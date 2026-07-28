@@ -1,12 +1,11 @@
+from datetime import datetime, timezone
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from datetime import datetime
-
-from models.ScanResponse import ScanResponse
 from models.ScanRequest import ScanRequest
-
-from utils.scan_modules import load_students, get_today_logs, log_scan
+from models.ScanResponse import ScanResponse
+from utils.scan_modules import get_today_logs, load_students, log_scan
 
 app = FastAPI()
 
@@ -51,7 +50,7 @@ async def scan(payload: ScanRequest):
         name=student.get("name"),
         class_name=student.get("class"),
         nisn=student.get("nisn"),
-        timestamp=datetime.now().strftime("%H:%M"),
+        timestamp=datetime.now(tz=timezone.utc).strftime("%H:%M"),
     )
 
 
