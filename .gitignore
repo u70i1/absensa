@@ -1,4 +1,3 @@
 backend/.venv
 __pycache__/
-mock/
 *.env
