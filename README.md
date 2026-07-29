@@ -6,6 +6,9 @@ Contributions are welcomed! Please check out the to-do list below for current pr
 
 ## Current To-Do
 
-- [x] Initialize Postgres on Docker
-- [ ] Migrate all mock CSV files to Postgres *(in progress)*
-- [ ] Initialize Alembic for database migrations
+- [ ] Fix routes to work with Postgres like they did with CSV
+- [ ] Find a new name because that name is so badly awful and awkward
+
+- ~~[x] Initialize Postgres on Docker~~
+- ~~[x] Migrate all mock CSV files to Postgres~~
+- ~~[x] Initialize Alembic for database migrations~~
