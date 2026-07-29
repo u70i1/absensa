@@ -7,7 +7,7 @@ services:
       - POSTGRES_PASSWORD=attendance
       - POSTGRES_DB=attendance
     ports:
-      - "5433:5432"
+      - "5433:5432" # You might want to change the host port to avoid clash with your local Postgres port
     volumes:
       - pgdata:/var/lib/postgresql
     healthcheck:

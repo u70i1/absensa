@@ -1,8 +1,8 @@
-# Praesens - QR-Based School Attendance System
+# Praesens - QR-Based School Attendance System (Working Name)
 
 An ongoing project.
 
-Contributions are welcomed! Please check out the to-dos below for current priorities.
+Contributions are welcomed! Please check out the to-do list below for current priorities.
 
 ## Current To-Do
 
