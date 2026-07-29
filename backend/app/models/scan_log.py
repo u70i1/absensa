@@ -6,15 +6,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
 class ScanLog(Base):
-    """
-    scan_logs table. Recently scanned students
-    """
+    """Individual item of "scan_logs" table"""
+
     __tablename__ = "scan_logs"
 
     scan_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(255))
-    class_: Mapped[str] = mapped_column("class", String, nullable=False)
+    class_: Mapped[str] = mapped_column("class", String(10), nullable=False)
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.now
     )
