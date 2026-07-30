@@ -13,4 +13,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def root():
+    return "Server is running"
+
 app.include_router(api_router)
