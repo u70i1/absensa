@@ -46,25 +46,25 @@ def test_default_page_size_is_10(client, seeded_students):
 
 
 def test_page_2_returns_remaining_students(client, seeded_students):
-    """11 seeded students, amount=10 -> page 2 should hold the last 1."""
-    response = client.get("/students?page=2&amount=10")
+    """11 seeded students, limit=10 -> page 2 should hold the last 1."""
+    response = client.get("/students?page=2&limit=10")
 
     assert response.status_code == 200
     body = response.json()
     assert len(body) == 1
 
 
-def test_custom_amount_per_page(client, seeded_students):
-    response = client.get("/students?amount=5")
+def test_custom_limit_per_page(client, seeded_students):
+    response = client.get("/students?limit=5")
 
     assert response.status_code == 200
     assert len(response.json()) == 5
 
 
-def test_page_and_amount_do_not_repeat_rows(client, seeded_students):
-    """Page 1 and page 2 (amount=5) should never share a student."""
-    page1 = client.get("/students?page=1&amount=5").json()
-    page2 = client.get("/students?page=2&amount=5").json()
+def test_page_and_limit_do_not_repeat_rows(client, seeded_students):
+    """Page 1 and page 2 (limit=5) should never share a student."""
+    page1 = client.get("/students?page=1&limit=5").json()
+    page2 = client.get("/students?page=2&limit=5").json()
 
     ids_page1 = {s["id"] for s in page1}
     ids_page2 = {s["id"] for s in page2}
@@ -83,7 +83,7 @@ def test_invalid_page_is_rejected(client, bad_page):
 
 
 def test_filter_by_class(client, seeded_students):
-    response = client.get("/students?class=10B&amount=100")
+    response = client.get("/students?class=10B&limit=100")
 
     assert response.status_code == 200
     body = response.json()
