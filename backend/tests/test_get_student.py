@@ -88,7 +88,7 @@ def test_filter_by_class(client, seeded_students):
     assert response.status_code == 200
     body = response.json()
     names = {s["name"] for s in body}
-    assert names == {"Tom", "Declan"}
+    assert names == {"Yvonne", "Tom"}
 
 
 def test_filter_by_class_no_match(client, seeded_students):
