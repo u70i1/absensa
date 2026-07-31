@@ -46,12 +46,12 @@ def test_default_page_size_is_10(client, seeded_students):
 
 
 def test_page_2_returns_remaining_students(client, seeded_students):
-    """11 seeded students, limit=10 -> page 2 should hold the last 1."""
+    """11 seeded students, limit=10 -> page 2 should hold the last 2."""
     response = client.get("/students?page=2&limit=10")
 
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 1
+    assert len(body) == 2
 
 
 def test_custom_limit_per_page(client, seeded_students):

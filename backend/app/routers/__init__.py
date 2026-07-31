@@ -1,7 +1,7 @@
 """Shortcut to all routes."""
 
 from app.routers.scan import router as scan_router
-from app.routers.student import router as student_router
+from app.routers.students import router as student_router
 from fastapi import APIRouter
 
 api_router = APIRouter()
