@@ -16,9 +16,9 @@ class FilterParams(BaseModel):
 
     limit: int = Field(10, ge=1, le=100)
     page: int = Field(1, ge=1)
-    name: str = Field(None)
-    class_: str = Field(None, alias="class")
-    nisn: str = Field(None)
+    name: str | None = Field(None)
+    class_: str | None = Field(None, alias="class")
+    nisn: str | None = Field(None)
 
 
 @router.get("/students", response_model=list[StudentResponse])
@@ -31,7 +31,7 @@ def get_student(
     if filter_query.name is not None:
         filters.append(Student.name.ilike(f"%{filter_query.name}%"))
     if filter_query.class_ is not None:
-        filters.append(Student.class_.ilike(filter_query.class_))
+        filters.append(Student.class_.ilike(f"%{filter_query.class_}%"))
     if filter_query.nisn is not None:
         filters.append(Student.nisn == filter_query.nisn)
 
