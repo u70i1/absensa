@@ -7,7 +7,7 @@ from pydantic import BaseModel
 class ScanResponse(BaseModel):
     """Response schema for POST /scan."""
 
-    status: Literal["success", "already_scanned"]
+    # status: Literal["success", "already_scanned"]
     name: str
     class_name: str
     nisn: str
