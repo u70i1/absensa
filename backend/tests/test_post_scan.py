@@ -1,12 +1,13 @@
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from app.core.config import settings
 from app.models.scan_log import ScanLog
 from app.models.student import Student
 
 # match whatever your app reads from the TZ env var — don't hardcode
 # a different literal here than what your app actually uses
-LOCAL_TZ = ZoneInfo("Asia/Jakarta")
+LOCAL_TZ = ZoneInfo(settings.timezone)
 
 
 def test_scan_creates_log(client, db_session):
