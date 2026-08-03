@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     # postgresql+psycopg2://attendance:attendance@localhost:5432/attendance
     database_url: str
     test_database_url: str
+    timezone: str
     cors_origin: str = "http://localhost:5173"
     photos_dir: str = "photos"
 
