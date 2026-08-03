@@ -6,7 +6,7 @@ Contributions are welcomed! Please check out the to-do list below for current pr
 
 ## Current To-Do
 
-- [ ] Fix routes to work with Postgres like they did with CSV
+- [x] Fix routes to work with Postgres like they did with CSV
 - [ ] Find a new name because that name is so badly awful and awkward
 
 - [x] *~~Initialize Postgres on Docker~~*
