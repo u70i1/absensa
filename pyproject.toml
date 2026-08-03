@@ -1,0 +1,4 @@
+[tool.ruff.lint.per-file-ignores]
+# "backend/app/models/*.py" = ["F821"]
+"backend/alembic/*.py" = ["I001", "UP007", "UP035"]
+"backend/app/routers/*.py" = ["B008"]
