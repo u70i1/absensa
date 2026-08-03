@@ -12,7 +12,9 @@ config = context.config
 # Override url
 from app.core.config import settings
 
-if not config.get_main_option("sqlalchemy.url"):  # So this can be overriden by run_migrations helper function
+if not config.get_main_option(
+    "sqlalchemy.url"
+):  # So this can be overriden by run_migrations helper function
     config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # Interpret the config file for Python logging.
@@ -49,10 +51,11 @@ def run_migrations_offline() -> None:
     """
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        compare_type=True,
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
+        compare_type=True,
+        compare_server_default=True,
         dialect_opts={"paramstyle": "named"},
     )
 
@@ -75,7 +78,10 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            compare_type=True, connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            compare_server_default=True,
         )
 
         with context.begin_transaction():
