@@ -52,6 +52,7 @@ def scan(payload: ScanRequest, db: Session = Depends(get_db)):
     db.commit()
 
     return {
+        "scan_id": new_scan_log.scan_id,
         "timestamp": timestamp,
         "name": scanned_student.name,
         "class_name": scanned_student.class_,
