@@ -3,7 +3,7 @@ from typing import Annotated
 from app.db.session import get_db
 from app.models.student import Student
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+from schemas import StudentQuery
 from schemas.StudentResponse import StudentResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,19 +11,9 @@ from sqlalchemy.orm import Session
 router = APIRouter()
 
 
-class FilterParams(BaseModel):
-    """Query model for GET /student"""
-
-    limit: int = Field(10, ge=1, le=100)
-    page: int = Field(1, ge=1)
-    name: str | None = Field(None)
-    class_: str | None = Field(None, alias="class")
-    nisn: str | None = Field(None)
-
-
 @router.get("/students", response_model=list[StudentResponse])
 def get_student(
-    filter_query: Annotated[FilterParams, Query()], db: Session = Depends(get_db)
+    filter_query: Annotated[StudentQuery, Query()], db: Session = Depends(get_db)
 ):
     """Retrieve students with optional queries from the database."""
     filters = []

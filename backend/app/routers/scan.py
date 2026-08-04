@@ -6,7 +6,8 @@ from app.db.session import get_db
 from app.models.scan_log import ScanLog
 from app.models.student import Student
 from fastapi import APIRouter, Depends, HTTPException
-from schemas.Scan import ScanRequest, ScanResponse
+from schemas.ScanRequest import ScanRequest
+from schemas.ScanResponse import ScanResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 

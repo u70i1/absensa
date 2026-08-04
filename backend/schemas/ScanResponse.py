@@ -4,14 +4,10 @@ from pydantic import BaseModel
 
 
 class ScanResponse(BaseModel):
-    """Response schema for POST /scan."""
+    """Response schema for both GET & POST /scan."""
+    scan_id: int
     name: str
     class_name: str
     nisn: str
     timestamp: datetime
 
-
-class ScanRequest(BaseModel):
-    """Request payload schema for POST /scan."""
-
-    nisn: str
