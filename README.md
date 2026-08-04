@@ -6,7 +6,7 @@ Contributions are welcomed! Please check out the to-do list below for current pr
 
 ## Current To-Do
 - [ ] Add POST, PATCH, and DELETE /students endpoint
-- [ ] Add GET and DELETE /scan endpoint
+- [x] Add GET and DELETE /scan endpoint
 
 <details>
   <summary>Previously Completed Tasks</summary>

@@ -1,11 +1,13 @@
 from datetime import datetime
+from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.scan_log import ScanLog
 from app.models.student import Student
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from schemas.ScanQuery import ScanQuery
 from schemas.ScanRequest import ScanRequest
 from schemas.ScanResponse import ScanResponse
 from sqlalchemy import select
@@ -17,7 +19,7 @@ router = APIRouter()
 
 
 @router.post("/scan", response_model=ScanResponse)
-def scan(payload: ScanRequest, db: Session = Depends(get_db)):
+def post_scan(payload: ScanRequest, db: Session = Depends(get_db)):
     # Check if student is already scanned today
     start_today = datetime.now(tz=tz_info).replace(hour=0, minute=0, second=0)
     end_today = datetime.now(tz=tz_info).replace(hour=23, minute=59, second=59)
@@ -54,8 +56,63 @@ def scan(payload: ScanRequest, db: Session = Depends(get_db)):
 
     return {
         "scan_id": new_scan_log.scan_id,
-        "timestamp": timestamp,
         "name": scanned_student.name,
-        "class_name": scanned_student.class_,
-        "nisn": scanned_student.nisn,
+        "class_": scanned_student.class_,
+        "student_nisn": scanned_student.nisn,
+        "timestamp": timestamp,
     }
+
+
+@router.get("/scans", response_model=list[ScanResponse])
+def get_scan(query: Annotated[ScanQuery, Query()], db: Session = Depends(get_db)):
+    """GET /scans
+    Returns:
+        list[ScanResponse]
+    """
+
+    filters = []
+
+    if query.nisn is not None:
+        filters.append(ScanLog.student_nisn == query.nisn)
+
+    if query.date_from is not None:
+        filters.append(
+            ScanLog.timestamp >= query.date_from.replace(hour=0, minute=0, second=0)
+        )
+
+    if query.date_to is not None:
+        filters.append(
+            ScanLog.timestamp <= query.date_to.replace(hour=23, minute=59, second=59)
+        )
+
+    stmt = (
+        select(ScanLog)
+        .where(*filters)
+        .offset((query.page - 1) * query.limit)
+        .limit(query.limit)
+        .order_by(ScanLog.timestamp.desc())
+    )
+    scan_logs = db.scalars(stmt).all()
+
+    results = list(scan_logs)
+
+    return results
+
+
+@router.get("/scans/{scan_id}", response_model=ScanResponse)
+def get_scan_by_id(scan_id: int, db: Session = Depends(get_db)):
+    result = db.get(ScanLog, scan_id)
+    if not result:
+        raise HTTPException(404)
+    return result
+
+
+@router.delete("/scans/{scan_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_scan(scan_id: int, db: Session = Depends(get_db)):
+    to_delete = db.get(ScanLog, scan_id)
+
+    if not to_delete:
+        raise HTTPException(404)
+
+    db.delete(to_delete)
+    db.commit()
