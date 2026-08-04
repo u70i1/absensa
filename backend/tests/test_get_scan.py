@@ -44,7 +44,7 @@ def make_scan(db_session, student, when: datetime):
 
 def test_get_scan_empty_returns_empty_list(client):
     """No scans at all -> 200 with a bare empty list, not 404."""
-    response = client.get("/scan")
+    response = client.get("/scans")
 
     assert response.status_code == 200, "Empty result set should still be 200"
     assert response.json() == [], "Should return a bare empty list"
@@ -55,7 +55,7 @@ def test_get_scan_returns_bare_list_not_wrapped(client, db_session):
     student = make_student(db_session)
     make_scan(db_session, student, datetime.now(LOCAL_TZ))
 
-    response = client.get("/scan")
+    response = client.get("/scans")
     body = response.json()
 
     assert isinstance(body, list), "Body should be a bare list, not an object wrapper"
@@ -76,7 +76,7 @@ def test_get_scan_orders_by_recency_desc(client, db_session):
     middle = make_scan(db_session, student, now - timedelta(days=1))
     newest = make_scan(db_session, student, now)
 
-    response = client.get("/scan")
+    response = client.get("/scans")
     body = response.json()
 
     ids_in_order = [row["scan_id"] for row in body]
@@ -91,14 +91,14 @@ def test_get_scan_orders_by_recency_desc(client, db_session):
 
 
 def test_get_scan_default_limit_is_30(client, db_session):
-    """Insert 35 scans, hit /scan with no query params, expect exactly 30 back."""
+    """Insert 35 scans, hit /scans with no query params, expect exactly 30 back."""
     student = make_student(db_session)
     now = datetime.now(LOCAL_TZ)
 
     for i in range(35):
         make_scan(db_session, student, now - timedelta(minutes=i))
 
-    response = client.get("/scan")
+    response = client.get("/scans")
     body = response.json()
 
     assert response.status_code == 200
@@ -111,7 +111,7 @@ def test_get_scan_respects_custom_limit(client, db_session):
     for i in range(10):
         make_scan(db_session, student, now - timedelta(minutes=i))
 
-    response = client.get("/scan", params={"limit": 5})
+    response = client.get("/scans", params={"limit": 5})
     body = response.json()
 
     assert len(body) == 5
@@ -129,8 +129,8 @@ def test_get_scan_page_2_returns_next_slice(client, db_session):
     ]
     # logs[0] is newest (smallest offset), logs[11] is oldest
 
-    page_1 = client.get("/scan", params={"limit": 5, "page": 1}).json()
-    page_2 = client.get("/scan", params={"limit": 5, "page": 2}).json()
+    page_1 = client.get("/scans", params={"limit": 5, "page": 1}).json()
+    page_2 = client.get("/scans", params={"limit": 5, "page": 2}).json()
 
     page_1_ids = [row["scan_id"] for row in page_1]
     page_2_ids = [row["scan_id"] for row in page_2]
@@ -145,30 +145,30 @@ def test_get_scan_page_beyond_last_page_returns_empty_list(client, db_session):
     student = make_student(db_session)
     make_scan(db_session, student, datetime.now(LOCAL_TZ))
 
-    response = client.get("/scan", params={"limit": 30, "page": 999})
+    response = client.get("/scans", params={"limit": 30, "page": 999})
 
     assert response.status_code == 200
     assert response.json() == []
 
 
 def test_get_scan_limit_zero_is_422(client):
-    response = client.get("/scan", params={"limit": 0})
+    response = client.get("/scans", params={"limit": 0})
     assert response.status_code == 422
 
 
 def test_get_scan_negative_limit_is_422(client):
-    response = client.get("/scan", params={"limit": -5})
+    response = client.get("/scans", params={"limit": -5})
     assert response.status_code == 422
 
 
 def test_get_scan_negative_page_is_422(client):
-    response = client.get("/scan", params={"page": -1})
+    response = client.get("/scans", params={"page": -1})
     assert response.status_code == 422
 
 
 def test_get_scan_page_zero_is_422(client):
     """page is 1-indexed per the spec (default 1) — 0 is out of range, not 'first page'."""
-    response = client.get("/scan", params={"page": 0})
+    response = client.get("/scans", params={"page": 0})
     assert response.status_code == 422
 
 
@@ -185,7 +185,7 @@ def test_get_scan_filters_by_nisn(client, db_session):
     make_scan(db_session, student_a, now)
     make_scan(db_session, student_b, now)
 
-    response = client.get("/scan", params={"nisn": "1111111111"})
+    response = client.get("/scans", params={"nisn": "1111111111"})
     body = response.json()
 
     assert len(body) == 1
@@ -197,7 +197,7 @@ def test_get_scan_filter_nisn_no_matches_returns_empty_list(client, db_session):
     student = make_student(db_session, nisn="1111111111")
     make_scan(db_session, student, datetime.now(LOCAL_TZ))
 
-    response = client.get("/scan", params={"nisn": "9999999999"})
+    response = client.get("/scans", params={"nisn": "9999999999"})
 
     assert response.status_code == 200
     assert response.json() == []
@@ -226,7 +226,7 @@ def test_get_scan_filters_by_date_range(client, db_session):
     )
 
     response = client.get(
-        "/scan", params={"date_from": "2026-07-10", "date_to": "2026-07-20"}
+        "/scans", params={"date_from": "2026-07-10", "date_to": "2026-07-20"}
     )
     body = response.json()
     ids = [row["scan_id"] for row in body]
@@ -251,7 +251,7 @@ def test_get_scan_date_to_is_inclusive_of_entire_day(client, db_session):
     )
 
     response = client.get(
-        "/scan", params={"date_from": "2026-08-01", "date_to": "2026-08-04"}
+        "/scans", params={"date_from": "2026-08-01", "date_to": "2026-08-04"}
     )
     body = response.json()
     ids = [row["scan_id"] for row in body]
@@ -272,7 +272,7 @@ def test_get_scan_date_from_only(client, db_session):
         db_session, student, datetime(2026, 7, 1, 12, 0, tzinfo=LOCAL_TZ)
     )
 
-    response = client.get("/scan", params={"date_from": "2026-06-01"})
+    response = client.get("/scans", params={"date_from": "2026-06-01"})
     ids = [row["scan_id"] for row in response.json()]
 
     assert newer.scan_id in ids
@@ -290,7 +290,7 @@ def test_get_scan_date_to_only(client, db_session):
         db_session, student, datetime(2026, 7, 1, 12, 0, tzinfo=LOCAL_TZ)
     )
 
-    response = client.get("/scan", params={"date_to": "2026-03-01"})
+    response = client.get("/scans", params={"date_to": "2026-03-01"})
     ids = [row["scan_id"] for row in response.json()]
 
     assert older.scan_id in ids
@@ -299,19 +299,19 @@ def test_get_scan_date_to_only(client, db_session):
 
 def test_get_scan_date_from_after_date_to_is_422(client):
     response = client.get(
-        "/scan", params={"date_from": "2026-08-04", "date_to": "2026-08-01"}
+        "/scans", params={"date_from": "2026-08-04", "date_to": "2026-08-01"}
     )
     assert response.status_code == 422
 
 
 def test_get_scan_malformed_date_is_422(client):
-    response = client.get("/scan", params={"date_from": "not-a-date"})
+    response = client.get("/scans", params={"date_from": "not-a-date"})
     assert response.status_code == 422
 
 
 def test_get_scan_wrong_date_format_is_422(client):
     """DD-MM-YYYY or similar should be rejected — spec is strictly YYYY-MM-DD."""
-    response = client.get("/scan", params={"date_from": "04-08-2026"})
+    response = client.get("/scans", params={"date_from": "04-08-2026"})
     assert response.status_code == 422
 
 
@@ -324,7 +324,7 @@ def test_get_scan_by_id_returns_matching_scan(client, db_session):
     student = make_student(db_session)
     target = make_scan(db_session, student, datetime.now(LOCAL_TZ))
 
-    response = client.get(f"/scan/{target.scan_id}")
+    response = client.get(f"/scans/{target.scan_id}")
     body = response.json()
 
     assert response.status_code == 200
@@ -337,21 +337,21 @@ def test_get_scan_by_id_returns_bare_object_not_list(client, db_session):
     student = make_student(db_session)
     target = make_scan(db_session, student, datetime.now(LOCAL_TZ))
 
-    response = client.get(f"/scan/{target.scan_id}")
+    response = client.get(f"/scans/{target.scan_id}")
     body = response.json()
 
     assert isinstance(body, dict), "Single scan lookup should return a bare object"
 
 
 def test_get_scan_by_id_missing_returns_404(client, db_session):
-    """A scan_id that doesn't exist should 404, same convention as POST /scan
+    """A scan_id that doesn't exist should 404, same convention as POST /scans
     for a missing student."""
     # make sure the table isn't empty, so a passing test isn't just an
     # accidental "nothing exists yet" false positive
     student = make_student(db_session)
     make_scan(db_session, student, datetime.now(LOCAL_TZ))
 
-    response = client.get("/scan/999999")
+    response = client.get("/scans/999999")
 
     assert response.status_code == 404
 
@@ -359,7 +359,7 @@ def test_get_scan_by_id_missing_returns_404(client, db_session):
 def test_get_scan_by_id_non_integer_is_422(client):
     """FastAPI path param typed as int should reject non-numeric ids at the
     validation layer, before your route logic even runs."""
-    response = client.get("/scan/not-an-id")
+    response = client.get("/scans/not-an-id")
 
     assert response.status_code == 422
 
@@ -377,7 +377,7 @@ def test_get_scan_combines_nisn_and_date_range(client, db_session):
     make_scan(db_session, student_b, datetime(2026, 7, 15, 12, 0, tzinfo=LOCAL_TZ))
 
     response = client.get(
-        "/scan",
+        "/scans",
         params={
             "nisn": "1111111111",
             "date_from": "2026-07-01",

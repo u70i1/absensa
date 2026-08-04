@@ -63,9 +63,9 @@ def post_scan(payload: ScanRequest, db: Session = Depends(get_db)):
     }
 
 
-@router.get("/scan", response_model=list[ScanResponse])
+@router.get("/scans", response_model=list[ScanResponse])
 def get_scan(query: Annotated[ScanQuery, Query()], db: Session = Depends(get_db)):
-    """GET /scan
+    """GET /scans
     Returns:
         list[ScanResponse]
     """
@@ -99,7 +99,7 @@ def get_scan(query: Annotated[ScanQuery, Query()], db: Session = Depends(get_db)
     return results
 
 
-@router.get("/scan/{scan_id}", response_model=ScanResponse)
+@router.get("/scans/{scan_id}", response_model=ScanResponse)
 def get_scan_by_id(scan_id: int, db: Session = Depends(get_db)):
     result = db.get(ScanLog, scan_id)
 
@@ -107,3 +107,5 @@ def get_scan_by_id(scan_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404)
 
     return result
+
+
