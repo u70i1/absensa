@@ -320,6 +320,50 @@ def test_get_scan_wrong_date_format_is_422(client):
 # ---------------------------------------------------------------------------
 
 
+def test_get_scan_by_id_returns_matching_scan(client, db_session):
+    student = make_student(db_session)
+    target = make_scan(db_session, student, datetime.now(LOCAL_TZ))
+
+    response = client.get(f"/scan/{target.scan_id}")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["scan_id"] == target.scan_id
+    assert body["student_nisn"] == student.nisn
+
+
+def test_get_scan_by_id_returns_bare_object_not_list(client, db_session):
+    """Single-item lookup should return a JSON object, not a one-item list."""
+    student = make_student(db_session)
+    target = make_scan(db_session, student, datetime.now(LOCAL_TZ))
+
+    response = client.get(f"/scan/{target.scan_id}")
+    body = response.json()
+
+    assert isinstance(body, dict), "Single scan lookup should return a bare object"
+
+
+def test_get_scan_by_id_missing_returns_404(client, db_session):
+    """A scan_id that doesn't exist should 404, same convention as POST /scan
+    for a missing student."""
+    # make sure the table isn't empty, so a passing test isn't just an
+    # accidental "nothing exists yet" false positive
+    student = make_student(db_session)
+    make_scan(db_session, student, datetime.now(LOCAL_TZ))
+
+    response = client.get("/scan/999999")
+
+    assert response.status_code == 404
+
+
+def test_get_scan_by_id_non_integer_is_422(client):
+    """FastAPI path param typed as int should reject non-numeric ids at the
+    validation layer, before your route logic even runs."""
+    response = client.get("/scan/not-an-id")
+
+    assert response.status_code == 422
+
+
 def test_get_scan_combines_nisn_and_date_range(client, db_session):
     student_a = make_student(db_session, nisn="1111111111", name="Student A")
     student_b = make_student(db_session, nisn="2222222222", name="Student B")
