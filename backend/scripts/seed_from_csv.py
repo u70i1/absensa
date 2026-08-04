@@ -1,5 +1,3 @@
-
-
 import csv
 from pathlib import Path
 
@@ -49,6 +47,7 @@ def seed() -> None:
 
         print("Closing connection...")
         db.close()
+
 
 if __name__ == "__main__":
     seed()
