@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 class Student(Base):
     """Individual item of "students" table"""
+
     __tablename__ = "students"
 
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True)
@@ -17,7 +18,7 @@ class Student(Base):
     )
 
     scan_logs: Mapped[list["ScanLog"]] = relationship(  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
-        back_populates="student", order_by="ScanLog.timestamp"
+        back_populates="student", order_by="ScanLog.timestamp", passive_deletes=True
     )
 
     def __repr__(self):

@@ -3,6 +3,7 @@ Tests for POST, PUT, DELETE /students.
 """
 
 import pytest
+from app.models.scan_log import ScanLog
 from app.models.student import Student
 from sqlalchemy import select
 
@@ -125,7 +126,9 @@ class TestUpdateStudent:
         )
         assert response.status_code == 404
 
-    def test_update_student_cannot_change_id(self, client, existing_student, db_session):
+    def test_update_student_cannot_change_id(
+        self, client, existing_student, db_session
+    ):
         original_id = existing_student.id
         response = client.put(
             f"/students/{original_id}",
@@ -143,7 +146,9 @@ class TestUpdateStudent:
         else:
             assert response.status_code == 422
 
-    def test_update_student_duplicate_nisn_conflicts(self, client, db_session, existing_student):
+    def test_update_student_duplicate_nisn_conflicts(
+        self, client, db_session, existing_student
+    ):
         other = Student(name="Other Student", class_="X-C", nisn="1111111111")
         db_session.add(other)
         db_session.commit()
@@ -151,7 +156,11 @@ class TestUpdateStudent:
 
         response = client.put(
             f"/students/{other.id}",
-            json={"name": other.name, "class_": other.class_, "nisn": existing_student.nisn},
+            json={
+                "name": other.name,
+                "class_": other.class_,
+                "nisn": existing_student.nisn,
+            },
         )
         assert response.status_code in (400, 409)
 
@@ -200,11 +209,45 @@ class TestDeleteStudent:
         response = client.delete("/students/not-a-number")
         assert response.status_code == 422
 
-    @pytest.mark.skip(
-        reason="TODO: fill in once you've decided FK behavior for scan_logs "
-        "on student delete (cascade delete vs. restrict-with-409). "
-        "Insert a ScanLog tied to `existing_student`, delete the student, "
-        "then assert whichever behavior you intended actually happens."
-    )
-    def test_delete_student_with_scan_logs(self, client, existing_student, db_session):
-        pass
+    def test_delete_student_cascades_scan_logs(
+        self, client, existing_student, db_session
+    ):
+        # ScanLog links via student_nisn, not student_id — match your FK
+        log = ScanLog(
+            student_nisn=existing_student.nisn,
+            name=existing_student.name,
+            class_=existing_student.class_,
+        )
+        log_scan_id = log.scan_id
+        db_session.add(log)
+        db_session.commit()
+        db_session.refresh(log)
+
+        response = client.delete(f"/students/{existing_student.id}")
+        assert response.status_code in (200, 204)
+
+        stmt = select(ScanLog).where(ScanLog.scan_id == log_scan_id)
+        assert db_session.scalars(stmt).one_or_none() is None
+
+    def test_delete_student_with_scan_logs_does_not_orphan_or_error(
+        self, client, existing_student, db_session
+    ):
+        # two scan logs for the same student — cascade should take out both,
+        # and the delete request itself should not 500 just because related
+        # rows exist (a common failure mode if the FK were RESTRICT instead)
+        for _ in range(2):
+            db_session.add(
+                ScanLog(
+                    student_nisn=existing_student.nisn,
+                    name=existing_student.name,
+                    class_=existing_student.class_,
+                )
+            )
+        db_session.commit()
+
+        response = client.delete(f"/students/{existing_student.id}")
+        assert response.status_code in (200, 204)
+
+        stmt = select(ScanLog).where(ScanLog.student_nisn == existing_student.nisn)
+        remaining = db_session.scalars(stmt).all()
+        assert remaining == []
