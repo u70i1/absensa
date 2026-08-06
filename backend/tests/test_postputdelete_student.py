@@ -15,7 +15,7 @@ from sqlalchemy import select
 def existing_student(db_session):
     """Insert one student directly via the ORM (bypassing the API) so tests
     have a known row to PUT/DELETE against, independent of POST working."""
-    student = Student(name="Ahmad Fauzi", class_="XII-A", nisn="1234567890")
+    student = Student(name="Bitzer", class_="XII-A", nisn="1234567890")
     db_session.add(student)
     db_session.commit()
     db_session.refresh(student)
