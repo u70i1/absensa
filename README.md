@@ -5,12 +5,14 @@ An ongoing project.
 Contributions are welcomed! Please check out the to-do list below for current priorities.
 
 ## Current To-Do
-- [ ] Add POST, PATCH, and DELETE /students endpoint *(in progress)*
-- [x] Add GET and DELETE /scan endpoint
+- [ ] Change `scan_logs` foreign key to a more stable key which is `id` *(in progress)*
+- [ ] Create `class` table
 
 <details>
   <summary>Previously Completed Tasks</summary>
 
+  - [x] *~~Add POST, PATCH, and DELETE /students endpoint~~*
+  - [x] *~~Add GET and DELETE /scan endpoint~~*
   - [x] *~~Fix routes to work with Postgres like they did with CSV~~*
   - [x] *~~Initialize Postgres on Docker~~*
   - [x] *~~Migrate all mock CSV files to Postgres~~*
