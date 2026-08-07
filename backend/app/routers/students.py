@@ -2,10 +2,10 @@ from typing import Annotated
 
 from app.db.session import get_db
 from app.models.student import Student
+from app.schemas.StudentQuery import StudentQuery
+from app.schemas.StudentRequest import StudentRequest
+from app.schemas.StudentResponse import StudentResponse
 from fastapi import APIRouter, Depends, HTTPException, Query
-from schemas.StudentQuery import StudentQuery
-from schemas.StudentRequest import StudentRequest
-from schemas.StudentResponse import StudentResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 

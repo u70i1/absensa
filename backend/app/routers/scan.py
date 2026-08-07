@@ -6,10 +6,10 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models.scan_log import ScanLog
 from app.models.student import Student
+from app.schemas.ScanQuery import ScanQuery
+from app.schemas.ScanRequest import ScanRequest
+from app.schemas.ScanResponse import ScanResponse
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from schemas.ScanQuery import ScanQuery
-from schemas.ScanRequest import ScanRequest
-from schemas.ScanResponse import ScanResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
