@@ -5,8 +5,8 @@ An ongoing project.
 Contributions are welcomed! Please check out the to-do list below for current priorities.
 
 ## Current To-Do
-- [ ] Add `ON UPDATE CASCADE` to `scan_log.student_nisn` *(in progress)*
-- [ ] Create `class` table
+- [x] Add `ON UPDATE CASCADE` to `scan_log.student_nisn`
+- [ ] Create `class` table *(in progress)*
 
 <details>
   <summary>Previously Completed Tasks</summary>
