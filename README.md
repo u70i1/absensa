@@ -5,7 +5,7 @@ An ongoing project.
 Contributions are welcomed! Please check out the to-do list below for current priorities.
 
 ## Current To-Do
-- [ ] Add POST, PATCH, and DELETE /students endpoint
+- [ ] Add POST, PATCH, and DELETE /students endpoint *(in progress)*
 - [x] Add GET and DELETE /scan endpoint
 
 <details>
