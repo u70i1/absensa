@@ -11,7 +11,7 @@ class ScanLog(Base):
     __tablename__ = "scan_logs"
 
     scan_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    student_nisn: Mapped[str] = mapped_column(ForeignKey("students.nisn", ondelete="CASCADE"))
+    student_nisn: Mapped[str] = mapped_column(ForeignKey("students.nisn", onupdate="CASCADE", ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(String(255))
     class_: Mapped[str] = mapped_column("class", String(10))
     timestamp: Mapped[datetime] = mapped_column(
