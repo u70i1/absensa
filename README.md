@@ -5,7 +5,7 @@ An ongoing project.
 Contributions are welcomed! Please check out the to-do list below for current priorities.
 
 ## Current To-Do
-- [ ] Change `scan_logs` foreign key to a more stable key which is `id` *(in progress)*
+- [ ] Add `ON UPDATE CASCADE` to `scan_log.student_nisn` *(in progress)*
 - [ ] Create `class` table
 
 <details>
