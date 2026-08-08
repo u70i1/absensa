@@ -11,4 +11,4 @@ class Class(Base):
     class_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     class_name: Mapped[str] = mapped_column(String(10))
 
-    students: Mapped[list["Student"]] = relationship(back_populates="class")  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
+    students: Mapped[list["Student"]] = relationship(back_populates="class_")  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
