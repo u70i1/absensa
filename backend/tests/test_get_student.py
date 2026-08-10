@@ -31,7 +31,9 @@ def seeded_students_and_classes(db_session):
     """Insert SEED_STUDENTS and SEED_CLASSES and return them."""
     classes = [Class(class_name=class_) for class_ in SEED_CLASSES]
     db_session.add_all(classes)
+
     db_session.flush()
+
     students = [
         Student(
             name=data["name"],
@@ -42,7 +44,7 @@ def seeded_students_and_classes(db_session):
     ]
     db_session.add_all(students)
     db_session.commit()
-    return 0
+    return students
 
 
 # @pytest.fixture

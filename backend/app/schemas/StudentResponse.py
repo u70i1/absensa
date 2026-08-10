@@ -6,5 +6,5 @@ class StudentResponse(BaseModel):
     id: int
     nisn: str
     name: str
-    class_: str
+    class_name: str
     current: bool

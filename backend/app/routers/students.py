@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from app.db.session import get_db
+from app.models.class_ import Class
 from app.models.student import Student
 from app.schemas.StudentQuery import StudentQuery
 from app.schemas.StudentRequest import StudentRequest
@@ -20,17 +21,20 @@ def get_student(query: Annotated[StudentQuery, Query()], db: Session = Depends(g
     if query.name is not None:
         filters.append(Student.name.ilike(f"%{query.name}%"))
     if query.class_ is not None:
-        filters.append(Student.class_.ilike(f"%{query.class_}%"))
+        filters.append(Class.class_name.ilike(f"%{query.class_}%"))
     if query.nisn is not None:
         filters.append(Student.nisn == query.nisn)
 
     stmt = (
-        select(Student)
+        select(
+            Student.id, Student.name, Student.nisn, Student.current, Class.class_name
+        )
+        .join(Class, Class.class_id == Student.class_id)
         .where(*filters)
         .offset((query.page - 1) * query.limit)
         .limit(query.limit)
     )
-    students = db.scalars(stmt).all()
+    students = db.execute(stmt).all()
 
     results = list(students)
 
@@ -78,13 +82,11 @@ def put_student(
 
     to_update.name = payload.name
     to_update.class_ = payload.class_
-    to_update.current = payload.current
     to_update.nisn = payload.nisn
 
     db.commit()
 
     return to_update
-
 
 
 @router.delete("/students/{student_id}", status_code=204)
