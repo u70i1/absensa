@@ -11,7 +11,7 @@ class Student(Base):
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255))
     # class_: Mapped[str] = mapped_column("class", String(10), nullable=False)
-    class_id: Mapped[str] = mapped_column(ForeignKey("class.class_id"), nullable=True)
+    class_id: Mapped[int | None] = mapped_column(ForeignKey("class.class_id"), nullable=True)
     nisn: Mapped[str] = mapped_column(String(10), unique=True)
     current: Mapped[bool] = mapped_column(
         Boolean,  # Whether they've graduated or not
