@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from app.db.session import SessionLocal
 from app.models.class_ import Class
 from app.models.student import Student

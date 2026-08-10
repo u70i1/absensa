@@ -27,7 +27,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('class_id')
     )
     op.add_column('students', sa.Column('class_id', sa.Integer(), nullable=True))
-    op.create_foreign_key("students_classes_id_fkey", 'students', 'classes', ['class_id'], ['class_id'])
+    op.create_foreign_key("students_classes_id_fkey", 'students', 'classes', ['class_id'], ['class_id'], ondelete='SET NULL')
     op.drop_column('students', 'class')
     # ### end Alembic commands ###
 

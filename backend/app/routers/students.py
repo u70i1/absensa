@@ -29,10 +29,11 @@ def get_student(query: Annotated[StudentQuery, Query()], db: Session = Depends(g
         select(
             Student.id, Student.name, Student.nisn, Student.current, Class.class_name, Class.class_id
         )
-        .join(Class, Class.class_id == Student.class_id)
+        .outerjoin(Class, Class.class_id == Student.class_id)
         .where(*filters)
         .offset((query.page - 1) * query.limit)
         .limit(query.limit)
+        .order_by(Student.nisn.desc())
     )
     students = db.execute(stmt).all()
 
