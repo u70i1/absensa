@@ -78,7 +78,7 @@ def scan_logs_for(db_session, nisn):
 
 def test_scan_creates_log(client, db_session, existing_student):
     """Scanning an existing student should log it correctly to scan_logs."""
-    response = client.post("/scan", json={"nisn": existing_student.nisn})
+    response = client.post("/scans", json={"nisn": existing_student.nisn})
 
     assert response.status_code == 200, "Status code should be 200"
     body = response.json()
@@ -93,7 +93,7 @@ def test_scan_log_reflects_current_class(
 ):
     """The logged class_ should be a snapshot of the student's class name
     at scan time"""
-    response = client.post("/scan", json={"nisn": existing_student.nisn})
+    response = client.post("/scans", json={"nisn": existing_student.nisn})
 
     assert response.status_code == 200
     assert response.json()["class_name"] == existing_class.class_name
@@ -104,7 +104,7 @@ def test_scan_log_reflects_current_class(
 
 def test_scan_missing_returns_404(client):
     """Scanning a non-existing NISN should fail clearly."""
-    response = client.post("/scan", json={"nisn": "0000000000"})
+    response = client.post("/scans", json={"nisn": "0000000000"})
 
     assert response.status_code == 404, "Response status should be 404"
 
@@ -116,8 +116,8 @@ def test_scan_missing_returns_404(client):
 
 def test_scan_same_day_duplicate_returns_409(client, db_session, existing_student):
     """Scanning the same student twice on the same day should conflict."""
-    first_scan = client.post("/scan", json={"nisn": existing_student.nisn})
-    second_scan = client.post("/scan", json={"nisn": existing_student.nisn})
+    first_scan = client.post("/scans", json={"nisn": existing_student.nisn})
+    second_scan = client.post("/scans", json={"nisn": existing_student.nisn})
 
     assert first_scan.status_code == 200, "First scan status code should be 200"
     assert second_scan.status_code == 409, "Duplicate scan status code should be 409"
@@ -147,7 +147,7 @@ def test_scan_next_local_day_is_not_a_duplicate(client, db_session, existing_stu
     )
     db_session.commit()
 
-    response = client.post("/scan", json={"nisn": existing_student.nisn})
+    response = client.post("/scans", json={"nisn": existing_student.nisn})
 
     assert response.status_code == 200, "Scan on a new local day should succeed"
 
@@ -175,7 +175,7 @@ def test_scan_early_local_morning_is_still_a_duplicate(
     )
     db_session.commit()
 
-    response = client.post("/scan", json={"nisn": existing_student.nisn})
+    response = client.post("/scans", json={"nisn": existing_student.nisn})
 
     assert response.status_code == 409, (
         "Same local day, even near midnight, is a duplicate"
@@ -204,7 +204,7 @@ def test_scan_exact_local_midnight_boundary_is_a_duplicate(
     )
     db_session.commit()
 
-    response = client.post("/scan", json={"nisn": existing_student.nisn})
+    response = client.post("/scans", json={"nisn": existing_student.nisn})
 
     assert response.status_code == 409, "Exact midnight today is still today"
 
@@ -229,7 +229,7 @@ def test_scan_inactive_student_returns_404(client, db_session, existing_class):
         current=False,
     )
 
-    response = client.post("/scan", json={"nisn": student.nisn})
+    response = client.post("/scans", json={"nisn": student.nisn})
 
     assert response.status_code == 404, (
         "Inactive/non-current students shouldn't scan in"
@@ -248,7 +248,7 @@ def test_scan_student_without_class_still_scannable(client, db_session):
     db_session.add(student)
     db_session.commit()
 
-    response = client.post("/scan", json={"nisn": student.nisn})
+    response = client.post("/scans", json={"nisn": student.nisn})
 
     assert response.status_code == 200
     assert response.json()["class_name"] is None
@@ -262,7 +262,7 @@ def test_scan_student_without_class_still_scannable(client, db_session):
 def test_scan_missing_nisn_returns_422(client):
     """Missing 'nisn' field should fail request validation, not fall
     through to 404 logic."""
-    response = client.post("/scan", json={})
+    response = client.post("/scans", json={})
     assert response.status_code == 422, "Missing nisn should be a validation error"
 
 
@@ -274,7 +274,7 @@ def test_scan_integer_nisn_is_coerced_and_succeeds(client, existing_student):
     is the one that will need to flip to expecting 422.
     """
     nisn_as_int = int(existing_student.nisn)
-    response = client.post("/scan", json={"nisn": nisn_as_int})
+    response = client.post("/scans", json={"nisn": nisn_as_int})
 
     assert response.status_code == 200, (
         "int nisn should be coerced to str by Pydantic and succeed"
@@ -283,5 +283,5 @@ def test_scan_integer_nisn_is_coerced_and_succeeds(client, existing_student):
 
 def test_scan_wrong_type_nisn_returns_422(client):
     """A type Pydantic can't coerce to str (e.g. a list) should still 422."""
-    response = client.post("/scan", json={"nisn": ["not", "a", "string"]})
+    response = client.post("/scans", json={"nisn": ["not", "a", "string"]})
     assert response.status_code == 422

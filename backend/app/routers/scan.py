@@ -19,7 +19,7 @@ tz_info = ZoneInfo(settings.timezone)
 router = APIRouter()
 
 
-@router.post("/scan", response_model=ScanResponse)
+@router.post("/scans", response_model=ScanResponse)
 def post_scan(payload: ScanRequest, db: Session = Depends(get_db)):
     # Check if student is already scanned today
     start_today = datetime.now(tz=tz_info).replace(
