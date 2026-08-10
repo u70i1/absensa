@@ -4,9 +4,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
 class Class(Base):
-    """Individual item of "class" table"""
+    """Individual item of "classes" table"""
 
-    __tablename__ = "class"
+    __tablename__ = "classes"
 
     class_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     class_name: Mapped[str] = mapped_column(String(10), unique=True)
