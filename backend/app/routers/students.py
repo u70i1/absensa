@@ -20,14 +20,14 @@ def get_student(query: Annotated[StudentQuery, Query()], db: Session = Depends(g
 
     if query.name is not None:
         filters.append(Student.name.ilike(f"%{query.name}%"))
-    if query.class_ is not None:
-        filters.append(Class.class_name.ilike(f"%{query.class_}%"))
+    if query.class_name is not None:
+        filters.append(Class.class_name.ilike(f"%{query.class_name}%"))
     if query.nisn is not None:
         filters.append(Student.nisn == query.nisn)
 
     stmt = (
         select(
-            Student.id, Student.name, Student.nisn, Student.current, Class.class_name
+            Student.id, Student.name, Student.nisn, Student.current, Class.class_name, Class.class_id
         )
         .join(Class, Class.class_id == Student.class_id)
         .where(*filters)

@@ -7,5 +7,5 @@ class StudentQuery(BaseModel):
     limit: int = Field(10, ge=1, le=100)
     page: int = Field(1, ge=1)
     name: str | None = Field(None)
-    class_: str | None = Field(None, alias="class")
+    class_name: str | None = Field(None, alias="class")
     nisn: str | None = Field(None)

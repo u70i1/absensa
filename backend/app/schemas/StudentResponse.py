@@ -7,4 +7,5 @@ class StudentResponse(BaseModel):
     nisn: str
     name: str
     class_id: int | None = None
+    class_name: str | None = None
     current: bool
