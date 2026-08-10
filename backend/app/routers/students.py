@@ -44,15 +44,21 @@ def get_student(query: Annotated[StudentQuery, Query()], db: Session = Depends(g
 @router.post("/students", response_model=StudentResponse, status_code=201)
 def post_student(payload: StudentRequest, db: Session = Depends(get_db)):
     # Check if NISN already exists
-    exist = db.scalar(select(Student).where(Student.nisn == payload.nisn))
-    if exist:
+    nisn_exist = db.scalar(select(Student).where(Student.nisn == payload.nisn))
+    if nisn_exist:
         raise HTTPException(409)
+
+    # Check if class actually exists
+    if payload.class_id:
+        class_exist = db.get(Class, payload.class_id)
+        if not class_exist:
+            raise HTTPException(404)
 
     # Attempt to add student
     new_student = Student(
         name=payload.name,
         nisn=payload.nisn,
-        class_=payload.class_,
+        class_id=payload.class_id,
         current=payload.current,
     )
 
@@ -71,6 +77,11 @@ def put_student(
     if not to_update:
         raise HTTPException(404)
 
+    if payload.class_id:
+        class_exist = db.get(Class, payload.class_id)
+        if not class_exist:
+            raise HTTPException(404)
+
     # TODO: Prevent duplicate NISN errors on update
     nisn_dupe_exists = db.scalar(
         select(Student)
@@ -81,8 +92,9 @@ def put_student(
         raise HTTPException(409)
 
     to_update.name = payload.name
-    to_update.class_ = payload.class_
+    to_update.class_id = payload.class_id
     to_update.nisn = payload.nisn
+    to_update.current = payload.current
 
     db.commit()
 
