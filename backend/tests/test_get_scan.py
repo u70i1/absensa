@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.core.config import settings
+from app.models.class_ import Class
 from app.models.scan_log import ScanLog
 from app.models.student import Student
 
@@ -10,11 +11,18 @@ from app.models.student import Student
 LOCAL_TZ = ZoneInfo(settings.timezone)
 
 
-def make_student(db_session, nisn="1234567890", name="Nicholas Angle", class_="11B"):
-    """Helper: insert a student, return it. Reused across most tests here."""
-    student = Student(name=name, class_=class_, nisn=nisn, current=True)
+def make_student_and_class(
+    db_session, nisn="1234567890", name="Nicholas Angle", class_name="11B"
+):
+    """Helper: insert a class + a student linked to it, return the student."""
+    class_ = Class(class_name=class_name)
+    db_session.add(class_)
+    db_session.flush()
+
+    student = Student(name=name, class_id=class_.class_id, nisn=nisn, current=True)
     db_session.add(student)
     db_session.commit()
+    db_session.refresh(student)
     return student
 
 
@@ -25,15 +33,24 @@ def make_scan(db_session, student, when: datetime):
     We can't rely on server_default=func.now() for range-filter tests —
     we need full control over "when" each row happened, otherwise there's
     no way to assert the boundary behavior deterministically.
+
+    ScanLog.class_ is a denormalized string snapshot (not a FK) — we read
+    student.class_.class_name at scan-creation time on purpose, so the log
+    keeps its historical value even if the student's class later changes
+    or the Class row gets deleted (which SET NULLs student.class_id but
+    must not rewrite past scan logs).
     """
+    class_name = student.class_.class_name if student.class_ is not None else None
+
     log = ScanLog(
         student_nisn=student.nisn,
         name=student.name,
-        class_=student.class_,
+        class_name=class_name,
         timestamp=when,
     )
     db_session.add(log)
     db_session.commit()
+    db_session.refresh(log)
     return log
 
 
@@ -52,7 +69,7 @@ def test_get_scan_empty_returns_empty_list(client):
 
 def test_get_scan_returns_bare_list_not_wrapped(client, db_session):
     """Response body should be a raw list, not {"items": [...]} or similar."""
-    student = make_student(db_session)
+    student = make_student_and_class(db_session)
     make_scan(db_session, student, datetime.now(LOCAL_TZ))
 
     response = client.get("/scans")
@@ -69,7 +86,7 @@ def test_get_scan_returns_bare_list_not_wrapped(client, db_session):
 
 
 def test_get_scan_orders_by_recency_desc(client, db_session):
-    student = make_student(db_session)
+    student = make_student_and_class(db_session)
     now = datetime.now(LOCAL_TZ)
 
     oldest = make_scan(db_session, student, now - timedelta(days=2))
@@ -92,7 +109,7 @@ def test_get_scan_orders_by_recency_desc(client, db_session):
 
 def test_get_scan_default_limit_is_30(client, db_session):
     """Insert 35 scans, hit /scans with no query params, expect exactly 30 back."""
-    student = make_student(db_session)
+    student = make_student_and_class(db_session)
     now = datetime.now(LOCAL_TZ)
 
     for i in range(35):
@@ -106,7 +123,7 @@ def test_get_scan_default_limit_is_30(client, db_session):
 
 
 def test_get_scan_respects_custom_limit(client, db_session):
-    student = make_student(db_session)
+    student = make_student_and_class(db_session)
     now = datetime.now(LOCAL_TZ)
     for i in range(10):
         make_scan(db_session, student, now - timedelta(minutes=i))
@@ -122,7 +139,7 @@ def test_get_scan_page_2_returns_next_slice(client, db_session):
     With limit=5 and 12 rows, page=2 should return rows 6-10 (i.e. the
     6th-newest through 10th-newest), not overlap page 1 and not restart.
     """
-    student = make_student(db_session)
+    student = make_student_and_class(db_session)
     now = datetime.now(LOCAL_TZ)
     logs = [
         make_scan(db_session, student, now - timedelta(minutes=i)) for i in range(12)
@@ -142,7 +159,7 @@ def test_get_scan_page_2_returns_next_slice(client, db_session):
 
 def test_get_scan_page_beyond_last_page_returns_empty_list(client, db_session):
     """Requesting a page past the available data -> empty list, still 200."""
-    student = make_student(db_session)
+    student = make_student_and_class(db_session)
     make_scan(db_session, student, datetime.now(LOCAL_TZ))
 
     response = client.get("/scans", params={"limit": 30, "page": 999})
@@ -178,8 +195,8 @@ def test_get_scan_page_zero_is_422(client):
 
 
 def test_get_scan_filters_by_nisn(client, db_session):
-    student_a = make_student(db_session, nisn="1111111111", name="Student A")
-    student_b = make_student(db_session, nisn="2222222222", name="Student B")
+    student_a = make_student_and_class(db_session, nisn="1111111111", name="Student A")
+    student_b = make_student_and_class(db_session, nisn="2222222222", name="Student B")
     now = datetime.now(LOCAL_TZ)
 
     make_scan(db_session, student_a, now)
@@ -194,7 +211,7 @@ def test_get_scan_filters_by_nisn(client, db_session):
 
 def test_get_scan_filter_nisn_no_matches_returns_empty_list(client, db_session):
     """Filtering by a NISN that has no scans -> empty list, not 404."""
-    student = make_student(db_session, nisn="1111111111")
+    student = make_student_and_class(db_session, nisn="1111111111")
     make_scan(db_session, student, datetime.now(LOCAL_TZ))
 
     response = client.get("/scans", params={"nisn": "9999999999"})
@@ -213,7 +230,7 @@ def test_get_scan_filter_nisn_no_matches_returns_empty_list(client, db_session):
 
 
 def test_get_scan_filters_by_date_range(client, db_session):
-    student = make_student(db_session)
+    student = make_student_and_class(db_session)
 
     before_range = make_scan(
         db_session, student, datetime(2026, 7, 1, 12, 0, tzinfo=LOCAL_TZ)
@@ -245,7 +262,7 @@ def test_get_scan_date_to_is_inclusive_of_entire_day(client, db_session):
     happened later the same day — gets wrongly excluded. This test fails
     if that off-by-one is present.
     """
-    student = make_student(db_session)
+    student = make_student_and_class(db_session)
     late_in_day = make_scan(
         db_session, student, datetime(2026, 8, 4, 23, 30, tzinfo=LOCAL_TZ)
     )
@@ -263,14 +280,10 @@ def test_get_scan_date_to_is_inclusive_of_entire_day(client, db_session):
 
 def test_get_scan_date_from_only(client, db_session):
     """date_from with no date_to should return everything from that date onward."""
-    student = make_student(db_session)
+    student = make_student_and_class(db_session)
 
-    older = make_scan(
-        db_session, student, datetime(2026, 1, 1, 12, 0, tzinfo=LOCAL_TZ)
-    )
-    newer = make_scan(
-        db_session, student, datetime(2026, 7, 1, 12, 0, tzinfo=LOCAL_TZ)
-    )
+    older = make_scan(db_session, student, datetime(2026, 1, 1, 12, 0, tzinfo=LOCAL_TZ))
+    newer = make_scan(db_session, student, datetime(2026, 7, 1, 12, 0, tzinfo=LOCAL_TZ))
 
     response = client.get("/scans", params={"date_from": "2026-06-01"})
     ids = [row["scan_id"] for row in response.json()]
@@ -281,14 +294,10 @@ def test_get_scan_date_from_only(client, db_session):
 
 def test_get_scan_date_to_only(client, db_session):
     """date_to with no date_from should return everything up through that date."""
-    student = make_student(db_session)
+    student = make_student_and_class(db_session)
 
-    older = make_scan(
-        db_session, student, datetime(2026, 1, 1, 12, 0, tzinfo=LOCAL_TZ)
-    )
-    newer = make_scan(
-        db_session, student, datetime(2026, 7, 1, 12, 0, tzinfo=LOCAL_TZ)
-    )
+    older = make_scan(db_session, student, datetime(2026, 1, 1, 12, 0, tzinfo=LOCAL_TZ))
+    newer = make_scan(db_session, student, datetime(2026, 7, 1, 12, 0, tzinfo=LOCAL_TZ))
 
     response = client.get("/scans", params={"date_to": "2026-03-01"})
     ids = [row["scan_id"] for row in response.json()]
@@ -316,12 +325,12 @@ def test_get_scan_wrong_date_format_is_422(client):
 
 
 # ---------------------------------------------------------------------------
-# Combined filters
+# Scan lookup by id
 # ---------------------------------------------------------------------------
 
 
 def test_get_scan_by_id_returns_matching_scan(client, db_session):
-    student = make_student(db_session)
+    student = make_student_and_class(db_session)
     target = make_scan(db_session, student, datetime.now(LOCAL_TZ))
 
     response = client.get(f"/scans/{target.scan_id}")
@@ -334,7 +343,7 @@ def test_get_scan_by_id_returns_matching_scan(client, db_session):
 
 def test_get_scan_by_id_returns_bare_object_not_list(client, db_session):
     """Single-item lookup should return a JSON object, not a one-item list."""
-    student = make_student(db_session)
+    student = make_student_and_class(db_session)
     target = make_scan(db_session, student, datetime.now(LOCAL_TZ))
 
     response = client.get(f"/scans/{target.scan_id}")
@@ -348,7 +357,7 @@ def test_get_scan_by_id_missing_returns_404(client, db_session):
     for a missing student."""
     # make sure the table isn't empty, so a passing test isn't just an
     # accidental "nothing exists yet" false positive
-    student = make_student(db_session)
+    student = make_student_and_class(db_session)
     make_scan(db_session, student, datetime.now(LOCAL_TZ))
 
     response = client.get("/scans/999999")
@@ -364,9 +373,14 @@ def test_get_scan_by_id_non_integer_is_422(client):
     assert response.status_code == 422
 
 
+# ---------------------------------------------------------------------------
+# Combined filters
+# ---------------------------------------------------------------------------
+
+
 def test_get_scan_combines_nisn_and_date_range(client, db_session):
-    student_a = make_student(db_session, nisn="1111111111", name="Student A")
-    student_b = make_student(db_session, nisn="2222222222", name="Student B")
+    student_a = make_student_and_class(db_session, nisn="1111111111", name="Student A")
+    student_b = make_student_and_class(db_session, nisn="2222222222", name="Student B")
 
     target = make_scan(
         db_session, student_a, datetime(2026, 7, 15, 12, 0, tzinfo=LOCAL_TZ)
@@ -387,3 +401,27 @@ def test_get_scan_combines_nisn_and_date_range(client, db_session):
     ids = [row["scan_id"] for row in response.json()]
 
     assert ids == [target.scan_id]
+
+
+# ---------------------------------------------------------------------------
+# Scan for a student with no class assigned (nullable class_id)
+#
+# make_scan() already handles student.class_ is None by writing
+# ScanLog.class_ = None — this pins that behavior down explicitly rather
+# than leaving it as an implicit side effect of the helper.
+# ---------------------------------------------------------------------------
+
+
+def test_get_scan_for_student_without_class_has_null_class(client, db_session):
+    student = Student(name="No Class Yet", class_id=None, nisn="5555555555")
+    db_session.add(student)
+    db_session.commit()
+    db_session.refresh(student)
+
+    target = make_scan(db_session, student, datetime.now(LOCAL_TZ))
+
+    response = client.get(f"/scans/{target.scan_id}")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["class_name"] is None

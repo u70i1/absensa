@@ -361,7 +361,7 @@ class TestDeleteStudent:
         log = ScanLog(
             student_nisn=existing_student.nisn,
             name=existing_student.name,
-            class_=existing_class.class_name,
+            class_name=existing_class.class_name,
         )
         db_session.add(log)
         db_session.commit()
@@ -385,7 +385,7 @@ class TestDeleteStudent:
                 ScanLog(
                     student_nisn=existing_student.nisn,
                     name=existing_student.name,
-                    class_=existing_class.class_name,
+                    class_name=existing_class.class_name,
                 )
             )
         db_session.commit()

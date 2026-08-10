@@ -13,7 +13,7 @@ class ScanLog(Base):
     scan_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     student_nisn: Mapped[str] = mapped_column(ForeignKey("students.nisn", onupdate="CASCADE", ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(String(255))
-    class_: Mapped[str] = mapped_column("class", String(10))
+    class_name: Mapped[str] = mapped_column("class", String(10), nullable=True)
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
