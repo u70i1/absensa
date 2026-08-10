@@ -196,7 +196,7 @@ def test_get_scan_page_zero_is_422(client):
 
 def test_get_scan_filters_by_nisn(client, db_session):
     student_a = make_student_and_class(db_session, nisn="1111111111", name="Student A")
-    student_b = make_student_and_class(db_session, nisn="2222222222", name="Student B")
+    student_b = make_student_and_class(db_session, nisn="2222222222", class_name="11A", name="Student B")
     now = datetime.now(LOCAL_TZ)
 
     make_scan(db_session, student_a, now)
@@ -379,7 +379,7 @@ def test_get_scan_by_id_non_integer_is_422(client):
 
 
 def test_get_scan_combines_nisn_and_date_range(client, db_session):
-    student_a = make_student_and_class(db_session, nisn="1111111111", name="Student A")
+    student_a = make_student_and_class(db_session, nisn="1111111111", class_name="11A", name="Student A")
     student_b = make_student_and_class(db_session, nisn="2222222222", name="Student B")
 
     target = make_scan(
