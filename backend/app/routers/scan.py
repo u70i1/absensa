@@ -101,7 +101,7 @@ def get_scan(query: Annotated[ScanQuery, Query()], db: Session = Depends(get_db)
             ScanLog.student_nisn,
             ScanLog.timestamp,
         )
-        .join(Student, Student.nisn == ScanLog.student_nisn)
+        .outerjoin(Student, Student.nisn == ScanLog.student_nisn)
         .where(*filters)
         .offset((query.page - 1) * query.limit)
         .limit(query.limit)
@@ -125,7 +125,7 @@ def get_scan_by_id(scan_id: int, db: Session = Depends(get_db)):
             ScanLog.student_nisn,
             ScanLog.timestamp,
         )
-        .join(Student, Student.nisn == ScanLog.student_nisn)
+        .outerjoin(Student, Student.nisn == ScanLog.student_nisn)
         .where(ScanLog.scan_id == scan_id)
     )
     result = db.execute(stmt).first()
