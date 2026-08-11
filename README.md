@@ -5,12 +5,31 @@ An ongoing project.
 Contributions are welcomed! Please check out the to-do list below for current priorities.
 
 ## Current To-Do
-- [x] Add `ON UPDATE CASCADE` to `scan_log.student_nisn`
-- [ ] Create `class` table *(in progress)*
+
+### Auth & Access
+- [ ] Operator model (PIN-based, short-session login)
+- [ ] TrustedClient model (registration by Superadmin, password-based, long-session login)
+- [ ] Session handling (login, expiry, invalidate-on-relogin)
+- [ ] Superadmin (bootstrap script, password auth)
+- [ ] Role-based route protection (public / operator / superadmin)
+- [ ] Public NISN lookup endpoint with rate limiting
+### Features
+- [ ] Bulk student and class import/export endpoint (for spreadsheet feature)
+- [ ] Superadmin: manage operators (create, deactivate)
+- [ ] Superadmin: manage clients (register, revoke)
+### Infra & Deployment
+- [ ] HTTPS setup (mkcert + reverse proxy) for LAN deployment
+- [ ] Password/PIN reset flow
+- [ ] Backups strategy for the database
+### Testing
+- [ ] Auth flow tests (PIN, client session, superadmin)
+- [ ] Concurrency/edge case tests (following existing test patterns)
 
 <details>
   <summary>Previously Completed Tasks</summary>
 
+  - [x] *~~Add `ON UPDATE CASCADE` to `scan_log.student_nisn`~~*
+  - [x] *~~Create `class` table~~*
   - [x] *~~Add POST, PATCH, and DELETE /students endpoint~~*
   - [x] *~~Add GET and DELETE /scan endpoint~~*
   - [x] *~~Fix routes to work with Postgres like they did with CSV~~*
