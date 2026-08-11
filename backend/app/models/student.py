@@ -1,5 +1,5 @@
 from app.db.base import Base
-from sqlalchemy import Boolean, Integer, String
+from sqlalchemy import Boolean, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
@@ -10,7 +10,8 @@ class Student(Base):
 
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255))
-    class_: Mapped[str] = mapped_column("class", String(10), nullable=False)
+    # class_: Mapped[str] = mapped_column("class", String(10), nullable=False)
+    class_id: Mapped[int | None] = mapped_column(ForeignKey("classes.class_id", ondelete="SET NULL"), nullable=True)
     nisn: Mapped[str] = mapped_column(String(10), unique=True)
     current: Mapped[bool] = mapped_column(
         Boolean,  # Whether they've graduated or not
@@ -20,6 +21,8 @@ class Student(Base):
     scan_logs: Mapped[list["ScanLog"]] = relationship(  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
         back_populates="student", order_by="ScanLog.timestamp", passive_deletes=True
     )
+
+    class_: Mapped["Class"] = relationship(back_populates="students") # pyright: ignore[reportUndefinedVariable]  # noqa: F821
 
     def __repr__(self):
         return f"Student(id={self.id}, name={self.name}, nisn={self.nisn})"

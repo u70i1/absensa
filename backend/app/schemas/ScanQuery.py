@@ -5,7 +5,7 @@ from typing_extensions import Self
 
 
 class ScanQuery(BaseModel):
-    """Query model for GET /scan"""
+    """Query model for GET /scans"""
 
     limit: int = Field(30, ge=1, le=100)
     page: int = Field(1, ge=1)
