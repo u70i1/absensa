@@ -14,7 +14,8 @@ Contributions are welcomed! Please check out the to-do list below for current pr
 - [ ] Role-based route protection (public / operator / superadmin)
 - [ ] Public NISN lookup endpoint with rate limiting
 ### Features
-- [ ] Bulk student and class import/export endpoint (for spreadsheet feature) *(in progress)*
+- [ ] Bulk student and class endpoints (for spreadsheet feature) *(in progress)*
+- [ ] Make an .xlsx template for importing
 - [ ] Superadmin: manage operators (create, deactivate)
 - [ ] Superadmin: manage clients (register, revoke)
 ### Infra & Deployment
