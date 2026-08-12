@@ -157,3 +157,20 @@ def seeded_students_and_classes(db_session):
     db_session.add_all(students)
     db_session.commit()
     return students
+
+
+@pytest.fixture
+def existing_class(class_factory):
+    """A default class (11B) for most tests."""
+    return class_factory(class_name="11B")
+
+
+@pytest.fixture
+def existing_student(student_factory, existing_class):
+    """A single active, scannable student the default case most tests need."""
+    return student_factory(
+        name="Nicholas Angle",
+        nisn="1234567890",
+        class_id=existing_class.class_id,
+        current=True,
+    )

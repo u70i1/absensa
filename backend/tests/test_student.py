@@ -5,6 +5,8 @@ from app.models.scan_log import ScanLog
 from app.models.student import Student
 from sqlalchemy import select
 
+from tests.helpers import make_student_payload
+
 # Helpers
 
 # ---------------------------------------------------------------------------
@@ -27,22 +29,6 @@ def existing_student(student_factory, existing_class):
         current=True,
     )
 
-
-def valid_post_payload(existing_class, **overrides):
-    """A baseline valid POST body. Override individual fields per test.
-
-    class_id is now a required argument (not a hardcoded default) because
-    a hardcoded int here would drift from whatever ID the sequence actually
-    assigned in a given test run.
-    """
-    payload = {
-        "name": "Shaun",
-        "class_id": existing_class.class_id,
-        "nisn": "9876543210",
-        "current": True,
-    }
-    payload.update(overrides)
-    return payload
 
 class TestGetStudents:
 # ---------------------------------------------------------------------------
@@ -188,7 +174,7 @@ class TestGetStudents:
 
 class TestCreateStudent:
     def test_create_student_happy_path(self, client, existing_class, db_session):
-        response = client.post("/students", json=valid_post_payload(existing_class))
+        response = client.post("/students", json=make_student_payload(existing_class))
 
         assert response.status_code == 201
         body = response.json()
@@ -206,7 +192,7 @@ class TestCreateStudent:
     def test_create_student_defaults_current_to_true(self, client, existing_class):
         # your model has current: Mapped[bool] = mapped_column(default=True)
         # — confirm the API surfaces that default rather than leaving it null
-        response = client.post("/students", json=valid_post_payload(existing_class))
+        response = client.post("/students", json=make_student_payload(existing_class))
         assert response.status_code == 201
         assert response.json()["current"] is True
 
@@ -215,18 +201,18 @@ class TestCreateStudent:
     ):
         response = client.post(
             "/students",
-            json=valid_post_payload(existing_class, nisn=existing_student.nisn),
+            json=make_student_payload(existing_class, nisn=existing_student.nisn),
         )
         assert response.status_code in (400, 409)
 
     def test_create_student_missing_required_field(self, client, existing_class):
-        payload = valid_post_payload(existing_class)
+        payload = make_student_payload(existing_class)
         del payload["name"]
         response = client.post("/students", json=payload)
         assert response.status_code == 422
 
     def test_create_student_missing_nisn(self, client, existing_class):
-        payload = valid_post_payload(existing_class)
+        payload = make_student_payload(existing_class)
         del payload["nisn"]
         response = client.post("/students", json=payload)
         assert response.status_code == 422
@@ -264,7 +250,7 @@ class TestCreateStudent:
         # column is String(10) — one char over should fail cleanly (422),
         # not 500 with a raw psycopg2/DataError traceback
         response = client.post(
-            "/students", json=valid_post_payload(existing_class, nisn="1" * 11)
+            "/students", json=make_student_payload(existing_class, nisn="1" * 11)
         )
         assert response.status_code in (400, 422)
 
@@ -272,7 +258,7 @@ class TestCreateStudent:
         # boundary check on the other side of the limit above — exactly 10
         # chars should be accepted, not off-by-one rejected
         response = client.post(
-            "/students", json=valid_post_payload(existing_class, nisn="1" * 10)
+            "/students", json=make_student_payload(existing_class, nisn="1" * 10)
         )
         assert response.status_code == 201
 
@@ -281,7 +267,7 @@ class TestCreateStudent:
         # actually valid for your domain. This test documents the decision;
         # flip the assertion if you deliberately want to allow it.
         response = client.post(
-            "/students", json=valid_post_payload(existing_class, name="")
+            "/students", json=make_student_payload(existing_class, name="")
         )
         assert response.status_code == 422
 
@@ -290,7 +276,7 @@ class TestCreateStudent:
     ):
         # posting an id in the body shouldn't let the client pick their own PK
         response = client.post(
-            "/students", json=valid_post_payload(existing_class, id=99999)
+            "/students", json=make_student_payload(existing_class, id=99999)
         )
         assert response.status_code == 201
         assert response.json()["id"] != 99999
