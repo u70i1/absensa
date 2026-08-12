@@ -151,7 +151,7 @@ class TestGetScan:
         page_1_ids = [row["scan_id"] for row in page_1]
         page_2_ids = [row["scan_id"] for row in page_2]
 
-        assert page_1_ids == [logs[i].scan_id for i in range(0, 5)]
+        assert page_1_ids == [logs[i].scan_id for i in range(5)]
         assert page_2_ids == [logs[i].scan_id for i in range(5, 10)]
         assert set(page_1_ids).isdisjoint(page_2_ids), "Pages should not overlap"
 
@@ -639,18 +639,13 @@ class TestPostScan:
         response = client.post("/scans", json={"nisn": ["not", "a", "string"]})
         assert response.status_code == 422
 
-
 class TestDeleteScan:
     def test_delete_scan_removes_row(
-        self, client, db_session, class_factory, student_factory
+        self, client, db_session, existing_student
     ):
         """Deleting an existing scan should actually remove it from the DB —
         not just return a nice status code."""
-        class_ = class_factory(class_name="11B")
-        student = student_factory(
-            name="Nicholas Angle", nisn="1234567890", class_id=class_.class_id
-        )
-        target = make_scan(db_session, student, datetime.now(LOCAL_TZ))
+        target = make_scan(db_session, existing_student, datetime.now(LOCAL_TZ))
 
         response = client.delete(f"/scans/{target.scan_id}")
 
@@ -659,40 +654,32 @@ class TestDeleteScan:
 
         # the real assertion: is it actually gone from the DB, not just "did
         # the endpoint say 204". Query directly rather than trusting the response.
-        remaining = db_session.query(ScanLog).filter_by(scan_id=target.scan_id).first()
+        stmt = select(ScanLog).where(ScanLog.scan_id == target.scan_id)
+        remaining = db_session.scalars(stmt).first()
         assert remaining is None, "Scan should no longer exist in the DB"
 
     def test_delete_scan_only_removes_the_targeted_row(
-        self, client, db_session, class_factory, student_factory
+        self, client, db_session, existing_student
     ):
         """Sanity check against an overly broad DELETE (e.g. missing a WHERE
         clause, or filtering on the wrong column) — make sure siblings survive."""
-        class_ = class_factory(class_name="11B")
-        student = student_factory(
-            name="Nicholas Angle", nisn="1234567890", class_id=class_.class_id
-        )
-        target = make_scan(db_session, student, datetime.now(LOCAL_TZ))
-        survivor = make_scan(db_session, student, datetime.now(LOCAL_TZ))
+        target = make_scan(db_session, existing_student, datetime.now(LOCAL_TZ))
+        survivor = make_scan(db_session, existing_student, datetime.now(LOCAL_TZ))
 
         response = client.delete(f"/scans/{target.scan_id}")
 
         assert response.status_code == 204
-        still_there = (
-            db_session.query(ScanLog).filter_by(scan_id=survivor.scan_id).first()
-        )
+        stmt = select(ScanLog).where(ScanLog.scan_id == survivor.scan_id)
+        still_there = db_session.scalars(stmt).first()
         assert still_there is not None, "Unrelated scan should not have been deleted"
 
     def test_delete_scan_missing_returns_404(
-        self, client, db_session, class_factory, student_factory
+        self, client, db_session, existing_student
     ):
         """Deleting a scan_id that doesn't exist should 404, consistent with
         GET /scans/{id}'s behavior for a missing id."""
         # seed something unrelated so a passing test isn't just "table is empty"
-        class_ = class_factory(class_name="11B")
-        student = student_factory(
-            name="Nicholas Angle", nisn="1234567890", class_id=class_.class_id
-        )
-        make_scan(db_session, student, datetime.now(LOCAL_TZ))
+        make_scan(db_session, existing_student, datetime.now(LOCAL_TZ))
 
         response = client.delete("/scans/999999")
 
@@ -706,15 +693,11 @@ class TestDeleteScan:
         assert response.status_code == 422
 
     def test_delete_scan_is_idempotent_failure_on_second_call(
-        self, client, db_session, class_factory, student_factory
+        self, client, db_session, existing_student
     ):
         """Deleting the same id twice: first call succeeds, second call 404s —
         it shouldn't silently 204 again on an already-gone row."""
-        class_ = class_factory(class_name="11B")
-        student = student_factory(
-            name="Nicholas Angle", nisn="1234567890", class_id=class_.class_id
-        )
-        target = make_scan(db_session, student, datetime.now(LOCAL_TZ))
+        target = make_scan(db_session, existing_student, datetime.now(LOCAL_TZ))
 
         first = client.delete(f"/scans/{target.scan_id}")
         second = client.delete(f"/scans/{target.scan_id}")
