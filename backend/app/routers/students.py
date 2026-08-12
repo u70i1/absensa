@@ -83,7 +83,6 @@ def put_student(
         if not class_exist:
             raise HTTPException(404)
 
-    # TODO: Prevent duplicate NISN errors on update
     nisn_dupe_exists = db.scalar(
         select(Student)
         .where(Student.id != student_id)

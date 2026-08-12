@@ -24,6 +24,9 @@ Contributions are welcomed! Please check out the to-do list below for current pr
 ### Testing
 - [ ] Auth flow tests (PIN, client session, superadmin)
 - [ ] Concurrency/edge case tests (following existing test patterns)
+- [x] Single data factory for each table
+### Frontend
+--
 
 <details>
   <summary>Previously Completed Tasks</summary>

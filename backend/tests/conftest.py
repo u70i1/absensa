@@ -16,6 +16,8 @@ from alembic.config import Config
 from app.core.config import settings
 from app.db.session import get_db
 from app.main import app
+from app.models.class_ import Class
+from app.models.student import Student
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
@@ -88,3 +90,70 @@ def client(db_session):
     yield TestClient(app)
 
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def class_factory(db_session):
+    """Seed a single class entry"""
+
+    def _make_class(class_name="Flock A"):
+        class_ = Class(class_name=class_name)
+        db_session.add(class_)
+        db_session.commit()
+        db_session.refresh(class_)
+        return class_
+
+    return _make_class
+
+
+@pytest.fixture
+def student_factory(db_session):
+    """Seed a single student entry"""
+
+    def _make_student(name="Shaun", class_id=None, nisn="1000000001", current=True):
+        student = Student(name=name, class_id=class_id, nisn=nisn, current=current)
+        db_session.add(student)
+        db_session.commit()
+        db_session.refresh(student)
+        return student
+
+    return _make_student
+
+
+SEED_STUDENTS = [
+    {"name": "Shaun", "class_index": 0, "nisn": "1000000001"},
+    {"name": "Ed", "class_index": 0, "nisn": "1000000002"},
+    {"name": "Liz", "class_index": 0, "nisn": "1000000003"},
+    {"name": "David", "class_index": 0, "nisn": "1000000004"},
+    {"name": "Dianne", "class_index": 0, "nisn": "1000000005"},
+    {"name": "Barbara", "class_index": 0, "nisn": "1000000006"},
+    {"name": "Philip", "class_index": 0, "nisn": "1000000007"},
+    {"name": "Pete", "class_index": 0, "nisn": "1000000008"},
+    {"name": "Yvonne", "class_index": 1, "nisn": "1000000009"},
+    {"name": "Tom", "class_index": 1, "nisn": "1000000010"},
+    {"name": "Declan", "class_index": 2, "nisn": "1000000011"},
+    {"name": "Alan", "class_index": 3, "nisn": "1000000100"},
+]
+
+SEED_CLASSES = ["10A", "10B", "10C", "10D"]
+
+
+@pytest.fixture
+def seeded_students_and_classes(db_session):
+    """Insert SEED_STUDENTS and SEED_CLASSES and return them."""
+    classes = [Class(class_name=class_) for class_ in SEED_CLASSES]
+    db_session.add_all(classes)
+
+    db_session.flush()
+
+    students = [
+        Student(
+            name=data["name"],
+            nisn=data["nisn"],
+            class_id=classes[data["class_index"]].class_id,
+        )
+        for data in SEED_STUDENTS
+    ]
+    db_session.add_all(students)
+    db_session.commit()
+    return students

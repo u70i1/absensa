@@ -1,43 +1,34 @@
-"""
-Tests for POST, PUT, DELETE /students.
-"""
+"""Tests for /students endpoints."""
 
 import pytest
-from app.models.class_ import Class
 from app.models.scan_log import ScanLog
 from app.models.student import Student
 from sqlalchemy import select
+
+# Helpers
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures local to this file
 # ---------------------------------------------------------------------------
 
-
 @pytest.fixture
-def existing_class(db_session):
-    """Insert one class directly via the ORM (bypassing the API) so tests
-    have a known row to reference, independent of POST working."""
-    class_ = Class(class_name="XII-A")
-    db_session.add(class_)
-    db_session.commit()
-    db_session.refresh(class_)
-    return class_
+def existing_class(class_factory):
+    """A default class (XII-A) for most tests."""
+    return class_factory(class_name="XII-A")
 
 
 @pytest.fixture
-def existing_student(db_session, existing_class):
-    """Insert one student directly via the ORM (bypassing the API) so tests
-    have a known row to PUT/DELETE against, independent of POST working."""
-    student = Student(
-        name="Bitzer", class_id=existing_class.class_id, nisn="1234567890"
+def existing_student(student_factory, existing_class):
+    """A single student with default values, linked to the default class."""
+    return student_factory(
+        name="Bitzer",
+        class_id=existing_class.class_id,
+        nisn="1234567890",
+        current=True,
     )
-    db_session.add(student)
-    db_session.commit()
-    db_session.refresh(student)
-    return student
 
 
-def valid_payload(existing_class, **overrides):
+def valid_post_payload(existing_class, **overrides):
     """A baseline valid POST body. Override individual fields per test.
 
     class_id is now a required argument (not a hardcoded default) because
@@ -53,15 +44,151 @@ def valid_payload(existing_class, **overrides):
     payload.update(overrides)
     return payload
 
+class TestGetStudents:
+# ---------------------------------------------------------------------------
+# Pagination
+# ---------------------------------------------------------------------------
+    def test_default_page_size_is_10(self, client, seeded_students_and_classes):
+        response = client.get("/students")
 
-# ---------------------------------------------------------------------------
-# POST /students
-# ---------------------------------------------------------------------------
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body) == 10
+
+
+    def test_page_2_returns_remaining_students(self, client, seeded_students_and_classes):
+        """11 seeded students, limit=10 -> page 2 should hold the last 2."""
+        response = client.get("/students?page=2&limit=10")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body) == 2
+
+
+    def test_custom_limit_per_page(self, client, seeded_students_and_classes):
+        response = client.get("/students?limit=5")
+
+        assert response.status_code == 200
+        assert len(response.json()) == 5
+
+
+    def test_page_and_limit_do_not_repeat_rows(self, client, seeded_students_and_classes):
+        """Page 1 and page 2 (limit=5) should never share a student."""
+        page1 = client.get("/students?page=1&limit=5").json()
+        page2 = client.get("/students?page=2&limit=5").json()
+
+        ids_page1 = {s["id"] for s in page1}
+        ids_page2 = {s["id"] for s in page2}
+        assert ids_page1.isdisjoint(ids_page2)
+
+
+    @pytest.mark.parametrize("bad_page", [0, -1])
+    def test_invalid_page_is_rejected(self, client, bad_page):
+        response = client.get(f"/students?page={bad_page}")
+        assert response.status_code == 422
+
+
+    # ---------------------------------------------------------------------------
+    # class filter
+    # ---------------------------------------------------------------------------
+
+
+    def test_filter_by_class(self, client, seeded_students_and_classes):
+        response = client.get("/students?class=10B&limit=100")
+
+        assert response.status_code == 200
+        body = response.json()
+        names = {s["name"] for s in body}
+        assert names == {"Yvonne", "Tom"}
+
+
+    def test_filter_by_class_no_match(self, client, seeded_students_and_classes):
+        response = client.get("/students?class=99Z")
+
+        assert response.status_code == 200
+        assert response.json() == []
+
+
+    # ---------------------------------------------------------------------------
+    # name filter (substring, case-insensitive)
+    # ---------------------------------------------------------------------------
+
+
+    def test_filter_by_name_substring(self, client, seeded_students_and_classes):
+        """'lan' should match both Declan and Alan."""
+        response = client.get("/students?name=lan")
+
+        assert response.status_code == 200
+        names = {s["name"] for s in response.json()}
+        assert names == {"Declan", "Alan"}
+
+
+    def test_filter_by_name_is_case_insensitive(self, client, seeded_students_and_classes):
+        response = client.get("/students?name=SHAUN")
+
+        assert response.status_code == 200
+        names = {s["name"] for s in response.json()}
+        assert names == {"Shaun"}
+
+
+    def test_filter_by_name_no_match(self, client, seeded_students_and_classes):
+        response = client.get("/students?name=zzz")
+
+        assert response.status_code == 200
+        assert response.json() == []
+
+
+    # ---------------------------------------------------------------------------
+    # nisn filter (exact match)
+    # ---------------------------------------------------------------------------
+
+
+    def test_filter_by_nisn_exact_match(self, client, seeded_students_and_classes):
+        response = client.get("/students?nisn=1000000003")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body) == 1
+        assert body[0]["name"] == "Liz"
+
+
+    def test_filter_by_nisn_no_match(self, client, seeded_students_and_classes):
+        response = client.get("/students?nisn=0000000000")
+
+        assert response.status_code == 200
+        assert response.json() == []
+
+
+    # ---------------------------------------------------------------------------
+    # combined filters
+    # ---------------------------------------------------------------------------
+
+
+    def test_combined_class_and_name_filters(self, client, seeded_students_and_classes):
+        """class=10B narrows to Yvonne+Tom, then name=yvon narrows further to Yvonne."""
+        response = client.get("/students?class=10B&name=yvon")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body) == 1
+        assert body[0]["name"] == "Yvonne"
+
+
+    # ---------------------------------------------------------------------------
+    # empty database
+    # ---------------------------------------------------------------------------
+
+
+    def test_no_students_returns_empty_list(self, client):
+        response = client.get("/students")
+
+        assert response.status_code == 200
+        assert response.json() == []
 
 
 class TestCreateStudent:
     def test_create_student_happy_path(self, client, existing_class, db_session):
-        response = client.post("/students", json=valid_payload(existing_class))
+        response = client.post("/students", json=valid_post_payload(existing_class))
 
         assert response.status_code == 201
         body = response.json()
@@ -79,7 +206,7 @@ class TestCreateStudent:
     def test_create_student_defaults_current_to_true(self, client, existing_class):
         # your model has current: Mapped[bool] = mapped_column(default=True)
         # — confirm the API surfaces that default rather than leaving it null
-        response = client.post("/students", json=valid_payload(existing_class))
+        response = client.post("/students", json=valid_post_payload(existing_class))
         assert response.status_code == 201
         assert response.json()["current"] is True
 
@@ -88,18 +215,18 @@ class TestCreateStudent:
     ):
         response = client.post(
             "/students",
-            json=valid_payload(existing_class, nisn=existing_student.nisn),
+            json=valid_post_payload(existing_class, nisn=existing_student.nisn),
         )
         assert response.status_code in (400, 409)
 
     def test_create_student_missing_required_field(self, client, existing_class):
-        payload = valid_payload(existing_class)
+        payload = valid_post_payload(existing_class)
         del payload["name"]
         response = client.post("/students", json=payload)
         assert response.status_code == 422
 
     def test_create_student_missing_nisn(self, client, existing_class):
-        payload = valid_payload(existing_class)
+        payload = valid_post_payload(existing_class)
         del payload["nisn"]
         response = client.post("/students", json=payload)
         assert response.status_code == 422
@@ -137,7 +264,7 @@ class TestCreateStudent:
         # column is String(10) — one char over should fail cleanly (422),
         # not 500 with a raw psycopg2/DataError traceback
         response = client.post(
-            "/students", json=valid_payload(existing_class, nisn="1" * 11)
+            "/students", json=valid_post_payload(existing_class, nisn="1" * 11)
         )
         assert response.status_code in (400, 422)
 
@@ -145,7 +272,7 @@ class TestCreateStudent:
         # boundary check on the other side of the limit above — exactly 10
         # chars should be accepted, not off-by-one rejected
         response = client.post(
-            "/students", json=valid_payload(existing_class, nisn="1" * 10)
+            "/students", json=valid_post_payload(existing_class, nisn="1" * 10)
         )
         assert response.status_code == 201
 
@@ -154,7 +281,7 @@ class TestCreateStudent:
         # actually valid for your domain. This test documents the decision;
         # flip the assertion if you deliberately want to allow it.
         response = client.post(
-            "/students", json=valid_payload(existing_class, name="")
+            "/students", json=valid_post_payload(existing_class, name="")
         )
         assert response.status_code == 422
 
@@ -163,7 +290,7 @@ class TestCreateStudent:
     ):
         # posting an id in the body shouldn't let the client pick their own PK
         response = client.post(
-            "/students", json=valid_payload(existing_class, id=99999)
+            "/students", json=valid_post_payload(existing_class, id=99999)
         )
         assert response.status_code == 201
         assert response.json()["id"] != 99999
@@ -224,14 +351,14 @@ class TestUpdateStudent:
             assert response.status_code == 422
 
     def test_update_student_duplicate_nisn_conflicts(
-        self, client, db_session, existing_student, existing_class
+        self, client, db_session, existing_student, existing_class, student_factory
     ):
-        other = Student(
-            name="Other Student", class_id=existing_class.class_id, nisn="1111111111"
+        other = student_factory(
+            name="Other Student",
+            class_id=existing_class.class_id,
+            nisn="1111111111",
+            current=True,
         )
-        db_session.add(other)
-        db_session.commit()
-        db_session.refresh(other)
 
         response = client.put(
             f"/students/{other.id}",
@@ -396,4 +523,3 @@ class TestDeleteStudent:
         stmt = select(ScanLog).where(ScanLog.student_nisn == existing_student.nisn)
         remaining = db_session.scalars(stmt).all()
         assert remaining == []
-

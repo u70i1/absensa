@@ -19,17 +19,10 @@ CLASSES_URL = "/classes"
 # Helpers / fixtures local to this file
 # ---------------------------------------------------------------------------
 
-
-@pytest.fixture
-def existing_class(db_session):
-    """Insert one class directly via the ORM (bypassing the API) so tests
-    have a known row to PUT/DELETE against, independent of POST working."""
-    class_ = Class(class_name="XII-A")
-    db_session.add(class_)
-    db_session.commit()
-    db_session.refresh(class_)
+@pytest.fixture()
+def existing_class(class_factory):
+    class_ = class_factory()
     return class_
-
 
 def valid_payload(**overrides):
     """A baseline valid POST body. Override individual fields per test."""
@@ -99,7 +92,9 @@ class TestCreateClass:
         # returns an error status but still commits (a real failure mode
         # if the constraint check and the insert aren't in the same
         # transaction/are handled out of order)
-        client.post(CLASSES_URL, json=valid_payload(class_name=existing_class.class_name))
+        client.post(
+            CLASSES_URL, json=valid_payload(class_name=existing_class.class_name)
+        )
 
         stmt = select(Class).where(Class.class_name == existing_class.class_name)
         matches = db_session.scalars(stmt).all()
@@ -124,14 +119,10 @@ class TestUpdateClass:
         assert existing_class.class_name == "XII-A rnmd"
 
     def test_update_nonexistent_class_404(self, client):
-        response = client.put(
-            f"{CLASSES_URL}/999999", json={"class_name": "Nobody"}
-        )
+        response = client.put(f"{CLASSES_URL}/999999", json={"class_name": "Nobody"})
         assert response.status_code == 404
 
-    def test_update_class_cannot_change_id(
-        self, client, existing_class, db_session
-    ):
+    def test_update_class_cannot_change_id(self, client, existing_class, db_session):
         original_id = existing_class.class_id
         response = client.put(
             f"{CLASSES_URL}/{original_id}",
@@ -157,9 +148,7 @@ class TestUpdateClass:
         assert first.json() == second.json()
 
     def test_update_class_invalid_id_type_422(self, client):
-        response = client.put(
-            f"{CLASSES_URL}/not-a-number", json={"class_name": "X"}
-        )
+        response = client.put(f"{CLASSES_URL}/not-a-number", json={"class_name": "X"})
         assert response.status_code == 422
 
     def test_update_class_name_too_long_rejected(self, client, existing_class):
@@ -169,14 +158,13 @@ class TestUpdateClass:
         )
         assert response.status_code in (400, 422)
 
-    def test_update_class_duplicate_name_rejected(self, client, db_session, existing_class):
-        other = Class(class_name="XI-C")
-        db_session.add(other)
-        db_session.commit()
-        db_session.refresh(other)
+    def test_update_class_duplicate_name_rejected(
+        self, client, existing_class, class_factory
+    ):
+        another_class = class_factory(class_name="XI-C")
 
         response = client.put(
-            f"{CLASSES_URL}/{other.class_id}",
+            f"{CLASSES_URL}/{another_class.class_id}",
             json={"class_name": existing_class.class_name},
         )
         assert response.status_code in (400, 409)
