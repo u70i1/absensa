@@ -5,9 +5,25 @@ RESPONSE CONTRACT:
 
 Bulk create/update -> 200, body:
 {
-  "succeeded": [ {"index": 0, "id": 5, ...StudentResponse fields}, ... ],
-  "failed":    [ {"index": 3, "error": "duplicate nisn", "input": {...}}, ... ]
+  "succeeded": [
+    {"index": 0, "student": {"id": 5, "name": ..., "nisn": ..., "class_id": ..., "current": ...}},
+    ...
+  ],
+  "failed": [
+    {"index": 3, "error": "duplicate nisn", "student": {"name": ..., "nisn": ..., "class_id": ...}},
+    ...
+  ]
 }
+
+Both branches share "index" so a frontend can zip either array back to the
+original spreadsheet row without special-casing. The nested keys are
+deliberately named for what they contain rather than reused across
+branches:
+  - succeeded[i]["student"] is the resulting StudentResponse (has "id",
+    reflects anything the server defaulted/normalized).
+  - failed[i]["student"] is the original request payload as sent (no "id",
+    since it never made it into the DB) -- useful for a spreadsheet UI to
+    show the user exactly what they typed on the offending row.
 
 Row-level processing rules (create & update):
   - Malformed row (missing required field, wrong type) -> validation happens
@@ -38,11 +54,12 @@ Suggested schema names (adjust to match whatever you actually name them):
   - StudentBulkDeleteRequest = {"ids": list[int]}
 """
 
-import pytest
 from app.models.student import Student
 from sqlalchemy import select
 
-from tests.helpers import make_student_payload
+
+def make_student_payload(name="Shaun", nisn="1000000001", class_id=None, current=True):
+    return {"name": name, "nisn": nisn, "class_id": class_id, "current": current}
 
 
 # ===========================================================================
@@ -71,7 +88,8 @@ class TestBulkCreate:
 
         for item in body["succeeded"]:
             assert "index" in item
-            assert "id" in item
+            assert "student" in item
+            assert "id" in item["student"]
 
         # Confirm indices map 1:1 with input order
         assert sorted(item["index"] for item in body["succeeded"]) == list(range(5))
@@ -86,11 +104,12 @@ class TestBulkCreate:
         individually-created ones -- fetch one back via GET /students and
         confirm the fields match what you sent."""
         class_ = class_factory()
-        payload = make_student_payload(name="Fetch Me", nisn="1000009999", class_id=class_.class_id)
+        class_id = class_.class_id
+        payload = make_student_payload(name="Fetch Me", nisn="1000009999", class_id=class_id)
 
         response = client.post("/students/bulk", json=[payload])
         assert response.status_code == 200
-        created_id = response.json()["succeeded"][0]["id"]
+        created_id = response.json()["succeeded"][0]["student"]["id"]
 
         get_response = client.get("/students", params={"nisn": "1000009999"})
         assert get_response.status_code == 200
@@ -100,7 +119,7 @@ class TestBulkCreate:
         assert fetched["id"] == created_id
         assert fetched["name"] == "Fetch Me"
         assert fetched["nisn"] == "1000009999"
-        assert fetched["class_id"] == class_.class_id
+        assert fetched["class_id"] == class_id
 
     def test_students_without_class_id_are_allowed(self, client, db_session):
         """class_id is nullable on the model. A bulk import of students who
@@ -299,9 +318,9 @@ class TestBulkCreateEdgeCases:
         assert len(body["succeeded"]) == 100
         assert len(body["failed"]) == 0
 
-        count = db_session.scalar(
-            select(Student).where(Student.nisn.like("20000%"))
-        )
+        # count = db_session.scalar(
+        #     select(Student).where(Student.nisn.like("20000%"))
+        # )
         all_created = db_session.scalars(
             select(Student).where(Student.nisn.like("20000%"))
         ).all()
@@ -314,7 +333,9 @@ class TestBulkCreateResponseShape:
 
     def test_response_has_succeeded_and_failed_keys(self, client, class_factory):
         """Even with a batch that's 100% successful, `failed` should still
-        be present as an empty list, not omitted. Same in reverse."""
+        be present as an empty list, not omitted. Same in reverse. (Shape
+        of individual items -- {"index","student"} vs {"index","error",
+        "student"} -- is asserted in the more targeted shape tests below.)"""
         class_ = class_factory()
         payloads = [make_student_payload(name="Solo", nisn="1000000001", class_id=class_.class_id)]
 
@@ -330,7 +351,7 @@ class TestBulkCreateResponseShape:
 
     def test_failed_item_includes_input_and_error(self, client, student_factory):
         """Assert the shape of an individual `failed` entry: "index",
-        "error", and "input" (the original payload sent for that row --
+        "error", and "student" (the original payload sent for that row --
         useful for a spreadsheet UI showing the user exactly which row +
         what they typed)."""
         student_factory(name="Existing", nisn="1000000001")
@@ -346,12 +367,16 @@ class TestBulkCreateResponseShape:
         assert failed_item["index"] == 0
         assert isinstance(failed_item["error"], str)
         assert failed_item["error"] != ""
-        assert failed_item["input"] == bad_payload
+        assert failed_item["student"] == bad_payload
 
     def test_succeeded_item_matches_studentresponse_shape(self, client, class_factory):
-        """Assert a `succeeded` entry has the same fields as the existing
-        StudentResponse (id, name, nisn, current, class_id, ...) plus the
-        "index" key."""
+        """Assert a `succeeded` entry is {"index": ..., "student": {...}},
+        where "student" carries the same fields as the existing
+        StudentResponse (id, name, nisn, current, class_id, ...). The
+        student payload is nested rather than merged flat onto the item,
+        so success and failure items share a predictable top-level shape
+        ("index" + one branch-specific key) without conflating "what was
+        sent" with "what the DB now holds"."""
         class_ = class_factory()
         payload = make_student_payload(name="Shaped", nisn="1000000001", class_id=class_.class_id, current=True)
 
@@ -362,14 +387,17 @@ class TestBulkCreateResponseShape:
         assert len(body["succeeded"]) == 1
         item = body["succeeded"][0]
 
-        expected_keys = {"index", "id", "name", "nisn", "current", "class_id"}
-        assert expected_keys.issubset(item.keys())
-
+        assert set(item.keys()) == {"index", "student"}
         assert item["index"] == 0
-        assert item["name"] == "Shaped"
-        assert item["nisn"] == "1000000001"
-        assert item["current"] is True
-        assert item["class_id"] == class_.class_id
+
+        student = item["student"]
+        expected_keys = {"id", "name", "nisn", "current", "class_id"}
+        assert expected_keys.issubset(student.keys())
+        assert isinstance(student["id"], int)
+        assert student["name"] == "Shaped"
+        assert student["nisn"] == "1000000001"
+        assert student["current"] is True
+        assert student["class_id"] == class_.class_id
 
 
 # ===========================================================================
@@ -623,12 +651,12 @@ class TestBulkUpdateResponseShape:
         assert isinstance(body["succeeded"], list)
         assert isinstance(body["failed"], list)
 
-        assert "index" in body["succeeded"][0]
-        assert "id" in body["succeeded"][0]
+        assert set(body["succeeded"][0].keys()) == {"index", "student"}
+        assert "id" in body["succeeded"][0]["student"]
 
         assert "index" in body["failed"][0]
         assert "error" in body["failed"][0]
-        assert "input" in body["failed"][0]
+        assert "student" in body["failed"][0]
 
 
 # ===========================================================================
@@ -699,9 +727,9 @@ class TestBulkDeleteEdgeCases:
     def test_empty_id_list(self, client, db_session):
         """DECISION: empty id list -> 204, no-op, nothing deleted. Matches
         the "nothing to do" treatment given to empty bulk-create lists."""
-        existing_count_before = db_session.scalar(
-            select(Student.id)
-        )
+        # existing_count_before = db_session.scalar(
+        #     select(Student.id)
+        # )
 
         response = client.post("/students/bulk-delete", json={"ids": []})
 
