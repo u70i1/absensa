@@ -12,7 +12,7 @@ import pytest
 from app.models.class_ import Class
 from sqlalchemy import select
 
-from tests.helpers import class_payload
+from tests.helpers import make_class_payload
 
 CLASSES_URL = "/classes"
 
@@ -33,7 +33,7 @@ def existing_class(class_factory):
 
 class TestCreateClass:
     def test_create_class_happy_path(self, client, db_session):
-        response = client.post(CLASSES_URL, json=class_payload())
+        response = client.post(CLASSES_URL, json=make_class_payload())
 
         assert response.status_code == 201
         body = response.json()
@@ -52,30 +52,30 @@ class TestCreateClass:
         # empty string satisfies "is a str" at the type level — decide if
         # that's actually valid for your domain, same call as the analogous
         # empty-name test on Student. Flip this if you deliberately allow it.
-        response = client.post(CLASSES_URL, json=class_payload(class_name=""))
+        response = client.post(CLASSES_URL, json=make_class_payload(class_name=""))
         assert response.status_code == 422
 
     def test_create_class_name_too_long_rejected(self, client):
         # column is String(10) — one char over should fail cleanly (422),
         # not 500 with a raw psycopg2/DataError traceback
-        response = client.post(CLASSES_URL, json=class_payload(class_name="X" * 11))
+        response = client.post(CLASSES_URL, json=make_class_payload(class_name="X" * 11))
         assert response.status_code in (400, 422)
 
     def test_create_class_name_at_max_length_accepted(self, client):
         # boundary check on the other side of the limit above
-        response = client.post(CLASSES_URL, json=class_payload(class_name="X" * 10))
+        response = client.post(CLASSES_URL, json=make_class_payload(class_name="X" * 10))
         assert response.status_code == 201
 
     def test_create_class_response_does_not_leak_id_control(self, client):
         # posting a class_id in the body shouldn't let the client pick
         # their own PK
-        response = client.post(CLASSES_URL, json=class_payload(class_id=99999))
+        response = client.post(CLASSES_URL, json=make_class_payload(class_id=99999))
         assert response.status_code == 201
         assert response.json()["class_id"] != 99999
 
     def test_create_class_duplicate_name_rejected(self, client, existing_class):
         response = client.post(
-            CLASSES_URL, json=class_payload(class_name=existing_class.class_name)
+            CLASSES_URL, json=make_class_payload(class_name=existing_class.class_name)
         )
         assert response.status_code in (400, 409)
 
@@ -88,7 +88,7 @@ class TestCreateClass:
         # if the constraint check and the insert aren't in the same
         # transaction/are handled out of order)
         client.post(
-            CLASSES_URL, json=class_payload(class_name=existing_class.class_name)
+            CLASSES_URL, json=make_class_payload(class_name=existing_class.class_name)
         )
 
         stmt = select(Class).where(Class.class_name == existing_class.class_name)
