@@ -6,6 +6,8 @@ from app.models.student import Student
 from app.schemas.BulkStudentRequest import BulkStudentRequest
 from app.schemas.BulkStudentResponse import BulkStudentResponse
 from fastapi import APIRouter, Depends
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,7 +18,7 @@ router = APIRouter()
 def post_students_bulk(
     payload: list[BulkStudentRequest], db: Session = Depends(get_db)
 ):
-    """Create students in bulk. Receives a list of StudentRequest."""
+    """Create students in bulk."""
     succeeded = []
     failed = []
     REQUIRED_FIELDS = {"nisn", "name"}
@@ -84,7 +86,19 @@ def post_students_bulk(
     db.add_all(new_students)
     db.commit()
 
+    if len(succeeded) < 1 and len(failed) >= 1:
+        return JSONResponse(
+            status_code=422,
+            content=jsonable_encoder(
+                {
+                    "succeeded": succeeded,
+                    "failed": failed,
+                }
+            ),
+        )
+
     return {
         "succeeded": succeeded,
         "failed": failed,
     }
+

@@ -237,7 +237,7 @@ class TestBulkCreateEdgeCases:
 
         response = client.post("/students/bulk", json=payloads)
 
-        assert response.status_code == 200
+        assert response.status_code == 422
         body = response.json()
 
         assert len(body["succeeded"]) == 0
@@ -359,7 +359,7 @@ class TestBulkCreateResponseShape:
 
         response = client.post("/students/bulk", json=[bad_payload])
 
-        assert response.status_code == 200
+        assert response.status_code == 422
         body = response.json()
         assert len(body["failed"]) == 1
         failed_item = body["failed"][0]
