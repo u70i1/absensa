@@ -13,3 +13,8 @@ class BulkStudentRequestWithId(BulkStudentRequest):
 
     Extended from BulkStudentRequest by adding id field."""
     id: int | None = Field(None)
+
+class BulkStudentIdOnly(BaseModel):
+    """Request payload schema for POST /students/delete-bulk"""
+
+    ids: list[int]
