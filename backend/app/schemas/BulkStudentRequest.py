@@ -7,3 +7,9 @@ class BulkStudentRequest(BaseModel):
     name: str | None = Field(None, min_length=1)
     class_id: int | None = None
     current: bool | None
+
+class BulkStudentRequestWithId(BulkStudentRequest):
+    """Single item from request payload schema for PUT /student/bulk.
+
+    Extended from BulkStudentRequest by adding id field."""
+    id: int | None = Field(None)

@@ -7,7 +7,7 @@ from app.routers.students import router as student_router
 from fastapi import APIRouter
 
 api_router = APIRouter()
+api_router.include_router(bulk_student_router)
 api_router.include_router(class_router)
 api_router.include_router(student_router)
 api_router.include_router(scan_router)
-api_router.include_router(bulk_student_router)

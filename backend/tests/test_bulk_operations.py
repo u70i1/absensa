@@ -1,5 +1,5 @@
 """
-Test suite for POST /students/bulk, PATCH /students/bulk, POST /students/bulk-delete
+Test suite for POST /students/bulk, PUT /students/bulk, POST /students/bulk-delete
 
 RESPONSE CONTRACT:
 
@@ -401,11 +401,11 @@ class TestBulkCreateResponseShape:
 
 
 # ===========================================================================
-# 2. BULK UPDATE -- PATCH /students/bulk
+# 2. BULK UPDATE -- put /students/bulk
 # ===========================================================================
 class TestBulkUpdate:
     def test_updates_multiple_students(self, client, seeded_students_and_classes, db_session):
-        """Happy path: PATCH several existing students' fields (e.g. move
+        """Happy path: put several existing students' fields (e.g. move
         them to a different class_id) in one request, confirm DB reflects
         the changes."""
         students = seeded_students_and_classes
@@ -429,7 +429,7 @@ class TestBulkUpdate:
             },
         ]
 
-        response = client.patch("/students/bulk", json=payload)
+        response = client.put("/students/bulk", json=payload)
 
         assert response.status_code == 200
         body = response.json()
@@ -462,7 +462,7 @@ class TestBulkUpdate:
             for s in class_a_students
         ]
 
-        response = client.patch("/students/bulk", json=payload)
+        response = client.put("/students/bulk", json=payload)
 
         assert response.status_code == 200
         body = response.json()
@@ -504,7 +504,7 @@ class TestBulkUpdateEdgeCases:
             },
         ]
 
-        response = client.patch("/students/bulk", json=payload)
+        response = client.put("/students/bulk", json=payload)
 
         assert response.status_code == 200
         body = response.json()
@@ -532,9 +532,9 @@ class TestBulkUpdateEdgeCases:
             },
         ]
 
-        response = client.patch("/students/bulk", json=payload)
+        response = client.put("/students/bulk", json=payload)
 
-        assert response.status_code == 200
+        assert response.status_code == 422
         body = response.json()
         assert len(body["succeeded"]) == 0
         assert len(body["failed"]) == 1
@@ -550,9 +550,7 @@ class TestBulkUpdateEdgeCases:
         yet), so this is documented as a per-row failure -- NOT a supported
         atomic swap. Both rows are expected to fail with a duplicate-nisn
         style error, even though the end state (if computed as a set)
-        would have been valid. If a future version wants to support true
-        swaps, this test should be updated to reflect a two-pass diffing
-        strategy instead.
+        would have been valid.
         """
         students = seeded_students_and_classes
         student_x, student_y = students[0], students[1]
@@ -576,9 +574,9 @@ class TestBulkUpdateEdgeCases:
             },
         ]
 
-        response = client.patch("/students/bulk", json=payload)
+        response = client.put("/students/bulk", json=payload)
 
-        assert response.status_code == 200
+        assert response.status_code == 422
         body = response.json()
 
         # Documented v1 behavior: swap is not supported, at least one (or
@@ -608,9 +606,9 @@ class TestBulkUpdateEdgeCases:
             },
         ]
 
-        response = client.patch("/students/bulk", json=payload)
+        response = client.put("/students/bulk", json=payload)
 
-        assert response.status_code == 200
+        assert response.status_code == 422
         body = response.json()
         assert len(body["succeeded"]) == 0
         assert len(body["failed"]) == 1
@@ -642,7 +640,7 @@ class TestBulkUpdateResponseShape:
             },
         ]
 
-        response = client.patch("/students/bulk", json=payload)
+        response = client.put("/students/bulk", json=payload)
 
         assert response.status_code == 200
         body = response.json()
