@@ -13,6 +13,7 @@ from tests.helpers import make_student_payload
 # Helpers / fixtures local to this file
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def existing_class(class_factory):
     """A default class (XII-A) for most tests."""
@@ -31,9 +32,9 @@ def existing_student(student_factory, existing_class):
 
 
 class TestGetStudents:
-# ---------------------------------------------------------------------------
-# Pagination
-# ---------------------------------------------------------------------------
+    # ---------------------------------------------------------------------------
+    # Pagination
+    # ---------------------------------------------------------------------------
     def test_default_page_size_is_10(self, client, seeded_students_and_classes):
         response = client.get("/students")
 
@@ -41,8 +42,9 @@ class TestGetStudents:
         body = response.json()
         assert len(body) == 10
 
-
-    def test_page_2_returns_remaining_students(self, client, seeded_students_and_classes):
+    def test_page_2_returns_remaining_students(
+        self, client, seeded_students_and_classes
+    ):
         """11 seeded students, limit=10 -> page 2 should hold the last 2."""
         response = client.get("/students?page=2&limit=10")
 
@@ -50,15 +52,15 @@ class TestGetStudents:
         body = response.json()
         assert len(body) == 2
 
-
     def test_custom_limit_per_page(self, client, seeded_students_and_classes):
         response = client.get("/students?limit=5")
 
         assert response.status_code == 200
         assert len(response.json()) == 5
 
-
-    def test_page_and_limit_do_not_repeat_rows(self, client, seeded_students_and_classes):
+    def test_page_and_limit_do_not_repeat_rows(
+        self, client, seeded_students_and_classes
+    ):
         """Page 1 and page 2 (limit=5) should never share a student."""
         page1 = client.get("/students?page=1&limit=5").json()
         page2 = client.get("/students?page=2&limit=5").json()
@@ -67,17 +69,14 @@ class TestGetStudents:
         ids_page2 = {s["id"] for s in page2}
         assert ids_page1.isdisjoint(ids_page2)
 
-
     @pytest.mark.parametrize("bad_page", [0, -1])
     def test_invalid_page_is_rejected(self, client, bad_page):
         response = client.get(f"/students?page={bad_page}")
         assert response.status_code == 422
 
-
     # ---------------------------------------------------------------------------
     # class filter
     # ---------------------------------------------------------------------------
-
 
     def test_filter_by_class(self, client, seeded_students_and_classes):
         response = client.get("/students?class=10B&limit=100")
@@ -87,18 +86,15 @@ class TestGetStudents:
         names = {s["name"] for s in body}
         assert names == {"Yvonne", "Tom"}
 
-
     def test_filter_by_class_no_match(self, client, seeded_students_and_classes):
         response = client.get("/students?class=99Z")
 
         assert response.status_code == 200
         assert response.json() == []
 
-
     # ---------------------------------------------------------------------------
     # name filter (substring, case-insensitive)
     # ---------------------------------------------------------------------------
-
 
     def test_filter_by_name_substring(self, client, seeded_students_and_classes):
         """'lan' should match both Declan and Alan."""
@@ -108,14 +104,14 @@ class TestGetStudents:
         names = {s["name"] for s in response.json()}
         assert names == {"Declan", "Alan"}
 
-
-    def test_filter_by_name_is_case_insensitive(self, client, seeded_students_and_classes):
+    def test_filter_by_name_is_case_insensitive(
+        self, client, seeded_students_and_classes
+    ):
         response = client.get("/students?name=SHAUN")
 
         assert response.status_code == 200
         names = {s["name"] for s in response.json()}
         assert names == {"Shaun"}
-
 
     def test_filter_by_name_no_match(self, client, seeded_students_and_classes):
         response = client.get("/students?name=zzz")
@@ -123,11 +119,9 @@ class TestGetStudents:
         assert response.status_code == 200
         assert response.json() == []
 
-
     # ---------------------------------------------------------------------------
     # nisn filter (exact match)
     # ---------------------------------------------------------------------------
-
 
     def test_filter_by_nisn_exact_match(self, client, seeded_students_and_classes):
         response = client.get("/students?nisn=1000000003")
@@ -137,18 +131,15 @@ class TestGetStudents:
         assert len(body) == 1
         assert body[0]["name"] == "Liz"
 
-
     def test_filter_by_nisn_no_match(self, client, seeded_students_and_classes):
         response = client.get("/students?nisn=0000000000")
 
         assert response.status_code == 200
         assert response.json() == []
 
-
     # ---------------------------------------------------------------------------
     # combined filters
     # ---------------------------------------------------------------------------
-
 
     def test_combined_class_and_name_filters(self, client, seeded_students_and_classes):
         """class=10B narrows to Yvonne+Tom, then name=yvon narrows further to Yvonne."""
@@ -159,11 +150,9 @@ class TestGetStudents:
         assert len(body) == 1
         assert body[0]["name"] == "Yvonne"
 
-
     # ---------------------------------------------------------------------------
     # empty database
     # ---------------------------------------------------------------------------
-
 
     def test_no_students_returns_empty_list(self, client):
         response = client.get("/students")
@@ -231,7 +220,12 @@ class TestCreateStudent:
         # (e.g. pending placement) must be a valid state, not an error
         response = client.post(
             "/students",
-            json={"name": "Shaun", "class_id": None, "nisn": "9876543210", "current": True},
+            json={
+                "name": "Shaun",
+                "class_id": None,
+                "nisn": "9876543210",
+                "current": True,
+            },
         )
         assert response.status_code == 201
         assert response.json()["class_id"] is None
@@ -295,7 +289,7 @@ class TestUpdateStudent:
                 "name": "Bitzer Updated",
                 "class_id": existing_student.class_id,
                 "nisn": "1234567890",
-                "current": True
+                "current": True,
             },
         )
         assert response.status_code == 200
@@ -311,7 +305,7 @@ class TestUpdateStudent:
                 "name": "Nobody",
                 "class_id": existing_class.class_id,
                 "nisn": "0000000000",
-                "current": True
+                "current": True,
             },
         )
         assert response.status_code == 404
@@ -352,7 +346,7 @@ class TestUpdateStudent:
                 "name": other.name,
                 "class_id": other.class_id,
                 "nisn": existing_student.nisn,
-                "current": True
+                "current": True,
             },
         )
         assert response.status_code in (400, 409)
@@ -362,7 +356,7 @@ class TestUpdateStudent:
             "name": "Bitzer",
             "class_id": existing_student.class_id,
             "nisn": "1234567890",
-            "current": True
+            "current": True,
         }
         first = client.put(f"/students/{existing_student.id}", json=payload)
         second = client.put(f"/students/{existing_student.id}", json=payload)
@@ -426,7 +420,7 @@ class TestUpdateStudent:
                 "name": existing_student.name,
                 "class_id": None,
                 "nisn": existing_student.nisn,
-                "current": True
+                "current": True,
             },
         )
         assert response.status_code == 200
@@ -464,29 +458,6 @@ class TestDeleteStudent:
         response = client.delete("/students/not-a-number")
         assert response.status_code == 422
 
-    def test_delete_student_cascades_scan_logs(
-        self, client, existing_student, existing_class, db_session
-    ):
-        # ScanLog.class_ is a plain string snapshot, not a FK to Class —
-        # it logs the class name as it was at scan time, so we pass the
-        # Class's name here, not the Student relationship (which no longer
-        # exists as a string).
-        log = ScanLog(
-            student_nisn=existing_student.nisn,
-            name=existing_student.name,
-            class_name=existing_class.class_name,
-        )
-        db_session.add(log)
-        db_session.commit()
-        db_session.refresh(log)
-        log_scan_id = log.scan_id
-
-        response = client.delete(f"/students/{existing_student.id}")
-        assert response.status_code in (200, 204)
-
-        stmt = select(ScanLog).where(ScanLog.scan_id == log_scan_id)
-        assert db_session.scalars(stmt).one_or_none() is None
-
     def test_delete_student_with_scan_logs_does_not_orphan_or_error(
         self, client, existing_student, existing_class, db_session
     ):
@@ -496,7 +467,7 @@ class TestDeleteStudent:
         for _ in range(2):
             db_session.add(
                 ScanLog(
-                    student_nisn=existing_student.nisn,
+                    student_id=existing_student.id,
                     name=existing_student.name,
                     class_name=existing_class.class_name,
                 )
@@ -506,6 +477,6 @@ class TestDeleteStudent:
         response = client.delete(f"/students/{existing_student.id}")
         assert response.status_code in (200, 204)
 
-        stmt = select(ScanLog).where(ScanLog.student_nisn == existing_student.nisn)
+        stmt = select(ScanLog).where(ScanLog.student_id == existing_student.nisn)
         remaining = db_session.scalars(stmt).all()
         assert remaining == []

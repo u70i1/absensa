@@ -9,7 +9,6 @@ from sqlalchemy import select
 # match whatever your app reads from the TZ env var — don't hardcode
 # a different literal here than what your app actually uses
 LOCAL_TZ = ZoneInfo(settings.timezone)
-from zoneinfo import ZoneInfo
 
 
 def make_scan(db_session, student, when: datetime):
@@ -19,7 +18,7 @@ def make_scan(db_session, student, when: datetime):
     class_name = student.class_.class_name if student.class_ is not None else None
 
     log = ScanLog(
-        student_nisn=student.nisn,
+        student_id=student.id,
         name=student.name,
         class_name=class_name,
         timestamp=when,
@@ -30,9 +29,8 @@ def make_scan(db_session, student, when: datetime):
     return log
 
 
-
-def scan_logs_for(db_session, nisn):
-    stmt = select(ScanLog).filter_by(student_nisn=nisn)
+def scan_logs_for(db_session, student_id):
+    stmt = select(ScanLog).filter_by(student_id=student_id)
     return db_session.scalars(stmt).all()
 
 
@@ -168,10 +166,10 @@ class TestGetScan:
         assert response.status_code == 422
 
     # ---------------------------------------------------------------------------
-    # NISN filter
+    # student_id filter
     # ---------------------------------------------------------------------------
 
-    def test_get_scan_filters_by_nisn(
+    def test_get_scan_filters_by_student_id(
         self, client, student_factory, class_factory, db_session
     ):
         class_a = class_factory(class_name="11A")
@@ -188,20 +186,20 @@ class TestGetScan:
         make_scan(db_session, student_a, now)
         make_scan(db_session, student_b, now)
 
-        response = client.get("/scans", params={"nisn": "1111111111"})
+        response = client.get("/scans", params={"student_id": student_a.id})
         body = response.json()
 
         assert len(body) == 1
-        assert body[0]["student_nisn"] == "1111111111"
+        assert body[0]["student_id"] == student_a.id
 
-    def test_get_scan_filter_nisn_no_matches_returns_empty_list(
+    def test_get_scan_filter_student_id_no_matches_returns_empty_list(
         self, student_factory, client, db_session
     ):
-        """Filtering by a NISN that has no scans -> empty list, not 404."""
+        """Filtering by a student_id that has no scans -> empty list, not 404."""
         student = student_factory(nisn="1111111111")
         make_scan(db_session, student, datetime.now(LOCAL_TZ))
 
-        response = client.get("/scans", params={"nisn": "9999999999"})
+        response = client.get("/scans", params={"student_id": student.id + 999999})
 
         assert response.status_code == 200
         assert response.json() == []
@@ -321,7 +319,7 @@ class TestGetScan:
 
         assert response.status_code == 200
         assert body["scan_id"] == target.scan_id
-        assert body["student_nisn"] == student.nisn
+        assert body["student_id"] == student.id
 
     def test_get_scan_by_id_returns_bare_object_not_list(
         self, student_factory, client, db_session
@@ -340,8 +338,6 @@ class TestGetScan:
     ):
         """A scan_id that doesn't exist should 404, same convention as POST /scans
         for a missing student."""
-        # make sure the table isn't empty, so a passing test isn't just an
-        # accidental "nothing exists yet" false positive
         student = student_factory()
         make_scan(db_session, student, datetime.now(LOCAL_TZ))
 
@@ -356,11 +352,7 @@ class TestGetScan:
 
         assert response.status_code == 422
 
-    # ---------------------------------------------------------------------------
-    # Combined filters
-    # ---------------------------------------------------------------------------
-
-    def test_get_scan_combines_nisn_and_date_range(
+    def test_get_scan_combines_student_id_and_date_range(
         self, client, db_session, class_factory, student_factory
     ):
 
@@ -385,7 +377,7 @@ class TestGetScan:
         response = client.get(
             "/scans",
             params={
-                "nisn": "1111111111",
+                "student_id": student_a.id,
                 "date_from": "2026-07-01",
                 "date_to": "2026-07-31",
             },
@@ -393,14 +385,6 @@ class TestGetScan:
         ids = [row["scan_id"] for row in response.json()]
 
         assert ids == [target.scan_id]
-
-    # ---------------------------------------------------------------------------
-    # Scan for a student with no class assigned (nullable class_id)
-    #
-    # make_scan() already handles student.class_ is None by writing
-    # ScanLog.class_ = None — this pins that behavior down explicitly rather
-    # than leaving it as an implicit side effect of the helper.
-    # ---------------------------------------------------------------------------
 
     def test_get_scan_for_student_without_class_has_null_class(
         self, client, db_session
@@ -418,6 +402,35 @@ class TestGetScan:
         assert response.status_code == 200
         assert body["class_name"] is None
 
+    def test_get_scan_survives_student_deletion_with_null_student_id(
+        self, client, db_session, student_factory
+    ):
+        """
+        Deleting a student should SET NULL on their scan logs' student_id,
+        not cascade-delete the logs (that's the behavior change from the old
+        student_nisn / ondelete=CASCADE FK). The log -- and its name/class_name
+        snapshot -- should still be fetchable afterward.
+        """
+        student = student_factory(name="Departing Student", nisn="8888888888")
+        target = make_scan(db_session, student, datetime.now(LOCAL_TZ))
+
+        db_session.delete(student)
+        db_session.commit()
+        db_session.refresh(target)
+
+        response = client.get(f"/scans/{target.scan_id}")
+        body = response.json()
+
+        assert response.status_code == 200, (
+            "Scan log should survive its student being deleted"
+        )
+        assert body["student_id"] is None, (
+            "student_id should be SET NULL, not cascade-deleted"
+        )
+        assert body["name"] == "Departing Student", (
+            "Denormalized name snapshot should be unaffected by the FK nulling"
+        )
+
 
 class TestPostScan:
     def test_scan_creates_log(self, client, db_session, existing_student):
@@ -428,7 +441,7 @@ class TestPostScan:
         body = response.json()
         assert body["name"] == existing_student.name, "Name is wrong"
 
-        logs = scan_logs_for(db_session, existing_student.nisn)
+        logs = scan_logs_for(db_session, existing_student.id)
         assert len(logs) == 1, "Unexpected amount of logs"
 
     def test_scan_log_reflects_current_class(
@@ -441,7 +454,7 @@ class TestPostScan:
         assert response.status_code == 200
         assert response.json()["class_name"] == existing_class.class_name
 
-        logs = scan_logs_for(db_session, existing_student.nisn)
+        logs = scan_logs_for(db_session, existing_student.id)
         assert logs[0].class_name == existing_class.class_name
 
     def test_scan_missing_returns_404(self, client):
@@ -466,7 +479,7 @@ class TestPostScan:
             "Duplicate scan status code should be 409"
         )
 
-        logs = scan_logs_for(db_session, existing_student.nisn)
+        logs = scan_logs_for(db_session, existing_student.id)
         assert len(logs) == 1, "Duplicate scan should not be added in the database"
 
     def test_scan_next_local_day_is_not_a_duplicate(
@@ -484,7 +497,7 @@ class TestPostScan:
         )
         db_session.add(
             ScanLog(
-                student_nisn=existing_student.nisn,
+                student_id=existing_student.id,
                 name=existing_student.name,
                 class_name=existing_student.class_.class_name,
                 timestamp=yesterday_late,
@@ -496,7 +509,7 @@ class TestPostScan:
 
         assert response.status_code == 200, "Scan on a new local day should succeed"
 
-        logs = scan_logs_for(db_session, existing_student.nisn)
+        logs = scan_logs_for(db_session, existing_student.id)
         assert len(logs) == 2, "Should now have yesterday's log plus today's"
 
     def test_scan_early_local_morning_is_still_a_duplicate(
@@ -511,7 +524,7 @@ class TestPostScan:
         early_today = now_local.replace(hour=0, minute=5, second=0, microsecond=0)
         db_session.add(
             ScanLog(
-                student_nisn=existing_student.nisn,
+                student_id=existing_student.id,
                 name=existing_student.name,
                 class_name=existing_student.class_.class_name,
                 timestamp=early_today,
@@ -539,7 +552,7 @@ class TestPostScan:
         exact_midnight = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
         db_session.add(
             ScanLog(
-                student_nisn=existing_student.nisn,
+                student_id=existing_student.id,
                 name=existing_student.name,
                 class_name=existing_student.class_.class_name,
                 timestamp=exact_midnight,
@@ -621,6 +634,7 @@ class TestPostScan:
         """A type Pydantic can't coerce to str (e.g. a list) should still 422."""
         response = client.post("/scans", json={"nisn": ["not", "a", "string"]})
         assert response.status_code == 422
+
 
 class TestDeleteScan:
     def test_delete_scan_removes_row(
