@@ -12,7 +12,7 @@ from app.schemas.BulkStudentResponse import BulkStudentResponse
 from fastapi import APIRouter, Depends
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
 router = APIRouter()
@@ -119,6 +119,8 @@ def post_students_bulk(
         "failed": failed,
     }
 
+def simulate_transaction(nisn_db: dict, nisn_payload: dict) -> None:
+    nisn_db.update(nisn_payload)
 
 # TODO: this should support swapping
 @router.put("/students/bulk", response_model=BulkStudentResponse)
@@ -131,20 +133,23 @@ def update_students_bulk(
     failed = []
     enum_payload = enumerate(payload)
 
-    # For checking duplicate nisn in the database
-    existing_nisns_db = dict(db.execute(select(Student.id, Student.nisn)).all())  # type: ignore
+    before_transaction = dict(db.execute(select(Student.id, Student.nisn)).all()) # type: ignore
+    nisns_payload = {student.id: student.nisn for student in payload}
+    after_transaction = before_transaction | nisns_payload
 
-    # And for checking id existences in the database
     existing_student_ids = set(db.scalars(select(Student.id)).all())
     existing_class_ids = set(db.scalars(select(Class.class_id)).all())
 
     # Count nisn duplicates in the payload
-    nisn_counter = Counter([student.nisn for student in payload])
+    nisn_counter_payload = Counter(student.nisn for student in payload)
+    nisn_counter_after_transaction = Counter(nisn for nisn in after_transaction.values())
 
     updating_students = []
     succeeded = []
     for index, student in enum_payload:
         success = True
+
+        # Check for missing fields
         REQUIRED_FIELDS = {"id", "nisn", "name"}
         provided = {
             field for field, value in student.model_dump().items() if value is not None
@@ -167,16 +172,14 @@ def update_students_bulk(
                 {"index": index, "error": "cannot find the id", "student": student}
             )
 
-        if nisn_counter[student.nisn] > 1:
+        if nisn_counter_payload[student.nisn] > 1:
             success = False
             failed.append(
                 {"index": index, "error": "duplicate nisn in batch", "student": student}
             )
 
         # Check if NISN already exists in the database
-        if existing_nisns_db.get(student.id) != student.nisn and student.nisn in [  # type: ignore
-            *existing_nisns_db.values()
-        ]:
+        if nisn_counter_after_transaction[student.nisn] > 1:
             success = False
             failed.append(
                 {
@@ -209,6 +212,7 @@ def update_students_bulk(
                 }
             )
 
+    db.execute(text("SET CONSTRAINTS students_nisn_key DEFERRED"))
     db.execute(update(Student), updating_students)
     db.commit()
 
@@ -246,7 +250,7 @@ def delete_students_bulk(payload: BulkStudentIdOnly, db: Session = Depends(get_d
         missing_ids.append(i)
     if len(missing_ids) >= 1:
         return JSONResponse(
-            status_code=404, content=jsonable_encoder({"missing_ids": missing_ids})
+            status_code=422, content=jsonable_encoder({"missing_ids": missing_ids})
         )
 
     db.execute(delete(Student).where(Student.id.in_(payload_ids)))
