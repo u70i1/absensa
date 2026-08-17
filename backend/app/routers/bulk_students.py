@@ -119,9 +119,6 @@ def post_students_bulk(
         "failed": failed,
     }
 
-def simulate_transaction(nisn_db: dict, nisn_payload: dict) -> None:
-    nisn_db.update(nisn_payload)
-
 # TODO: this should support swapping
 @router.put("/students/bulk", response_model=BulkStudentResponse)
 def update_students_bulk(
