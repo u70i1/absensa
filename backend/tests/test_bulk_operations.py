@@ -541,16 +541,11 @@ class TestBulkUpdateEdgeCases:
         assert body["failed"][0]["index"] == 0
         assert "nisn" in body["failed"][0]["error"].lower()
 
-    def test_two_rows_in_batch_try_to_swap_nisns(self, client, seeded_students_and_classes, db_session):
+    def test_two_rows_in_batch_swap_nisns(self, client, seeded_students_and_classes, db_session):
         """Student X currently has nisn 'A', student Y has nisn 'B'. Batch
         says: set X's nisn to 'B', set Y's nisn to 'A'.
 
-        DECISION: out of scope for v1. Processed row-by-row, updating X to
-        Y's CURRENT nisn will collide (Y hasn't been updated away from it
-        yet), so this is documented as a per-row failure -- NOT a supported
-        atomic swap. Both rows are expected to fail with a duplicate-nisn
-        style error, even though the end state (if computed as a set)
-        would have been valid.
+        DECISION: swaps of unique keys within a single batch ARE supported.
         """
         students = seeded_students_and_classes
         student_x, student_y = students[0], students[1]
@@ -576,20 +571,23 @@ class TestBulkUpdateEdgeCases:
 
         response = client.put("/students/bulk", json=payload)
 
-        assert response.status_code == 422
+        assert response.status_code == 200
         body = response.json()
 
-        # Documented v1 behavior: swap is not supported, at least one (or
-        # both) rows fail rather than silently succeeding in an
-        # order-dependent way.
-        assert len(body["failed"]) >= 1
+        # Both rows succeed -- the swap is treated as an atomic set operation,
+        # not two independent row-by-row updates.
+        assert len(body.get("failed", [])) == 0
+        assert len(body["succeeded"]) == 2
 
         db_session.expire_all()
         refreshed_x = db_session.get(Student, student_x.id)
         refreshed_y = db_session.get(Student, student_y.id)
-        # Nisns must remain globally unique regardless of outcome
-        assert refreshed_x.nisn != refreshed_y.nisn
 
+        # Nisns must remain globally unique...
+        assert refreshed_x.nisn != refreshed_y.nisn
+        # ...and each student now holds the OTHER's original nisn.
+        assert refreshed_x.nisn == original_y_nisn
+        assert refreshed_y.nisn == original_x_nisn
     def test_nonexistent_class_id_in_one_row(self, client, seeded_students_and_classes):
         """Mirrors the create case: a row referencing a non-existent
         class_id fails without blocking sibling rows."""
