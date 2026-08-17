@@ -3,7 +3,7 @@ from app.routers import api_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="praesens")
+app = FastAPI(title="absensa")
 
 app.add_middleware(
     CORSMiddleware,
