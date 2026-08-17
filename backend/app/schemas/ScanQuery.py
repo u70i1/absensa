@@ -9,7 +9,8 @@ class ScanQuery(BaseModel):
 
     limit: int = Field(30, ge=1, le=100)
     page: int = Field(1, ge=1)
-    nisn: str | None = Field(None)
+    nisn: str | None = Field(None, min_length=10, max_length=10)
+    student_id: int | None = Field(None)
     date_from: datetime | None = Field(None)
     date_to: datetime | None = Field(None)
 
