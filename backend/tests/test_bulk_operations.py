@@ -15,6 +15,10 @@ Bulk create/update -> 200, body:
   ]
 }
 
+Status code rule: 200 if `succeeded` is non-empty (even with partial failures),
+422 only when the batch was non-empty and EVERY row failed. Empty request list
+is a no-op, 200, both arrays empty.
+
 Both branches share "index" so a frontend can zip either array back to the
 original spreadsheet row without special-casing. The nested keys are
 deliberately named for what they contain rather than reused across
@@ -41,9 +45,21 @@ Row-level processing rules (create & update):
   - Valid rows are committed; failures are filtered out and reported.
   - Empty list -> 200, empty succeeded/failed (no-op), not 422.
 
+Bulk update specifically:
+  - Rows are validated independently. A row that fails for its own reason
+    (bad class_id, stale id, etc.) does NOT block unrelated valid rows in
+    the same batch from committing -- including rows that are part of a
+    multi-row nisn swap/rotation. "Whatever can succeed, does; the rest is
+    reported" -- not all-or-nothing per request.
+  - nisn collision check happens AFTER computing the full set of post-update
+    nisn values for all rows that pass their OTHER validations: if that
+    resulting set has no duplicates, the update is allowed to proceed (this
+    is what makes swaps/rotations legal). A row resubmitting its OWN current
+    nisn unchanged is never treated as a collision against itself.
+
 Bulk delete -> pre-check ALL ids exist before deleting anything.
   - all exist  -> delete all, 204, empty body
-  - any missing -> 404, body: {"missing_ids": [7, 12]}, nothing deleted
+  - any missing -> 422, body: {"missing_ids": [7, 12]}, nothing deleted
   - duplicate ids in the request are deduped before the existence check,
     so [5, 5, 7] behaves identically to [5, 7]
   - empty id list -> 204, no-op, nothing deleted
@@ -161,7 +177,11 @@ class TestBulkCreateEdgeCases:
         """One row in the batch has an nisn that already exists in the DB
         (student_factory seeds it first). That row should land in `failed`
         with a useful error, and it must NOT block the other valid rows in
-        the same batch from succeeding."""
+        the same batch from succeeding.
+
+        STATUS CODE: 200, because `succeeded` is non-empty -- partial
+        success is still 200, not 422. 422 is reserved for "every row in
+        the batch failed" (see test_all_rows_fail_returns_422)."""
         student_factory(name="Existing", nisn="1000000001")
 
         payloads = [
@@ -197,6 +217,8 @@ class TestBulkCreateEdgeCases:
         The error message is "duplicate nisn in batch", distinct from
         "duplicate nisn" (which is reserved for collisions against an
         existing DB row) -- see test_duplicate_nisn_batch_vs_db_have_distinct_errors.
+
+        STATUS CODE: 200, because one valid row still succeeds.
         """
         payloads = [
             make_student_payload(name="Dupe A", nisn="1000000099"),
@@ -226,6 +248,11 @@ class TestBulkCreateEdgeCases:
         Row 0 and row 1 collide with EACH OTHER (in-batch duplicate).
         Row 2 collides with an EXISTING DB row (pre-seeded).
         These must produce different error strings.
+
+        STATUS CODE: 422 here specifically because ALL THREE rows fail --
+        there is no valid row left in this particular batch. Don't confuse
+        this with the two tests above, which use 200 because they each
+        have at least one succeeding row.
         """
         student_factory(name="Already Exists", nisn="1000000001")
 
@@ -251,6 +278,27 @@ class TestBulkCreateEdgeCases:
 
         # The two error strings must not be interchangeable
         assert failed_by_index[0]["error"] != failed_by_index[2]["error"]
+
+    def test_all_rows_fail_returns_422(self, client, student_factory):
+        """CONTRACT PIN: the 200-vs-422 rule is driven entirely by whether
+        `succeeded` is empty, not by whether `failed` is non-empty. A batch
+        where every single row fails (for whatever mix of reasons) must
+        return 422, even though each individual row failure would look
+        identical to a partial-failure case that returns 200.
+        """
+        student_factory(name="Existing", nisn="1000000001")
+
+        payloads = [
+            make_student_payload(name="DB Dupe", nisn="1000000001"),
+            {"name": "Missing NISN", "class_id": None, "current": True},  # malformed
+        ]
+
+        response = client.post("/students/bulk", json=payloads)
+
+        assert response.status_code == 422
+        body = response.json()
+        assert body["succeeded"] == []
+        assert len(body["failed"]) == 2
 
     def test_nonexistent_class_id_in_one_row(self, client, class_factory):
         """One row references a class_id that doesn't exist (e.g. 99999).
@@ -289,7 +337,8 @@ class TestBulkCreateEdgeCases:
 
         response = client.post("/students/bulk", json=payloads)
 
-        # Must NOT be a blanket 422 -- the malformed row is a per-row failure
+        # Must NOT be a blanket 422 -- the malformed row is a per-row failure,
+        # and row 0 still succeeds, so this is 200 per the succeeded-driven rule.
         assert response.status_code == 200
         body = response.json()
 
@@ -318,9 +367,6 @@ class TestBulkCreateEdgeCases:
         assert len(body["succeeded"]) == 100
         assert len(body["failed"]) == 0
 
-        # count = db_session.scalar(
-        #     select(Student).where(Student.nisn.like("20000%"))
-        # )
         all_created = db_session.scalars(
             select(Student).where(Student.nisn.like("20000%"))
         ).all()
@@ -353,7 +399,11 @@ class TestBulkCreateResponseShape:
         """Assert the shape of an individual `failed` entry: "index",
         "error", and "student" (the original payload sent for that row --
         useful for a spreadsheet UI showing the user exactly which row +
-        what they typed)."""
+        what they typed).
+
+        STATUS CODE: 422 here because this batch has exactly one row and
+        it fails -- `succeeded` is empty, so per the contract this is 422,
+        not 200."""
         student_factory(name="Existing", nisn="1000000001")
         bad_payload = make_student_payload(name="Colliding", nisn="1000000001")
 
@@ -480,6 +530,50 @@ class TestBulkUpdate:
             refreshed = db_session.get(Student, s.id)
             assert refreshed.class_id == s.class_id
 
+    def test_row_resubmitting_its_own_current_nisn_is_not_a_collision(
+        self, client, seeded_students_and_classes, db_session
+    ):
+        """A row can change OTHER fields (e.g. name, class_id) while
+        sending back its own unchanged nisn. This must NOT be treated as a
+        collision against itself -- the collision check operates on the
+        POST-update set of nisn values, and a row keeping its own nisn
+        contributes the same value it already held, so there's nothing new
+        to collide with.
+
+        This matters because a naive implementation might do something
+        like "does this nisn already exist in the DB for a DIFFERENT row"
+        correctly, but a naive in-batch dedup pass might instead just
+        count raw occurrences of nisn strings in the payload without
+        excluding a row's own current value -- which would be fine here
+        too (it only appears once), but this test exists to pin the
+        specific "unchanged self" case since it's the one most likely to
+        be mishandled by an over-eager collision check.
+        """
+        students = seeded_students_and_classes
+        target = students[0]
+
+        payload = [
+            {
+                "id": target.id,
+                "name": "Renamed But Same NISN",
+                "nisn": target.nisn,  # unchanged
+                "class_id": target.class_id,
+                "current": target.current,
+            },
+        ]
+
+        response = client.put("/students/bulk", json=payload)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["succeeded"]) == 1
+        assert len(body["failed"]) == 0
+
+        db_session.expire_all()
+        refreshed = db_session.get(Student, target.id)
+        assert refreshed.name == "Renamed But Same NISN"
+        assert refreshed.nisn == target.nisn
+
 
 class TestBulkUpdateEdgeCases:
     def test_one_id_does_not_exist(self, client, seeded_students_and_classes):
@@ -517,8 +611,13 @@ class TestBulkUpdateEdgeCases:
 
     def test_update_creates_nisn_collision_with_another_row_in_db(self, client, seeded_students_and_classes):
         """Row A is updated to use an nisn that belongs to a DIFFERENT
-        existing student (not itself). Should fail per-row, same 409 logic
-        as the single PUT route."""
+        existing student (not itself), and that other student is NOT part
+        of this batch (so nothing frees up that nisn). Should fail
+        per-row, same logic as the single PUT route.
+
+        STATUS CODE: 422, since this batch has exactly one row and it's
+        the one that fails -- succeeded is empty.
+        """
         students = seeded_students_and_classes
         student_a, student_b = students[0], students[1]
 
@@ -546,6 +645,9 @@ class TestBulkUpdateEdgeCases:
         says: set X's nisn to 'B', set Y's nisn to 'A'.
 
         DECISION: swaps of unique keys within a single batch ARE supported.
+        This is the case backing the DEFERRABLE INITIALLY IMMEDIATE unique
+        constraint on Student.nisn -- see test_three_way_nisn_rotation for
+        the generalized N-way version.
         """
         students = seeded_students_and_classes
         student_x, student_y = students[0], students[1]
@@ -588,9 +690,133 @@ class TestBulkUpdateEdgeCases:
         # ...and each student now holds the OTHER's original nisn.
         assert refreshed_x.nisn == original_y_nisn
         assert refreshed_y.nisn == original_x_nisn
+
+    def test_three_way_nisn_rotation(self, client, seeded_students_and_classes, db_session):
+        """GENERALIZATION of the two-row swap: student A gets B's nisn, B
+        gets C's nisn, C gets A's nisn -- a 3-cycle, not just a pairwise
+        swap. Proves the deferred-constraint approach handles arbitrary
+        rotation, not just the 2-element case (a naive "swap via temp
+        placeholder value" implementation might special-case pairs and
+        silently break on cycles of length 3+, so this test exists
+        specifically to rule that out).
+        """
+        students = seeded_students_and_classes
+        student_a, student_b, student_c = students[0], students[1], students[2]
+        nisn_a, nisn_b, nisn_c = student_a.nisn, student_b.nisn, student_c.nisn
+
+        payload = [
+            {
+                "id": student_a.id,
+                "name": student_a.name,
+                "nisn": nisn_b,
+                "class_id": student_a.class_id,
+                "current": student_a.current,
+            },
+            {
+                "id": student_b.id,
+                "name": student_b.name,
+                "nisn": nisn_c,
+                "class_id": student_b.class_id,
+                "current": student_b.current,
+            },
+            {
+                "id": student_c.id,
+                "name": student_c.name,
+                "nisn": nisn_a,
+                "class_id": student_c.class_id,
+                "current": student_c.current,
+            },
+        ]
+
+        response = client.put("/students/bulk", json=payload)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body.get("failed", [])) == 0
+        assert len(body["succeeded"]) == 3
+
+        db_session.expire_all()
+        refreshed_a = db_session.get(Student, student_a.id)
+        refreshed_b = db_session.get(Student, student_b.id)
+        refreshed_c = db_session.get(Student, student_c.id)
+
+        assert refreshed_a.nisn == nisn_b
+        assert refreshed_b.nisn == nisn_c
+        assert refreshed_c.nisn == nisn_a
+
+        # Sanity: still globally unique across all three
+        assert len({refreshed_a.nisn, refreshed_b.nisn, refreshed_c.nisn}) == 3
+
+    def test_swap_succeeds_even_when_sibling_row_fails(self, client, seeded_students_and_classes, db_session):
+        """A batch contains a valid two-row nisn swap AND a third,
+        unrelated row that fails for its own reason (bad class_id). The
+        broken row must NOT abort or roll back the swap -- per the
+        "whatever can succeed, does" rule, the swap commits and only the
+        broken row is reported in `failed`.
+
+        This is the test that pins down that bulk update is NOT one
+        single all-or-nothing transaction across the whole batch -- if it
+        were, the deferred constraint on the swap would never even get a
+        chance to resolve, because the broken row would trigger a
+        rollback before COMMIT.
+        """
+        students = seeded_students_and_classes
+        student_x, student_y, student_z = students[0], students[1], students[2]
+        original_x_nisn = student_x.nisn
+        original_y_nisn = student_y.nisn
+
+        payload = [
+            {
+                "id": student_x.id,
+                "name": student_x.name,
+                "nisn": original_y_nisn,
+                "class_id": student_x.class_id,
+                "current": student_x.current,
+            },
+            {
+                "id": student_y.id,
+                "name": student_y.name,
+                "nisn": original_x_nisn,
+                "class_id": student_y.class_id,
+                "current": student_y.current,
+            },
+            {
+                "id": student_z.id,
+                "name": student_z.name,
+                "nisn": student_z.nisn,
+                "class_id": 99999,  # broken -- nonexistent class
+                "current": student_z.current,
+            },
+        ]
+
+        response = client.put("/students/bulk", json=payload)
+
+        assert response.status_code == 200
+        body = response.json()
+
+        assert len(body["succeeded"]) == 2
+        succeeded_ids = {item["student"]["id"] for item in body["succeeded"]}
+        assert succeeded_ids == {student_x.id, student_y.id}
+
+        assert len(body["failed"]) == 1
+        assert body["failed"][0]["index"] == 2
+
+        db_session.expire_all()
+        refreshed_x = db_session.get(Student, student_x.id)
+        refreshed_y = db_session.get(Student, student_y.id)
+        refreshed_z = db_session.get(Student, student_z.id)
+
+        # The swap committed despite the sibling failure
+        assert refreshed_x.nisn == original_y_nisn
+        assert refreshed_y.nisn == original_x_nisn
+        # The broken row changed nothing
+        assert refreshed_z.class_id != 99999
+
     def test_nonexistent_class_id_in_one_row(self, client, seeded_students_and_classes):
         """Mirrors the create case: a row referencing a non-existent
-        class_id fails without blocking sibling rows."""
+        class_id fails without blocking sibling rows.
+
+        STATUS CODE: 422 -- this batch has exactly one row and it fails."""
         students = seeded_students_and_classes
         real_student = students[0]
 
@@ -659,7 +885,7 @@ class TestBulkUpdateResponseShape:
 # 3. BULK DELETE -- POST /students/bulk-delete
 # ===========================================================================
 # Contract: pre-check all ids exist. If ANY are missing, delete NOTHING and
-# return 404 with every missing id. Only if all ids are valid do you delete
+# return 422 with every missing id. Only if all ids are valid do you delete
 # all of them, returning 204. Duplicate ids in the request are deduped
 # before the existence check.
 class TestBulkDelete:
@@ -702,7 +928,7 @@ class TestBulkDeleteEdgeCases:
 
         response = client.post("/students/bulk-delete", json={"ids": real_ids + [fake_id]})
 
-        assert response.status_code == 404
+        assert response.status_code == 422
 
         # Proof of "all or nothing": the valid students must STILL be there
         for student_id in real_ids:
@@ -716,17 +942,13 @@ class TestBulkDeleteEdgeCases:
 
         response = client.post("/students/bulk-delete", json={"ids": [real_id] + fake_ids})
 
-        assert response.status_code == 404
+        assert response.status_code == 422
         body = response.json()
         assert set(body["missing_ids"]) == set(fake_ids)
 
     def test_empty_id_list(self, client, db_session):
         """DECISION: empty id list -> 204, no-op, nothing deleted. Matches
         the "nothing to do" treatment given to empty bulk-create lists."""
-        # existing_count_before = db_session.scalar(
-        #     select(Student.id)
-        # )
-
         response = client.post("/students/bulk-delete", json={"ids": []})
 
         assert response.status_code == 204
@@ -764,7 +986,7 @@ class TestBulkDeleteResponseShape:
         assert response.content == b""
 
     def test_failure_response_shape(self, client, seeded_students_and_classes):
-        """Pin down the 404 body shape: {"missing_ids": [...]}. The
+        """Pin down the 422 body shape: {"missing_ids": [...]}. The
         frontend needs the exact key name to build the per-row error UI."""
         students = seeded_students_and_classes
         real_id = students[0].id
@@ -772,7 +994,7 @@ class TestBulkDeleteResponseShape:
 
         response = client.post("/students/bulk-delete", json={"ids": [real_id, fake_id]})
 
-        assert response.status_code == 404
+        assert response.status_code == 422
         body = response.json()
         assert set(body.keys()) == {"missing_ids"}
         assert isinstance(body["missing_ids"], list)
