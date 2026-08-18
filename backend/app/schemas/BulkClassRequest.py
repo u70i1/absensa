@@ -9,7 +9,7 @@ class BulkClassRequestWithId(BulkClassRequest):
     """Single item from request payload schema for PUT /classes/bulk.
 
     Extended from BulkClassRequest by adding id field."""
-    id: int | None = Field(None)
+    class_id: int | None = Field(None)
 
 class BulkClassIdOnly(BaseModel):
     """Request payload schema for POST /Classs/delete-bulk"""
