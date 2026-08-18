@@ -102,7 +102,7 @@ def post_class_bulk(payload: list[BulkClassRequest], db: Session = Depends(get_d
     return response
 
 
-@router.put("/classes/bulk")
+@router.put("/classes/bulk", response_model=BulkClassResponse)
 def put_class_bulk(
     payload: list[BulkClassRequestWithId], db: Session = Depends(get_db)
 ):
@@ -111,7 +111,9 @@ def put_class_bulk(
     failed = []
     enum_payload = enumerate(payload)
 
-    before_transaction = dict(db.execute(select(Class.id, Class.class_name)).all())  # type: ignore
+    before_transaction = dict(
+        db.execute(select(Class.class_id, Class.class_name)).all()  # type: ignore
+    )
     class_names_payload = {class_.class_id: class_.class_name for class_ in payload}
     after_transaction = before_transaction | class_names_payload
 
@@ -129,7 +131,7 @@ def put_class_bulk(
         success = True
 
         # Check for missing fields
-        REQUIRED_FIELDS = {"id", "class_name"}
+        REQUIRED_FIELDS = {"class_id", "class_name"}
         provided = {
             field for field, value in class_.model_dump().items() if value is not None
         }
@@ -144,11 +146,11 @@ def put_class_bulk(
                     "class": class_,
                 }
             )
-
-        if class_.class_id not in existing_class_ids:
+        # class_name length check
+        if class_.class_name and len(class_.class_name) > 10:
             success = False
             failed.append(
-                {"index": index, "error": "cannot find the id", "class": class_}
+                {"index": index, "error": "class_name is too long", "class": class_}
             )
 
         if class_name_counter_payload[class_.class_name] > 1:
@@ -167,7 +169,7 @@ def put_class_bulk(
             failed.append(
                 {
                     "index": index,
-                    "error": "duplicate nisn",
+                    "error": "duplicate class_name",
                     "class": class_,
                 }
             )
@@ -188,11 +190,11 @@ def put_class_bulk(
             succeeded.append(
                 {
                     "index": index,
-                    "student": updating_class,
+                    "class": updating_class,
                 }
             )
 
-    db.execute(text("SET CONSTRAINTS students_nisn_key DEFERRED"))
+    db.execute(text("SET CONSTRAINTS classes_class_name_key DEFERRED"))
     db.execute(update(Class), updating_classes)
     db.commit()
 
