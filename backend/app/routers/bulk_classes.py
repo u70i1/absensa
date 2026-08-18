@@ -59,26 +59,26 @@ def post_class_bulk(payload: list[BulkClassRequest], db: Session = Depends(get_d
             new_classes.append(new_class)
             new_classes_meta.append((index, new_class))
 
-        db.add_all(new_classes)
-        db.commit()
+    db.add_all(new_classes)
+    db.commit()
 
-        succeeded = []
-        for index, new_class in new_classes_meta:
-            db.refresh(new_class)
-            succeeded.append({"index": index, "class": new_class})
+    succeeded = []
+    for index, new_class in new_classes_meta:
+        db.refresh(new_class)
+        succeeded.append({"index": index, "class": new_class})
 
-        response = {
-            "succeeded": succeeded,
-            "failed": failed,
-        }
+    response = {
+        "succeeded": succeeded,
+        "failed": failed,
+    }
 
-        if len(new_classes_meta) < 1 and len(failed) >= 1:
-            return JSONResponse(
-                status_code=422,
-                content=jsonable_encoder(response),
-            )
+    if len(new_classes_meta) < 1 and len(failed) >= 1:
+        return JSONResponse(
+            status_code=422,
+            content=jsonable_encoder(response),
+        )
 
-        return response
+    return response
 
 
 @router.put("/classes/bulk")
