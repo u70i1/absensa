@@ -11,8 +11,8 @@ class ScanQuery(BaseModel):
     page: int = Field(1, ge=1)
     nisn: str | None = Field(None, min_length=10, max_length=10)
     student_id: int | None = Field(None)
-    date_from: datetime | None = Field(None)
-    date_to: datetime | None = Field(None)
+    date_from: datetime | None = Field(None, description="Format: YYYY-MM-DD", examples=["2026-07-10"])
+    date_to: datetime | None = Field(None, description="Format: YYYY-MM-DD", examples=["2026-07-10"])
 
     @model_validator(mode="after")
     def check_date(self) -> Self:

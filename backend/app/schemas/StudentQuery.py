@@ -8,4 +8,7 @@ class StudentQuery(BaseModel):
     page: int = Field(1, ge=1)
     name: str | None = Field(None)
     class_name: str | None = Field(None, alias="class")
-    nisn: str | None = Field(None)
+    nisn: str | None = Field(
+        None,
+        description="National student ID number (Indonesia); always exactly 10 digits",
+    )

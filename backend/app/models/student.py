@@ -4,27 +4,34 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
 class Student(Base):
-    """Individual item of "students" table"""
+    """Represent one student or ex-student.
+
+    `ScanLog` references this table via `student_id`, deleting one student
+    makes the child's column set to NULL.
+    """
 
     __tablename__ = "students"
 
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String(255))
+    name: Mapped[str] = mapped_column(String(255), comment="Student's name")
     class_id: Mapped[int | None] = mapped_column(
-        ForeignKey("classes.class_id", ondelete="SET NULL"), nullable=True
+        ForeignKey("classes.class_id", ondelete="SET NULL"),
+        nullable=True,
     )
-    nisn: Mapped[str] = mapped_column(String(10))
-
+    nisn: Mapped[str] = mapped_column(
+        String(10),
+        comment="National student ID number (Indonesia); always exactly 10 digits",
+    )
     current: Mapped[bool] = mapped_column(
-        Boolean,  # Whether they've graduated or not
+        Boolean,
         default=True,
+        comment="Indicate if a student is still in school or not.",
     )
-
     scan_logs: Mapped[list["ScanLog"]] = relationship(  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
         back_populates="student", order_by="ScanLog.timestamp", passive_deletes=True
     )
-
     class_: Mapped["Class"] = relationship(back_populates="students")  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
+
     __table_args__ = (
         UniqueConstraint(
             "nisn", name="students_nisn_key", initially="IMMEDIATE", deferrable=True

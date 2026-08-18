@@ -15,7 +15,7 @@ router = APIRouter()
 
 @router.get("/students", response_model=list[StudentResponse])
 def get_student(query: Annotated[StudentQuery, Query()], db: Session = Depends(get_db)):
-    """Retrieve students with optional queries from the database."""
+    """Retrieve student items from "students" table."""
     filters = []
 
     if query.name is not None:
@@ -27,7 +27,12 @@ def get_student(query: Annotated[StudentQuery, Query()], db: Session = Depends(g
 
     stmt = (
         select(
-            Student.id, Student.name, Student.nisn, Student.current, Class.class_name, Class.class_id
+            Student.id,
+            Student.name,
+            Student.nisn,
+            Student.current,
+            Class.class_name,
+            Class.class_id,
         )
         .outerjoin(Class, Class.class_id == Student.class_id)
         .where(*filters)
@@ -42,20 +47,23 @@ def get_student(query: Annotated[StudentQuery, Query()], db: Session = Depends(g
     return results
 
 
-@router.post("/students", response_model=StudentResponse, status_code=201)
+@router.post(
+    "/students",
+    response_model=StudentResponse,
+    status_code=201,
+    responses={422: {"description": "Invalid `class_id`"}},
+)
 def post_student(payload: StudentRequest, db: Session = Depends(get_db)):
-    # Check if NISN already exists
+    """Create a student item into "students" table"""
     nisn_exist = db.scalar(select(Student).where(Student.nisn == payload.nisn))
     if nisn_exist:
         raise HTTPException(409)
 
-    # Check if class actually exists
     if payload.class_id:
         class_exist = db.get(Class, payload.class_id)
         if not class_exist:
-            raise HTTPException(404)
+            raise HTTPException(422)
 
-    # Attempt to add student
     new_student = Student(
         name=payload.name,
         nisn=payload.nisn,
@@ -69,19 +77,25 @@ def post_student(payload: StudentRequest, db: Session = Depends(get_db)):
     return new_student
 
 
-@router.put("/students/{student_id}", response_model=StudentResponse)
+@router.put(
+    "/students/{student_id}",
+    response_model=StudentResponse,
+    responses={
+        422: {"description": "Invalid `student_id` or `class_id`"},
+        409: {"description": "Conflict in NISN"},
+    },
+)
 def put_student(
     student_id: int, payload: StudentRequest, db: Session = Depends(get_db)
 ):
-    # Student to update must exist in the database
     to_update = db.get(Student, student_id)
     if not to_update:
-        raise HTTPException(404)
+        raise HTTPException(422)
 
     if payload.class_id:
         class_exist = db.get(Class, payload.class_id)
         if not class_exist:
-            raise HTTPException(404)
+            raise HTTPException(422)
 
     nisn_dupe_exists = db.scalar(
         select(Student)
@@ -101,12 +115,16 @@ def put_student(
     return to_update
 
 
-@router.delete("/students/{student_id}", status_code=204)
+@router.delete(
+    "/students/{student_id}",
+    status_code=204,
+    responses={422: {"description": "Student is not found"}},
+)
 def delete_scan(student_id: int, db: Session = Depends(get_db)):
     to_delete = db.get(Student, student_id)
 
     if not to_delete:
-        raise HTTPException(404)
+        raise HTTPException(422)
 
     db.delete(to_delete)
     db.commit()

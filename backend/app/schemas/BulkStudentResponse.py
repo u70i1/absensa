@@ -2,10 +2,15 @@ from app.schemas.StudentResponse import StudentResponse
 from pydantic import BaseModel, Field
 
 
-class FailedStudentResponse(BaseModel):
-    nisn: str | None = Field(None, min_length=10, max_length=10)
+class FailedStudentResponseItem(BaseModel):
+    nisn: str | None = Field(
+        None,
+        min_length=10,
+        max_length=10,
+        description="National student ID number (Indonesia); always exactly 10 digits",
+    )
     name: str | None = Field(None, min_length=1)
-    class_id: int | None = None
+    class_id: int | None = Field(None)
     current: bool | None = True
 
 
@@ -17,7 +22,7 @@ class StudentSuccess(BaseModel):
 class StudentFailed(BaseModel):
     index: int
     error: str
-    student: FailedStudentResponse
+    student: FailedStudentResponseItem
 
 
 class BulkStudentResponse(BaseModel):

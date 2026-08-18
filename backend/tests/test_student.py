@@ -298,7 +298,7 @@ class TestUpdateStudent:
         db_session.refresh(existing_student)
         assert existing_student.name == "Bitzer Updated"
 
-    def test_update_nonexistent_student_404(self, client, existing_class):
+    def test_update_nonexistent_student_422(self, client, existing_class):
         response = client.put(
             "/students/999999",
             json={
@@ -308,7 +308,7 @@ class TestUpdateStudent:
                 "current": True,
             },
         )
-        assert response.status_code == 404
+        assert response.status_code == 422
 
     def test_update_student_cannot_change_id(
         self, client, existing_student, db_session
@@ -443,16 +443,16 @@ class TestDeleteStudent:
         stmt = select(Student).where(Student.id == existing_student.id)
         assert db_session.scalars(stmt).one_or_none() is None
 
-    def test_delete_nonexistent_student_404(self, client):
+    def test_delete_nonexistent_student_422(self, client):
         response = client.delete("/students/999999")
-        assert response.status_code == 404
+        assert response.status_code == 422
 
-    def test_delete_student_twice_second_call_404(self, client, existing_student):
+    def test_delete_student_twice_second_call_422(self, client, existing_student):
         first = client.delete(f"/students/{existing_student.id}")
         second = client.delete(f"/students/{existing_student.id}")
 
         assert first.status_code in (200, 204)
-        assert second.status_code == 404
+        assert second.status_code == 422
 
     def test_delete_student_invalid_id_type_422(self, client):
         response = client.delete("/students/not-a-number")

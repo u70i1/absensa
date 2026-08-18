@@ -5,7 +5,12 @@ from sqlalchemy.orm import Session
 DATABASE_URL = settings.database_url
 
 
-def flush():
+def flush() -> None:
+    """For development purpose: drops database columns.
+
+    Raises:
+        ValueError: Invalid choices
+    """
     print("\nDatabase Flush")
     print("=" * 50)
     print("\nWARNING: This is a destructive operation.")
