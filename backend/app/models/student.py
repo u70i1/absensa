@@ -6,29 +6,26 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 class Student(Base):
     """Represent one student or ex-student.
 
-    One student is optionally registered to a `classes` item via
-    `class_id` column; deleting the class will set `class_id`
-    to NULL.
-
-    `nisn` column is unique and deferrable.
-
-    `current` column represents if a student is still in school
-    or not.
-
-    `ScanLog` references this table via `student_id`.
+    `ScanLog` references this table via `student_id`, deleting one student
+    makes the child's column set to NULL.
     """
 
     __tablename__ = "students"
 
     id: Mapped[int] = mapped_column("id", Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String(255))
+    name: Mapped[str] = mapped_column(String(255), comment="Student's name")
     class_id: Mapped[int | None] = mapped_column(
-        ForeignKey("classes.class_id", ondelete="SET NULL"), nullable=True
+        ForeignKey("classes.class_id", ondelete="SET NULL"),
+        nullable=True,
     )
-    nisn: Mapped[str] = mapped_column(String(10))
+    nisn: Mapped[str] = mapped_column(
+        String(10),
+        comment="National student ID number (Indonesia); always exactly 10 digits",
+    )
     current: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
+        comment="Indicate if a student is still in school or not.",
     )
     scan_logs: Mapped[list["ScanLog"]] = relationship(  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
         back_populates="student", order_by="ScanLog.timestamp", passive_deletes=True
