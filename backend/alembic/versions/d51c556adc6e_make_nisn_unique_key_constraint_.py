@@ -25,6 +25,10 @@ def upgrade() -> None:
     op.create_unique_constraint(
         "students_nisn_key", "students", ["nisn"], deferrable=True, initially="IMMEDIATE"
     )
+    op.drop_constraint("classes_class_name_key", "classes", type_="unique")
+    op.create_unique_constraint(
+        "classes_class_name_key", "classes", ["class_name"], deferrable=True, initially="IMMEDIATE"
+    )
     # ### end Alembic commands ###
 
 
@@ -34,5 +38,7 @@ def downgrade() -> None:
 
     op.drop_constraint("students_nisn_key", "students", type_="unique")
     op.create_unique_constraint("students_nisn_key", "students", ["nisn"])
+    op.drop_constraint("classes_class_name_key", "classes", type_="unique")
+    op.create_unique_constraint("classes_class_name_key", "classes", ["class_name"])
 
     # ### end Alembic commands ###
