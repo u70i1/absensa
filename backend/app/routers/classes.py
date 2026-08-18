@@ -1,12 +1,36 @@
+from typing import Annotated
+
 from app.db.session import get_db
 from app.models.class_ import Class
+from app.schemas.ClassQuery import ClassQuery
 from app.schemas.ClassRequest import ClassRequest
 from app.schemas.ClassResponse import ClassResponse
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 router = APIRouter()
+
+
+@router.get("/classes", response_model=list[ClassResponse])
+def get_student(query: Annotated[ClassQuery, Query()], db: Session = Depends(get_db)):
+    """Retrieve classes with optional queries from the database."""
+    filters = []
+
+    if query.class_name is not None:
+        filters.append(Class.class_name.ilike(f"%{query.class_name}%"))
+
+    classes = db.scalars(
+        select(Class)
+        .where(*filters)
+        .offset((query.page - 1) * query.limit)
+        .limit(query.limit)
+        .order_by(Class.class_id.desc())
+    ).all()
+
+    results = list(classes)
+
+    return results
 
 
 @router.post("/classes", status_code=201, response_model=ClassResponse)
@@ -51,6 +75,7 @@ def update_class(class_id: int, payload: ClassRequest, db: Session = Depends(get
     db.commit()
 
     return to_update
+
 
 @router.delete("/classes/{class_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_class(class_id: int, db: Session = Depends(get_db)):
