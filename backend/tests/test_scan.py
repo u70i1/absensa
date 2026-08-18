@@ -457,11 +457,11 @@ class TestPostScan:
         logs = scan_logs_for(db_session, existing_student.id)
         assert logs[0].class_name == existing_class.class_name
 
-    def test_scan_missing_returns_404(self, client):
+    def test_scan_missing_returns_422(self, client):
         """Scanning a non-existing NISN should fail clearly."""
         response = client.post("/scans", json={"nisn": "0000000000"})
 
-        assert response.status_code == 404, "Response status should be 404"
+        assert response.status_code == 422, "Response status should be 422"
 
     # ---------------------------------------------------------------------------
     # Duplicate-scan (same local day) logic
@@ -568,7 +568,7 @@ class TestPostScan:
     # Student eligibility
     # ---------------------------------------------------------------------------
 
-    def test_scan_inactive_student_returns_404(self, client, student_factory):
+    def test_scan_inactive_student_returns_422(self, client, student_factory):
         """
         A student who exists but is marked current=False (e.g. graduated/transferred)
         should be treated as not-scannable -- same as not existing at all.
@@ -584,7 +584,7 @@ class TestPostScan:
 
         response = client.post("/scans", json={"nisn": inactive.nisn})
 
-        assert response.status_code == 404, (
+        assert response.status_code == 422, (
             "Inactive/non-current students shouldn't scan in"
         )
 

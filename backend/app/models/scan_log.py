@@ -6,7 +6,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
 class ScanLog(Base):
-    """A log storing one activity of attendance registration.
+    """A scan refers to an event of storing one activity of attendance
+    registration.
 
     One item of `scan_logs` is related to one student via `student_id`;
     deleting the corresponding student sets `student_id` to NULL.
