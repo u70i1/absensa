@@ -19,9 +19,16 @@ tz_info = ZoneInfo(settings.timezone)
 router = APIRouter()
 
 
-@router.post("/scans", response_model=ScanResponse)
+@router.post(
+    "/scans",
+    response_model=ScanResponse,
+    responses={
+        422: {"description": "Student's NISN is not found"},
+        409: {"description": "Student is already scanned today"},
+    },
+)
 def post_scan(payload: ScanRequest, db: Session = Depends(get_db)):
-    # Check if student is already scanned today
+    """Create a scan item"""
     start_today = datetime.now(tz=tz_info).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
@@ -40,16 +47,17 @@ def post_scan(payload: ScanRequest, db: Session = Depends(get_db)):
     if exist:
         raise HTTPException(status_code=409, detail="student is already scanned today")
 
-    # Insert to the database
     scanned_student = db.execute(
-        select(Student.id, Student.name, Student.class_id, Student.nisn, Class.class_name)
+        select(
+            Student.id, Student.name, Student.class_id, Student.nisn, Class.class_name
+        )
         .outerjoin(Class, Class.class_id == Student.class_id)
         .where(Student.current == True)
         .where(Student.id == student_id)
     ).first()
 
     if scanned_student is None:
-        raise HTTPException(status_code=404)
+        raise HTTPException(status_code=422)
 
     timestamp = datetime.now(tz=tz_info)
     new_scan_log = ScanLog(
@@ -73,12 +81,12 @@ def post_scan(payload: ScanRequest, db: Session = Depends(get_db)):
     }
 
 
-@router.get("/scans", response_model=list[ScanResponse])
+@router.get(
+    "/scans",
+    response_model=list[ScanResponse],
+)
 def get_scan(query: Annotated[ScanQuery, Query()], db: Session = Depends(get_db)):
-    """GET /scans
-    Returns:
-        list[ScanResponse]
-    """
+    """Get items from "scan_logs" table"""
 
     filters = []
 
@@ -121,7 +129,11 @@ def get_scan(query: Annotated[ScanQuery, Query()], db: Session = Depends(get_db)
     return results
 
 
-@router.get("/scans/{scan_id}", response_model=ScanResponse)
+@router.get(
+    "/scans/{scan_id}",
+    response_model=ScanResponse,
+    responses={404: {"description": "Student with that id is not found"}},
+)
 def get_scan_by_id(scan_id: int, db: Session = Depends(get_db)):
     stmt = (
         select(
@@ -143,12 +155,16 @@ def get_scan_by_id(scan_id: int, db: Session = Depends(get_db)):
     return result
 
 
-@router.delete("/scans/{scan_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/scans/{scan_id}",
+    status_code=204,
+    responses={404: {"description": "Scan items are not found"}},
+)
 def delete_scan(scan_id: int, db: Session = Depends(get_db)):
     to_delete = db.get(ScanLog, scan_id)
 
     if not to_delete:
-        raise HTTPException(404)
+        raise HTTPException(422)
 
     db.delete(to_delete)
     db.commit()

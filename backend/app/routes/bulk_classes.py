@@ -32,16 +32,14 @@ def post_class_bulk(payload: list[BulkClassRequest], db: Session = Depends(get_d
     REQUIRED_FIELDS = {"class_name"}
 
     database_class_names = set(db.scalars(select(Class.class_name)).all())
-    class_name_counter = Counter([class_.class_name for class_ in payload])
+    class_name_payload_counter = Counter([class_.class_name for class_ in payload])
 
-    # new_classes contain items to be added to the database
-    # new_classes_meta contain items with indexes to be returned as a response item
     new_classes = []
     new_classes_meta = []
     for index, class_ in enum_payload:
         success = True
 
-        # Manually check missing fields
+        # Manually validate fields to prevent HTTP 422 for all items
         provided = {
             field for field, value in class_.model_dump().items() if value is not None
         }
@@ -57,22 +55,19 @@ def post_class_bulk(payload: list[BulkClassRequest], db: Session = Depends(get_d
                 }
             )
 
-        # class_name length check
         if class_.class_name and len(class_.class_name) > 10:
             success = False
             failed.append(
                 {"index": index, "error": "class_name is too long", "class": class_}
             )
 
-        # Check duplicate class_name in the database
         if class_.class_name and class_.class_name in database_class_names:
             success = False
             failed.append(
                 {"index": index, "error": "duplicate class_name", "class": class_}
             )
 
-        # Check duplicate class_name within the same batch
-        if class_name_counter[class_.class_name] > 1:
+        if class_name_payload_counter[class_.class_name] > 1:
             success = False
             failed.append(
                 {
@@ -134,7 +129,6 @@ def put_class_bulk(
 
     database_class_ids = set(db.scalars(select(Class.class_id)).all())
 
-    # Count nisn duplicates in the payload
     class_name_counter_payload = Counter(class_.class_name for class_ in payload)
     class_name_counter_after_transaction = Counter(
         class_name for class_name in after_transaction.values()
@@ -144,7 +138,7 @@ def put_class_bulk(
     for index, class_ in enum_payload:
         success = True
 
-        # Check missing fields
+        # Manually handle missing fields to prevent HTTP 422 for all items
         provided = {
             field for field, value in class_.model_dump().items() if value is not None
         }
@@ -159,14 +153,12 @@ def put_class_bulk(
                 }
             )
 
-        # Check class_name length
         if class_.class_name and len(class_.class_name) > 10:
             success = False
             failed.append(
                 {"index": index, "error": "class_name is too long", "class": class_}
             )
 
-        # Check class_name duplicates in payload
         if class_name_counter_payload[class_.class_name] > 1:
             success = False
             failed.append(
@@ -177,7 +169,6 @@ def put_class_bulk(
                 }
             )
 
-        # Check class_name duplicates in database
         if class_name_counter_after_transaction[class_.class_name] > 1:
             success = False
             failed.append(
@@ -188,7 +179,6 @@ def put_class_bulk(
                 }
             )
 
-        # Check class_id existence
         if class_.class_id not in database_class_ids:
             success = False
             failed.append(
@@ -233,14 +223,12 @@ def put_class_bulk(
 )
 def delete_class_bulk(payload: BulkClassIdOnly, db: Session = Depends(get_db)):
     """Delete multiple classes in one request."""
-    # Avoid duplicate ids
     payload_ids = set(payload.ids)
     if not payload_ids:
         return
 
     db_ids = set(db.scalars(select(Class.class_id)).all())
 
-    # Check for missing ids
     missing_ids = []
     for i in payload_ids:
         if i in db_ids:

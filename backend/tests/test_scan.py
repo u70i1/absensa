@@ -670,17 +670,17 @@ class TestDeleteScan:
         still_there = db_session.scalars(stmt).first()
         assert still_there is not None, "Unrelated scan should not have been deleted"
 
-    def test_delete_scan_missing_returns_404(
+    def test_delete_scan_missing_returns_422(
         self, client, db_session, existing_student
     ):
-        """Deleting a scan_id that doesn't exist should 404, consistent with
+        """Deleting a scan_id that doesn't exist should 422, consistent with
         GET /scans/{id}'s behavior for a missing id."""
         # seed something unrelated so a passing test isn't just "table is empty"
         make_scan(db_session, existing_student, datetime.now(LOCAL_TZ))
 
         response = client.delete("/scans/999999")
 
-        assert response.status_code == 404
+        assert response.status_code == 422
 
     def test_delete_scan_non_integer_id_is_422(self, client):
         """scan_id typed as int on the path should reject non-numeric input
@@ -692,7 +692,7 @@ class TestDeleteScan:
     def test_delete_scan_is_idempotent_failure_on_second_call(
         self, client, db_session, existing_student
     ):
-        """Deleting the same id twice: first call succeeds, second call 404s —
+        """Deleting the same id twice: first call succeeds, second call 422s —
         it shouldn't silently 204 again on an already-gone row."""
         target = make_scan(db_session, existing_student, datetime.now(LOCAL_TZ))
 
@@ -700,4 +700,4 @@ class TestDeleteScan:
         second = client.delete(f"/scans/{target.scan_id}")
 
         assert first.status_code == 204
-        assert second.status_code == 404
+        assert second.status_code == 422

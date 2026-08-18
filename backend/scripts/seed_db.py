@@ -54,7 +54,9 @@ def seed() -> None:
         students = []
         for student in SEED_STUDENT:
             class_id = db.scalar(
-                select(Class.class_id).where(Class.class_name == student.get("class_name"))
+                select(Class.class_id).where(
+                    Class.class_name == student.get("class_name")
+                )
             )
             students.append(
                 Student(

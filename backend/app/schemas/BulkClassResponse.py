@@ -3,9 +3,7 @@ from pydantic import BaseModel, Field
 
 
 class FailedClassItem(BaseModel):
-    class_name: str | None = Field(
-        "", description='Represent the class name from the "class" table'
-    )
+    class_name: str | None
 
 
 class ClassSuccess(BaseModel):

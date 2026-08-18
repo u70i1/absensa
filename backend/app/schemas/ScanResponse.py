@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ScanResponse(BaseModel):
@@ -8,8 +8,11 @@ class ScanResponse(BaseModel):
 
     scan_id: int
     name: str
-    class_name: str | None = None
-    class_id: int | None = None
-    nisn: str | None = None
-    student_id: int | None = None
+    class_name: str | None = Field(None)
+    class_id: int | None = Field(None)
+    nisn: str | None = Field(
+        None,
+        description="National student ID number (Indonesia); always exactly 10 digits",
+    )
+    student_id: int | None = Field(None)
     timestamp: datetime
