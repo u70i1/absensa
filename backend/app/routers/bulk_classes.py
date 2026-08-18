@@ -2,12 +2,12 @@ from collections import Counter
 
 from app.db.session import get_db
 from app.models.class_ import Class
-from app.schemas.BulkClassRequest import BulkClassRequest, BulkClassRequestWithId
+from app.schemas.BulkClassRequest import BulkClassIdOnly, BulkClassRequest, BulkClassRequestWithId
 from app.schemas.BulkClassResponse import BulkClassResponse
 from fastapi import APIRouter, Depends
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from sqlalchemy import select, text, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
 router = APIRouter()
@@ -212,6 +212,24 @@ def put_class_bulk(
     return response
 
 
-@router.post("/classes/bulk-delete")
-def delete_class_bulk():
-    pass
+@router.post("/classes/bulk-delete", status_code=204)
+def delete_class_bulk(payload: BulkClassIdOnly, db: Session = Depends(get_db)):
+    # Avoid duplicate ids
+    payload_ids = set(payload.ids)
+    if not payload_ids:
+        return
+
+    db_ids = set(db.scalars(select(Class.class_id)).all())
+
+    # Check for missing ids
+    missing_ids = []
+    for i in payload_ids:
+        if i in db_ids:
+            continue
+        missing_ids.append(i)
+    if len(missing_ids) >= 1:
+        return JSONResponse(
+            status_code=422, content=jsonable_encoder({"missing_ids": missing_ids})
+        )
+
+    db.execute(delete(Class).where(Class.class_id.in_(payload_ids)))

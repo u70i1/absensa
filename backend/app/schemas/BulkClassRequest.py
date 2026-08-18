@@ -12,6 +12,6 @@ class BulkClassRequestWithId(BulkClassRequest):
     class_id: int | None = Field(None)
 
 class BulkClassIdOnly(BaseModel):
-    """Request payload schema for POST /Classs/delete-bulk"""
+    """Request payload schema for POST /classes/delete-bulk"""
 
     ids: list[int]
