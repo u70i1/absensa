@@ -27,6 +27,7 @@ def post_class_bulk(payload: list[BulkClassRequest], db: Session = Depends(get_d
     REQUIRED_FIELDS = {"class_name"}
 
     existing_class_names = set(db.scalars(select(Class.class_name)).all())
+    class_name_counter = Counter([class_.class_name for class_ in payload])
 
     new_classes = []
     new_classes_meta = []
@@ -49,11 +50,29 @@ def post_class_bulk(payload: list[BulkClassRequest], db: Session = Depends(get_d
                 }
             )
 
-        # Check for duplicate class_name
+        # class_name length check
+        if class_.class_name and len(class_.class_name) > 10:
+            success = False
+            failed.append(
+                {"index": index, "error": "class_name is too long", "class": class_}
+            )
+
+        # Check for duplicate class_name in the database
         if class_.class_name in existing_class_names:
             success = False
             failed.append(
                 {"index": index, "error": "duplicate class_name", "class": class_}
+            )
+
+        # Check for duplicate nisn within the same batch
+        if class_name_counter[class_.class_name] > 1:
+            success = False
+            failed.append(
+                {
+                    "index": index,
+                    "error": "duplicate class_name in batch",
+                    "class": class_,
+                }
             )
 
         if success:
@@ -74,7 +93,7 @@ def post_class_bulk(payload: list[BulkClassRequest], db: Session = Depends(get_d
         "failed": failed,
     }
 
-    if len(new_classes_meta) < 1 and len(failed) >= 1:
+    if len(succeeded) == 0 and len(failed) >= 1:
         return JSONResponse(
             status_code=422,
             content=jsonable_encoder(response),

@@ -175,12 +175,12 @@ class TestBulkCreateEdgeCases:
         """Row 0/1 collide with each other (in-batch). Row 2 collides with
         an existing DB row. Different error strings. STATUS 422: all three
         rows fail, succeeded is empty."""
-        class_factory(class_name="Already Exists")
+        class_factory(class_name="DupeDb")
 
         payloads = [
-            make_class_payload(class_name="In-batch Dupe"),
-            make_class_payload(class_name="In-batch Dupe"),
-            make_class_payload(class_name="Already Exists"),
+            make_class_payload(class_name="DupePl"),
+            make_class_payload(class_name="DupePl"),
+            make_class_payload(class_name="DupeDb"),
         ]
 
         response = client.post("/classes/bulk", json=payloads)
