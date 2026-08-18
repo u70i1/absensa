@@ -2,7 +2,7 @@ from app.schemas.StudentResponse import StudentResponse
 from pydantic import BaseModel, Field
 
 
-class FailedStudentResponse(BaseModel):
+class FailedStudentItem(BaseModel):
     nisn: str | None = Field(None, min_length=10, max_length=10)
     name: str | None = Field(None, min_length=1)
     class_id: int | None = None
@@ -11,13 +11,14 @@ class FailedStudentResponse(BaseModel):
 
 class StudentSuccess(BaseModel):
     index: int
-    student: StudentResponse
+    student: StudentResponse = Field(description="Represent a successfuly added student." \
+    "Use StudentResponse because the structure is the same")
 
 
 class StudentFailed(BaseModel):
     index: int
     error: str
-    student: FailedStudentResponse
+    student: FailedStudentItem
 
 
 class BulkStudentResponse(BaseModel):

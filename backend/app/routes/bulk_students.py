@@ -102,24 +102,20 @@ def post_students_bulk(
                 "student": new_student,
             }
         )
-
-    if len(new_students_meta) < 1 and len(failed) >= 1:
-        return JSONResponse(
-            status_code=422,
-            content=jsonable_encoder(
-                {
-                    "succeeded": succeeded,
-                    "failed": failed,
-                }
-            ),
-        )
-
-    return {
+    response = {
         "succeeded": succeeded,
         "failed": failed,
     }
 
-# TODO: this should support swapping
+    if len(new_students_meta) < 1 and len(failed) >= 1:
+        return JSONResponse(
+            status_code=422,
+            content=jsonable_encoder(response),
+        )
+
+    return response
+
+
 @router.put("/students/bulk", response_model=BulkStudentResponse)
 def update_students_bulk(
     payload: list[BulkStudentRequestWithId], db: Session = Depends(get_db)
@@ -130,7 +126,7 @@ def update_students_bulk(
     failed = []
     enum_payload = enumerate(payload)
 
-    before_transaction = dict(db.execute(select(Student.id, Student.nisn)).all()) # type: ignore
+    before_transaction = dict(db.execute(select(Student.id, Student.nisn)).all())  # type: ignore
     nisns_payload = {student.id: student.nisn for student in payload}
     after_transaction = before_transaction | nisns_payload
 
@@ -139,7 +135,9 @@ def update_students_bulk(
 
     # Count nisn duplicates in the payload
     nisn_counter_payload = Counter(student.nisn for student in payload)
-    nisn_counter_after_transaction = Counter(nisn for nisn in after_transaction.values())
+    nisn_counter_after_transaction = Counter(
+        nisn for nisn in after_transaction.values()
+    )
 
     updating_students = []
     succeeded = []
@@ -251,4 +249,3 @@ def delete_students_bulk(payload: BulkStudentIdOnly, db: Session = Depends(get_d
         )
 
     db.execute(delete(Student).where(Student.id.in_(payload_ids)))
-
