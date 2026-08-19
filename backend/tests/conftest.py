@@ -10,6 +10,10 @@ base_number -> doubled exercise):
                 -> client  (function-scoped, FastAPI TestClient using db_session)
 """
 
+from collections.abc import Callable
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import pytest
 from alembic import command
 from alembic.config import Config
@@ -17,6 +21,7 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.main import app
 from app.models.class_ import Class
+from app.models.scan_log import ScanLog
 from app.models.student import Student
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
@@ -118,6 +123,35 @@ def student_factory(db_session):
         return student
 
     return _make_student
+
+
+@pytest.fixture
+def scan_log_factory(
+    db_session,
+    timezone: ZoneInfo | None = None,
+) -> Callable:
+    """Seed a single scan log entry"""
+
+    if timezone is None:
+        timezone = ZoneInfo(settings.timezone)
+
+    def _make_scan_log(student: Student, when: datetime | None = None) -> ScanLog:
+        if when is None:
+            when = datetime.now(tz=timezone)
+
+        class_name = student.class_.class_name if student.class_ is not None else None
+        scan_log = ScanLog(
+            student_id=student.id,
+            name=student.name,
+            class_name=class_name,
+            timestamp=when,
+        )
+        db_session.add(scan_log)
+        db_session.commit()
+        db_session.refresh(scan_log)
+        return scan_log
+
+    return _make_scan_log
 
 
 SEED_STUDENTS = [
