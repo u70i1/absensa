@@ -13,7 +13,7 @@ router = APIRouter()
 
 
 @router.get("/classes", response_model=list[ClassResponse])
-def get_student(query: Annotated[ClassQuery, Query()], db: Session = Depends(get_db)):
+def get_classes(query: Annotated[ClassQuery, Query()], db: Session = Depends(get_db)):
     """Retrieve classes; support filter queries"""
     filters = []
 
