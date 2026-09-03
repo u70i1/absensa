@@ -1,5 +1,5 @@
 from app.schemas.ClassResponse import ClassResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class FailedClassItem(BaseModel):
@@ -8,13 +8,13 @@ class FailedClassItem(BaseModel):
 
 class ClassSuccess(BaseModel):
     index: int
-    class_: ClassResponse = Field(alias="class")
+    item: ClassResponse
 
 
 class ClassFailed(BaseModel):
     index: int
     error: str
-    class_: FailedClassItem = Field(alias="class")
+    item: FailedClassItem
 
 
 class BulkClassResponse(BaseModel):

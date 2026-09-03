@@ -6,11 +6,11 @@ RESPONSE CONTRACT (mirrors /students/bulk -- see BulkClassResponse.py):
 Bulk create/update -> 200, body:
 {
   "succeeded": [
-    {"index": 0, "class": {"class_id": 5, "class_name": ...}},
+    {"index": 0, "item": {"class_id": 5, "class_name": ...}},
     ...
   ],
   "failed": [
-    {"index": 3, "error": "duplicate class_name", "class": {"class_name": ...}},
+    {"index": 3, "error": "duplicate class_name", "item": {"class_name": ...}},
     ...
   ]
 }
@@ -82,8 +82,8 @@ class TestBulkCreate:
 
         for item in body["succeeded"]:
             assert "index" in item
-            assert "class" in item
-            assert "class_id" in item["class"]
+            assert "item" in item
+            assert "class_id" in item["item"]
 
         assert sorted(item["index"] for item in body["succeeded"]) == list(range(5))
 
@@ -98,7 +98,7 @@ class TestBulkCreate:
 
         response = client.post("/classes/bulk", json=[payload])
         assert response.status_code == 200
-        created_id = response.json()["succeeded"][0]["class"]["class_id"]
+        created_id = response.json()["succeeded"][0]["item"]["class_id"]
 
         # ASSUMPTION: GET /classes supports filtering by class_name the same
         # way GET /students filters by nisn. Adjust the params if your route
@@ -144,7 +144,7 @@ class TestBulkCreateEdgeCases:
 
         assert len(body["failed"]) == 1
         assert body["failed"][0]["index"] == 2
-        assert body["failed"][0]["error"] == "duplicate class_name"
+        assert body["failed"][0]["error"] == "duplicate_class"
 
     def test_duplicate_class_name_within_same_batch(self, client):
         """Two rows in the SAME request use the same class_name, neither
@@ -194,7 +194,7 @@ class TestBulkCreateEdgeCases:
         failed_by_index = {item["index"]: item for item in body["failed"]}
         assert failed_by_index[0]["error"] == "duplicate class_name in batch"
         assert failed_by_index[1]["error"] == "duplicate class_name in batch"
-        assert failed_by_index[2]["error"] == "duplicate class_name"
+        assert failed_by_index[2]["error"] == "duplicate_class"
         assert failed_by_index[0]["error"] != failed_by_index[2]["error"]
 
     def test_all_rows_fail_returns_422(self, client, class_factory):
@@ -287,7 +287,7 @@ class TestBulkCreateResponseShape:
         assert body["failed"] == []
 
     def test_failed_item_includes_input_and_error(self, client, class_factory):
-        """Shape of a `failed` entry: "index", "error", "class" (the
+        """Shape of a `failed` entry: "index", "error", "item" (the
         original payload sent -- per FailedClassItem, only class_name).
         STATUS 422: single-row batch, that row fails."""
         class_factory(class_name="Existing")
@@ -303,10 +303,10 @@ class TestBulkCreateResponseShape:
         assert failed_item["index"] == 0
         assert isinstance(failed_item["error"], str)
         assert failed_item["error"] != ""
-        assert failed_item["class"]["class_name"] == bad_payload["class_name"]
+        assert failed_item["item"]["class_name"] == bad_payload["class_name"]
 
     def test_succeeded_item_matches_classresponse_shape(self, client):
-        """`succeeded` entry is {"index": ..., "class": {...}} where "class"
+        """`succeeded` entry is {"index": ..., "item": {...}} where "item"
         carries ClassResponse fields (class_id, class_name)."""
         payload = make_class_payload(class_name="Shaped")
 
@@ -317,10 +317,10 @@ class TestBulkCreateResponseShape:
         assert len(body["succeeded"]) == 1
         item = body["succeeded"][0]
 
-        assert set(item.keys()) == {"index", "class"}
+        assert set(item.keys()) == {"index", "item"}
         assert item["index"] == 0
 
-        class_ = item["class"]
+        class_ = item["item"]
         assert "class_id" in class_
         assert isinstance(class_["class_id"], int)
         assert class_["class_name"] == "Shaped"
@@ -405,7 +405,7 @@ class TestBulkUpdateEdgeCases:
         assert len(body["succeeded"]) == 0
         assert len(body["failed"]) == 1
         assert body["failed"][0]["index"] == 0
-        assert "class_name" in body["failed"][0]["error"].lower()
+        assert "duplicate_class" == body["failed"][0]["error"]
 
     def test_two_rows_in_batch_swap_class_names(self, client, seeded_students_and_classes, db_session):
         """Class X currently named 'A', class Y named 'B'. Batch swaps
@@ -485,7 +485,7 @@ class TestBulkUpdateEdgeCases:
         body = response.json()
 
         assert len(body["succeeded"]) == 2
-        succeeded_ids = {item["class"]["class_id"] for item in body["succeeded"]}
+        succeeded_ids = {item["item"]["class_id"] for item in body["succeeded"]}
         assert succeeded_ids == {class_x.class_id, class_y.class_id}
 
         assert len(body["failed"]) == 1
@@ -519,12 +519,12 @@ class TestBulkUpdateResponseShape:
         assert isinstance(body["succeeded"], list)
         assert isinstance(body["failed"], list)
 
-        assert set(body["succeeded"][0].keys()) == {"index", "class"}
-        assert "class_id" in body["succeeded"][0]["class"]
+        assert set(body["succeeded"][0].keys()) == {"index", "item"}
+        assert "class_id" in body["succeeded"][0]["item"]
 
         assert "index" in body["failed"][0]
         assert "error" in body["failed"][0]
-        assert "class" in body["failed"][0]
+        assert "item" in body["failed"][0]
 
 
 # ===========================================================================
