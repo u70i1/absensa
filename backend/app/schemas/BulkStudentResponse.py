@@ -16,13 +16,13 @@ class FailedStudentResponseItem(BaseModel):
 
 class StudentSuccess(BaseModel):
     index: int
-    student: StudentResponse
+    item: StudentResponse
 
 
 class StudentFailed(BaseModel):
     index: int
     error: str
-    student: FailedStudentResponseItem
+    item: FailedStudentResponseItem
 
 
 class BulkStudentResponse(BaseModel):

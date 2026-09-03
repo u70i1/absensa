@@ -23,9 +23,9 @@ Both branches share "index" so a frontend can zip either array back to the
 original spreadsheet row without special-casing. The nested keys are
 deliberately named for what they contain rather than reused across
 branches:
-  - succeeded[i]["student"] is the resulting StudentResponse (has "id",
+  - succeeded[i]["item"] is the resulting StudentResponse (has "id",
     reflects anything the server defaulted/normalized).
-  - failed[i]["student"] is the original request payload as sent (no "id",
+  - failed[i]["item"] is the original request payload as sent (no "id",
     since it never made it into the DB) -- useful for a spreadsheet UI to
     show the user exactly what they typed on the offending row.
 
@@ -104,8 +104,8 @@ class TestBulkCreate:
 
         for item in body["succeeded"]:
             assert "index" in item
-            assert "student" in item
-            assert "id" in item["student"]
+            assert "item" in item
+            assert "id" in item["item"]
 
         # Confirm indices map 1:1 with input order
         assert sorted(item["index"] for item in body["succeeded"]) == list(range(5))
@@ -125,7 +125,7 @@ class TestBulkCreate:
 
         response = client.post("/students/bulk", json=[payload])
         assert response.status_code == 200
-        created_id = response.json()["succeeded"][0]["student"]["id"]
+        created_id = response.json()["succeeded"][0]["item"]["id"]
 
         get_response = client.get("/students", params={"nisn": "1000009999"})
         assert get_response.status_code == 200
@@ -417,7 +417,7 @@ class TestBulkCreateResponseShape:
         assert failed_item["index"] == 0
         assert isinstance(failed_item["error"], str)
         assert failed_item["error"] != ""
-        assert failed_item["student"] == bad_payload
+        assert failed_item["item"] == bad_payload
 
     def test_succeeded_item_matches_studentresponse_shape(self, client, class_factory):
         """Assert a `succeeded` entry is {"index": ..., "student": {...}},
@@ -437,10 +437,10 @@ class TestBulkCreateResponseShape:
         assert len(body["succeeded"]) == 1
         item = body["succeeded"][0]
 
-        assert set(item.keys()) == {"index", "student"}
+        assert set(item.keys()) == {"index", "item"}
         assert item["index"] == 0
 
-        student = item["student"]
+        student = item["item"]
         expected_keys = {"id", "name", "nisn", "current", "class_id"}
         assert expected_keys.issubset(student.keys())
         assert isinstance(student["id"], int)
@@ -795,7 +795,7 @@ class TestBulkUpdateEdgeCases:
         body = response.json()
 
         assert len(body["succeeded"]) == 2
-        succeeded_ids = {item["student"]["id"] for item in body["succeeded"]}
+        succeeded_ids = {item["item"]["id"] for item in body["succeeded"]}
         assert succeeded_ids == {student_x.id, student_y.id}
 
         assert len(body["failed"]) == 1
@@ -873,12 +873,12 @@ class TestBulkUpdateResponseShape:
         assert isinstance(body["succeeded"], list)
         assert isinstance(body["failed"], list)
 
-        assert set(body["succeeded"][0].keys()) == {"index", "student"}
-        assert "id" in body["succeeded"][0]["student"]
+        assert set(body["succeeded"][0].keys()) == {"index", "item"}
+        assert "id" in body["succeeded"][0]["item"]
 
         assert "index" in body["failed"][0]
         assert "error" in body["failed"][0]
-        assert "student" in body["failed"][0]
+        assert "item" in body["failed"][0]
 
 
 # ===========================================================================

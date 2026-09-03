@@ -36,3 +36,8 @@ class StudentNotFound(AppException):
 class ClassNotFound(AppException):
     detail = "class_not_found"
     status_code = 422
+
+
+class ClassNameTooLong(AppException):
+    detail = "class_name_too_long"
+    status_code = 422

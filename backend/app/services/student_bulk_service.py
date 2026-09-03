@@ -16,7 +16,7 @@ from app.services.exceptions import (
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
-from .helpers import check_missing_fields
+from .helpers import bulk_response_or_422, check_missing_fields, fail
 
 
 def count_nisns(students) -> Counter:
@@ -27,22 +27,6 @@ def count_nisns(students) -> Counter:
 def class_id_is_valid(class_id: int | None, class_ids_db: set) -> bool:
     """A null class_id is always valid (unassigned); otherwise it must exist."""
     return class_id is None or class_id in class_ids_db
-
-
-def fail(index: int, error: str, student) -> dict:
-    """Build one failure entry in the shape both endpoints already return.
-    error is exc.detail from an AppException, kept as a plain string here
-    the service layer never raises out of the batch loop, so callers never
-    see AppException instances, only this dict shape."""
-    return {"index": index, "error": error, "student": student}
-
-
-def bulk_response_or_422(succeeded: list, failed: list) -> dict:
-    """Both bulk operations return the same envelope. The router decides
-    whether 'failed present, succeeded empty' means a 422 status this
-    function just returns the plain dict; no JSONResponse/status-code
-    concerns belong at this layer."""
-    return {"succeeded": succeeded, "failed": failed}
 
 
 def validate_new_student(
@@ -108,7 +92,7 @@ def create_students_bulk(db: Session, payload: list[BulkStudentRequest]) -> dict
     succeeded = []
     for index, new_student in new_students_meta:
         db.refresh(new_student)
-        succeeded.append({"index": index, "student": new_student})
+        succeeded.append({"index": index, "item": new_student})
 
     return bulk_response_or_422(succeeded, failed)
 
@@ -187,7 +171,7 @@ def update_students_bulk(db: Session, payload: list[BulkStudentRequestWithId]) -
             "current": student.current,
         }
         updating_students.append(updating_student)
-        succeeded.append({"index": index, "student": updating_student})
+        succeeded.append({"index": index, "item": updating_student})
 
     db.execute(text("SET CONSTRAINTS students_nisn_key DEFERRED"))
     db.execute(update(Student), updating_students)
