@@ -1,7 +1,7 @@
 from app.core.config import settings
 from app.routes import api_router
 from app.services.exceptions import AppException
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 

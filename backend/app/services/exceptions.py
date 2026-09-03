@@ -18,16 +18,21 @@ class DuplicateScanLog(AppException):
     status_code = 409
 
 
+class DuplicateClass(AppException):
+    detail = "duplicate_class"
+    status_code = 409
+
+
 class ScanLogNotFound(AppException):
     detail = "scan_log_not_found"
     status_code = 422
 
 
-class ClassNotFound(AppException):
-    detail = "class_not_found"
+class StudentNotFound(AppException):
+    detail = "student_not_found"
     status_code = 422
 
 
-class StudentNotFound(AppException):
-    detail = "student_not_found"
+class ClassNotFound(AppException):
+    detail = "class_not_found"
     status_code = 422
