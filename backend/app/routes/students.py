@@ -5,8 +5,7 @@ from app.schemas.StudentQuery import StudentQuery
 from app.schemas.StudentRequest import StudentRequest
 from app.schemas.StudentResponse import StudentResponse
 from app.services import student_service
-from app.services.exceptions import ClassNotFound, DuplicateNisn, StudentNotFound
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 router = APIRouter()
@@ -25,12 +24,7 @@ def get_student(query: Annotated[StudentQuery, Query()], db: Session = Depends(g
 )
 def post_student(payload: StudentRequest, db: Session = Depends(get_db)):
     """Create a student item into "students" table"""
-    try:
-        return student_service.post_student(db, **payload.model_dump())
-    except DuplicateNisn:
-        raise HTTPException(409, detail="duplicate_nisn")
-    except ClassNotFound:
-        raise HTTPException(422, detail="class_not_found")
+    return student_service.post_student(db, **payload.model_dump())
 
 
 @router.put(
@@ -44,14 +38,7 @@ def post_student(payload: StudentRequest, db: Session = Depends(get_db)):
 def put_student(
     student_id: int, payload: StudentRequest, db: Session = Depends(get_db)
 ):
-    try:
-        return student_service.edit_student(db, student_id, **payload.model_dump())
-    except StudentNotFound as e:
-        raise HTTPException(detail=e.detail, status_code=e.status_code)
-    except ClassNotFound as e:
-        raise HTTPException(detail=e.detail, status_code=e.status_code)
-    except DuplicateNisn as e:
-        raise HTTPException(detail=e.detail, status_code=e.status_code)
+    return student_service.edit_student(db, student_id, **payload.model_dump())
 
 
 @router.delete(
@@ -60,7 +47,4 @@ def put_student(
     responses={422: {"description": "Student is not found"}},
 )
 def delete_student(student_id: int, db: Session = Depends(get_db)):
-    try:
-        return student_service.delete_student(db, student_id)
-    except StudentNotFound as e:
-        raise HTTPException(detail=e.detail, status_code=e.status_code)
+    return student_service.delete_student(db, student_id)

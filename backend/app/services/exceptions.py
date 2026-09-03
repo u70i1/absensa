@@ -13,9 +13,14 @@ class DuplicateNisn(AppException):
     status_code = 409
 
 
-class ScanDuplicate(Exception):
+class DuplicateScanLog(AppException):
     detail = "duplicate_scan"
     status_code = 409
+
+
+class ScanLogNotFound(AppException):
+    detail = "scan_log_not_found"
+    status_code = 422
 
 
 class ClassNotFound(AppException):
@@ -23,6 +28,6 @@ class ClassNotFound(AppException):
     status_code = 422
 
 
-class StudentNotFound(Exception):
+class StudentNotFound(AppException):
     detail = "student_not_found"
     status_code = 422

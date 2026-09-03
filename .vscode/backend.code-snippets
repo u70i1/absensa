@@ -1,10 +1,19 @@
 {
   "Catch AppException exception": {
     "scope": "python",
+    "prefix": "catchappexc",
+    "body": [
+      "except ${1:AppException} as e:",
+      "\traise HTTPException(e.status_code, e.detail)"
+    ],
+  },
+  "Create AppException exception": {
+    "scope": "python",
     "prefix": "appexc",
     "body": [
-      "except ${0:AppException} as e:",
-      "\traise HTTPException(e.status_code, e.detail)"
+      "class ${1:CoolException}(AppException):",
+      "\tdetail = \"${2:something_wrong}\"",
+      "\tstatus_code = ${3:400}"
     ],
   }
   // Place your absensa workspace snippets here. Each snippet is defined under a snippet name and has a scope, prefix, body and
