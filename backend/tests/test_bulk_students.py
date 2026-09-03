@@ -202,7 +202,7 @@ class TestBulkCreateEdgeCases:
         assert len(body["failed"]) == 1
         failed_item = body["failed"][0]
         assert failed_item["index"] == 2
-        assert failed_item["error"] == "duplicate nisn"
+        assert failed_item["error"] == "duplicate_nisn"
 
     def test_duplicate_nisn_within_same_batch(self, client):
         """BULK-SPECIFIC CASE: two rows in the SAME request both use nisn
@@ -274,7 +274,7 @@ class TestBulkCreateEdgeCases:
 
         assert failed_by_index[0]["error"] == "duplicate nisn in batch"
         assert failed_by_index[1]["error"] == "duplicate nisn in batch"
-        assert failed_by_index[2]["error"] == "duplicate nisn"
+        assert failed_by_index[2]["error"] == "duplicate_nisn"
 
         # The two error strings must not be interchangeable
         assert failed_by_index[0]["error"] != failed_by_index[2]["error"]
