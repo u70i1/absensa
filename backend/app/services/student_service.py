@@ -91,18 +91,18 @@ def edit_student(
     """
     to_update = db.get(Student, student_id)
     if not to_update:
-        raise StudentNotFound
+        raise StudentNotFound()
 
     if class_id:
         class_exist = db.get(Class, class_id)
         if not class_exist:
-            raise ClassNotFound
+            raise ClassNotFound()
 
     nisn_dupe_exists = db.scalar(
         select(Student).where(Student.id != student_id).where(Student.nisn == nisn)
     )
     if nisn_dupe_exists:
-        raise DuplicateNisn
+        raise DuplicateNisn()
 
     to_update.name = name
     to_update.class_id = class_id
@@ -122,7 +122,7 @@ def delete_student(db: Session, student_id: int):
     to_delete = db.get(Student, student_id)
 
     if not to_delete:
-        raise StudentNotFound
+        raise StudentNotFound()
 
     db.delete(to_delete)
     db.commit()

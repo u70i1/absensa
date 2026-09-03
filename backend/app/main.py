@@ -1,7 +1,9 @@
 from app.core.config import settings
 from app.routes import api_router
-from fastapi import FastAPI
+from app.services.exceptions import AppException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 app = FastAPI(title="absensa")
 
@@ -13,8 +15,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/")
 def root():
     return "Server is running"
+
 
 app.include_router(api_router)

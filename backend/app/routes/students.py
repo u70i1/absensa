@@ -46,12 +46,12 @@ def put_student(
 ):
     try:
         return student_service.edit_student(db, student_id, **payload.model_dump())
-    except StudentNotFound:
-        raise HTTPException(422, detail="student_id_not_found")
-    except ClassNotFound:
-        raise HTTPException(422, detail="class_not_found")
-    except DuplicateNisn:
-        raise HTTPException(409, detail="duplicate_nisn")
+    except StudentNotFound as e:
+        raise HTTPException(detail=e.detail, status_code=e.status_code)
+    except ClassNotFound as e:
+        raise HTTPException(detail=e.detail, status_code=e.status_code)
+    except DuplicateNisn as e:
+        raise HTTPException(detail=e.detail, status_code=e.status_code)
 
 
 @router.delete(
@@ -59,8 +59,8 @@ def put_student(
     status_code=204,
     responses={422: {"description": "Student is not found"}},
 )
-def delete_scan(student_id: int, db: Session = Depends(get_db)):
+def delete_student(student_id: int, db: Session = Depends(get_db)):
     try:
         return student_service.delete_student(db, student_id)
-    except StudentNotFound:
-        raise HTTPException(422, detail="student_id_not_found")
+    except StudentNotFound as e:
+        raise HTTPException(detail=e.detail, status_code=e.status_code)
