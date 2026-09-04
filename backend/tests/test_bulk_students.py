@@ -85,13 +85,17 @@ class TestBulkCreate:
     """Cases matching how a teacher would actually use this: importing a
     fresh batch of students from a spreadsheet, all valid rows."""
 
-    def test_creates_multiple_students_in_one_request(self, client, class_factory, db_session):
+    def test_creates_multiple_students_in_one_request(
+        self, client, class_factory, db_session
+    ):
         """Happy path. Send N valid student payloads, expect N rows in
         `succeeded`, zero in `failed`, and N new rows actually present in
         the database afterward."""
         class_ = class_factory()
         payloads = [
-            make_student_payload(name=f"Student {i}", nisn=f"100000{i:04d}", class_id=class_.class_id)
+            make_student_payload(
+                name=f"Student {i}", nisn=f"100000{i:04d}", class_id=class_.class_id
+            )
             for i in range(5)
         ]
 
@@ -121,7 +125,9 @@ class TestBulkCreate:
         confirm the fields match what you sent."""
         class_ = class_factory()
         class_id = class_.class_id
-        payload = make_student_payload(name="Fetch Me", nisn="1000009999", class_id=class_id)
+        payload = make_student_payload(
+            name="Fetch Me", nisn="1000009999", class_id=class_id
+        )
 
         response = client.post("/students/bulk", json=[payload])
         assert response.status_code == 200
@@ -153,7 +159,9 @@ class TestBulkCreate:
         assert len(body["failed"]) == 0
 
         for payload in payloads:
-            student = db_session.scalar(select(Student).where(Student.nisn == payload["nisn"]))
+            student = db_session.scalar(
+                select(Student).where(Student.nisn == payload["nisn"])
+            )
             assert student is not None
             assert student.class_id is None
 
@@ -240,7 +248,9 @@ class TestBulkCreateEdgeCases:
         for failed_item in body["failed"]:
             assert failed_item["error"] == "duplicate nisn in batch"
 
-    def test_duplicate_nisn_batch_vs_db_have_distinct_errors(self, client, student_factory):
+    def test_duplicate_nisn_batch_vs_db_have_distinct_errors(
+        self, client, student_factory
+    ):
         """EDGE CASE: distinguishes the two different "duplicate nisn"
         scenarios so a frontend can tell a teacher "you typed this twice"
         vs "this student is already in the system".
@@ -306,7 +316,9 @@ class TestBulkCreateEdgeCases:
         class_ = class_factory()
 
         payloads = [
-            make_student_payload(name="Valid", nisn="1000000001", class_id=class_.class_id),
+            make_student_payload(
+                name="Valid", nisn="1000000001", class_id=class_.class_id
+            ),
             make_student_payload(name="Bad Class", nisn="1000000002", class_id=99999),
         ]
 
@@ -331,8 +343,14 @@ class TestBulkCreateEdgeCases:
         class_ = class_factory()
 
         payloads = [
-            make_student_payload(name="Valid", nisn="1000000001", class_id=class_.class_id),
-            {"name": "Missing NISN", "class_id": class_.class_id, "current": True},  # no "nisn" key
+            make_student_payload(
+                name="Valid", nisn="1000000001", class_id=class_.class_id
+            ),
+            {
+                "name": "Missing NISN",
+                "class_id": class_.class_id,
+                "current": True,
+            },  # no "nisn" key
         ]
 
         response = client.post("/students/bulk", json=payloads)
@@ -356,7 +374,9 @@ class TestBulkCreateEdgeCases:
         the list."""
         class_ = class_factory()
         payloads = [
-            make_student_payload(name=f"Bulk Student {i}", nisn=f"20000{i:05d}", class_id=class_.class_id)
+            make_student_payload(
+                name=f"Bulk Student {i}", nisn=f"20000{i:05d}", class_id=class_.class_id
+            )
             for i in range(100)
         ]
 
@@ -383,7 +403,11 @@ class TestBulkCreateResponseShape:
         of individual items -- {"index","student"} vs {"index","error",
         "student"} -- is asserted in the more targeted shape tests below.)"""
         class_ = class_factory()
-        payloads = [make_student_payload(name="Solo", nisn="1000000001", class_id=class_.class_id)]
+        payloads = [
+            make_student_payload(
+                name="Solo", nisn="1000000001", class_id=class_.class_id
+            )
+        ]
 
         response = client.post("/students/bulk", json=payloads)
 
@@ -428,7 +452,9 @@ class TestBulkCreateResponseShape:
         ("index" + one branch-specific key) without conflating "what was
         sent" with "what the DB now holds"."""
         class_ = class_factory()
-        payload = make_student_payload(name="Shaped", nisn="1000000001", class_id=class_.class_id, current=True)
+        payload = make_student_payload(
+            name="Shaped", nisn="1000000001", class_id=class_.class_id, current=True
+        )
 
         response = client.post("/students/bulk", json=[payload])
 
@@ -454,7 +480,9 @@ class TestBulkCreateResponseShape:
 # 2. BULK UPDATE -- put /students/bulk
 # ===========================================================================
 class TestBulkUpdate:
-    def test_updates_multiple_students(self, client, seeded_students_and_classes, db_session):
+    def test_updates_multiple_students(
+        self, client, seeded_students_and_classes, db_session
+    ):
         """Happy path: put several existing students' fields (e.g. move
         them to a different class_id) in one request, confirm DB reflects
         the changes."""
@@ -498,7 +526,9 @@ class TestBulkUpdate:
         -- flagged earlier as a specific risk case, worth its own explicit
         test."""
         students = seeded_students_and_classes
-        class_a_students = [s for s in students if s.name in ("Shaun", "Ed", "Liz", "David")]
+        class_a_students = [
+            s for s in students if s.name in ("Shaun", "Ed", "Liz", "David")
+        ]
         new_class_id = students[-1].class_id
 
         payload = [
@@ -609,7 +639,9 @@ class TestBulkUpdateEdgeCases:
         assert len(body["failed"]) == 1
         assert body["failed"][0]["index"] == 1
 
-    def test_update_creates_nisn_collision_with_another_row_in_db(self, client, seeded_students_and_classes):
+    def test_update_creates_nisn_collision_with_another_row_in_db(
+        self, client, seeded_students_and_classes
+    ):
         """Row A is updated to use an nisn that belongs to a DIFFERENT
         existing student (not itself), and that other student is NOT part
         of this batch (so nothing frees up that nisn). Should fail
@@ -640,7 +672,9 @@ class TestBulkUpdateEdgeCases:
         assert body["failed"][0]["index"] == 0
         assert "nisn" in body["failed"][0]["error"].lower()
 
-    def test_two_rows_in_batch_swap_nisns(self, client, seeded_students_and_classes, db_session):
+    def test_two_rows_in_batch_swap_nisns(
+        self, client, seeded_students_and_classes, db_session
+    ):
         """Student X currently has nisn 'A', student Y has nisn 'B'. Batch
         says: set X's nisn to 'B', set Y's nisn to 'A'.
 
@@ -691,7 +725,9 @@ class TestBulkUpdateEdgeCases:
         assert refreshed_x.nisn == original_y_nisn
         assert refreshed_y.nisn == original_x_nisn
 
-    def test_three_way_nisn_rotation(self, client, seeded_students_and_classes, db_session):
+    def test_three_way_nisn_rotation(
+        self, client, seeded_students_and_classes, db_session
+    ):
         """GENERALIZATION of the two-row swap: student A gets B's nisn, B
         gets C's nisn, C gets A's nisn -- a 3-cycle, not just a pairwise
         swap. Proves the deferred-constraint approach handles arbitrary
@@ -747,7 +783,9 @@ class TestBulkUpdateEdgeCases:
         # Sanity: still globally unique across all three
         assert len({refreshed_a.nisn, refreshed_b.nisn, refreshed_c.nisn}) == 3
 
-    def test_swap_succeeds_even_when_sibling_row_fails(self, client, seeded_students_and_classes, db_session):
+    def test_swap_succeeds_even_when_sibling_row_fails(
+        self, client, seeded_students_and_classes, db_session
+    ):
         """A batch contains a valid two-row nisn swap AND a third,
         unrelated row that fails for its own reason (bad class_id). The
         broken row must NOT abort or roll back the swap -- per the
@@ -840,7 +878,9 @@ class TestBulkUpdateEdgeCases:
 
 
 class TestBulkUpdateResponseShape:
-    def test_response_shape_matches_bulk_create_contract(self, client, seeded_students_and_classes):
+    def test_response_shape_matches_bulk_create_contract(
+        self, client, seeded_students_and_classes
+    ):
         """The create and update bulk responses use the SAME shape
         (succeeded/failed with index) -- a frontend built against one
         should work against the other without special-casing."""
@@ -889,7 +929,9 @@ class TestBulkUpdateResponseShape:
 # all of them, returning 204. Duplicate ids in the request are deduped
 # before the existence check.
 class TestBulkDelete:
-    def test_deletes_multiple_existing_students(self, client, seeded_students_and_classes, db_session):
+    def test_deletes_multiple_existing_students(
+        self, client, seeded_students_and_classes, db_session
+    ):
         """Happy path: delete 3 existing students in one call."""
         students = seeded_students_and_classes
         to_delete = students[:3]
@@ -908,7 +950,9 @@ class TestBulkDelete:
         for s in to_keep:
             assert db_session.get(Student, s.id) is not None
 
-    def test_deleting_student_with_null_class_id_works(self, client, student_factory, db_session):
+    def test_deleting_student_with_null_class_id_works(
+        self, client, student_factory, db_session
+    ):
         """A student with no class assigned deletes fine, no FK weirdness."""
         student = student_factory(name="No Class", nisn="1000000001", class_id=None)
 
@@ -919,14 +963,18 @@ class TestBulkDelete:
 
 
 class TestBulkDeleteEdgeCases:
-    def test_one_id_does_not_exist_blocks_entire_batch(self, client, seeded_students_and_classes, db_session):
+    def test_one_id_does_not_exist_blocks_entire_batch(
+        self, client, seeded_students_and_classes, db_session
+    ):
         """Per the agreed contract: if even one id is invalid, NOTHING
         should be deleted -- not even the valid ones."""
         students = seeded_students_and_classes
         real_ids = [students[0].id, students[1].id]
         fake_id = 999999
 
-        response = client.post("/students/bulk-delete", json={"ids": real_ids + [fake_id]})
+        response = client.post(
+            "/students/bulk-delete", json={"ids": real_ids + [fake_id]}
+        )
 
         assert response.status_code == 422
 
@@ -934,13 +982,17 @@ class TestBulkDeleteEdgeCases:
         for student_id in real_ids:
             assert db_session.get(Student, student_id) is not None
 
-    def test_multiple_missing_ids_all_reported_at_once(self, client, seeded_students_and_classes):
+    def test_multiple_missing_ids_all_reported_at_once(
+        self, client, seeded_students_and_classes
+    ):
         """Report ALL bad ids, not just the first one hit."""
         students = seeded_students_and_classes
         real_id = students[0].id
         fake_ids = [888888, 999999]
 
-        response = client.post("/students/bulk-delete", json={"ids": [real_id] + fake_ids})
+        response = client.post(
+            "/students/bulk-delete", json={"ids": [real_id] + fake_ids}
+        )
 
         assert response.status_code == 422
         body = response.json()
@@ -954,7 +1006,9 @@ class TestBulkDeleteEdgeCases:
         assert response.status_code == 204
         assert response.content == b""
 
-    def test_duplicate_ids_in_same_request(self, client, seeded_students_and_classes, db_session):
+    def test_duplicate_ids_in_same_request(
+        self, client, seeded_students_and_classes, db_session
+    ):
         """DECISION: duplicate ids are deduped before the existence
         pre-check -- [id, id, other_id] behaves identically to
         [id, other_id]. The student is deleted once; the duplicate entry
@@ -964,7 +1018,8 @@ class TestBulkDeleteEdgeCases:
         target = students[0]
 
         response = client.post(
-            "/students/bulk-delete", json={"ids": [target.id, target.id, students[1].id]}
+            "/students/bulk-delete",
+            json={"ids": [target.id, target.id, students[1].id]},
         )
 
         assert response.status_code == 204
@@ -992,10 +1047,363 @@ class TestBulkDeleteResponseShape:
         real_id = students[0].id
         fake_id = 999999
 
-        response = client.post("/students/bulk-delete", json={"ids": [real_id, fake_id]})
+        response = client.post(
+            "/students/bulk-delete", json={"ids": [real_id, fake_id]}
+        )
 
         assert response.status_code == 422
         body = response.json()
         assert set(body.keys()) == {"missing_ids"}
         assert isinstance(body["missing_ids"], list)
         assert fake_id in body["missing_ids"]
+
+
+class TestBulkDryRun:
+    """dry_run=true should exercise all the same validation as a real
+    request and return an identical response, but must not persist
+    anything to the database."""
+
+    # --- create -------------------------------------------------------
+
+    def test_dry_run_create_does_not_persist_rows(
+        self, client, class_factory, db_session
+    ):
+        """Response looks exactly like a real success, but nothing lands
+        in the DB."""
+        class_ = class_factory()
+        payloads = [
+            make_student_payload(
+                name=f"Dry {i}", nisn=f"900000000{i}", class_id=class_.class_id
+            )
+            for i in range(3)
+        ]
+
+        response = client.post(
+            "/students/bulk", json=payloads, params={"dry_run": True}
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["succeeded"]) == 3
+        assert len(body["failed"]) == 0
+
+        for item in body["succeeded"]:
+            assert "id" in item["item"]
+
+        db_nisns = set(db_session.scalars(select(Student.nisn)).all())
+        for payload in payloads:
+            assert payload["nisn"] not in db_nisns
+
+    def test_dry_run_create_still_reports_row_level_failures(
+        self, client, student_factory, db_session
+    ):
+        """Validation still runs in dry-run mode: a DB collision is still
+        reported as failed, and nothing changes either way."""
+        student_factory(name="Existing", nisn="1000000001")
+
+        payloads = [
+            make_student_payload(name="Valid Dry", nisn="1000000002"),
+            make_student_payload(name="Colliding", nisn="1000000001"),
+        ]
+
+        response = client.post(
+            "/students/bulk", json=payloads, params={"dry_run": True}
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["succeeded"]) == 1
+        assert body["succeeded"][0]["index"] == 0
+        assert len(body["failed"]) == 1
+        assert body["failed"][0]["index"] == 1
+        assert body["failed"][0]["error"] == "duplicate_nisn"
+
+        db_nisns = set(db_session.scalars(select(Student.nisn)).all())
+        assert "1000000002" not in db_nisns
+
+    def test_dry_run_create_still_422s_when_every_row_fails(
+        self, client, student_factory, db_session
+    ):
+        """Status-code rule (200 vs 422) is unaffected by dry_run -- it's
+        still driven by whether `succeeded` ended up empty."""
+        student_factory(name="Existing", nisn="1000000001")
+        payloads = [make_student_payload(name="Colliding", nisn="1000000001")]
+
+        response = client.post(
+            "/students/bulk", json=payloads, params={"dry_run": True}
+        )
+
+        assert response.status_code == 422
+        body = response.json()
+        assert body["succeeded"] == []
+        assert len(body["failed"]) == 1
+
+    def test_dry_run_create_in_batch_collisions_still_detected(
+        self, client, db_session
+    ):
+        """In-batch nisn collisions are still caught under dry_run, and
+        (per contract) both colliding rows fail -- neither is
+        speculatively created."""
+        payloads = [
+            make_student_payload(name="Dupe A", nisn="1000000099"),
+            make_student_payload(name="Dupe B", nisn="1000000099"),
+        ]
+
+        response = client.post(
+            "/students/bulk", json=payloads, params={"dry_run": True}
+        )
+
+        assert response.status_code == 422
+        body = response.json()
+        assert len(body["failed"]) == 2
+        for failed_item in body["failed"]:
+            assert failed_item["error"] == "duplicate nisn in batch"
+
+        db_nisns = set(db_session.scalars(select(Student.nisn)).all())
+        assert "1000000099" not in db_nisns
+
+    def test_dry_run_create_nonexistent_class_id_still_fails(self, client, db_session):
+        """Foreign-key validation (class_id must exist) still runs under
+        dry_run -- it's not skipped just because the row won't be
+        committed."""
+        payloads = [
+            make_student_payload(name="Bad Class", nisn="1000000001", class_id=99999)
+        ]
+
+        response = client.post(
+            "/students/bulk", json=payloads, params={"dry_run": True}
+        )
+
+        assert response.status_code == 422
+        body = response.json()
+        assert len(body["failed"]) == 1
+        assert body["failed"][0]["index"] == 0
+
+        db_nisns = set(db_session.scalars(select(Student.nisn)).all())
+        assert "1000000001" not in db_nisns
+
+    def test_dry_run_create_matches_real_run_response_for_same_input(
+        self, client, class_factory, db_session
+    ):
+        """Sanity check: dry_run and a real run against the same input
+        produce the same succeeded/failed shape (aside from the "id" a
+        real run assigns -- see assumption below)."""
+        class_ = class_factory()
+        payloads = [
+            make_student_payload(
+                name="Compare Me", nisn="1000000001", class_id=class_.class_id
+            )
+        ]
+
+        dry_response = client.post(
+            "/students/bulk", json=payloads, params={"dry_run": True}
+        )
+        assert dry_response.status_code == 200
+        dry_body = dry_response.json()
+        assert len(dry_body["succeeded"]) == 1
+        assert dry_body["succeeded"][0]["item"]["nisn"] == "1000000001"
+
+        db_nisns = set(db_session.scalars(select(Student.nisn)).all())
+        assert "1000000001" not in db_nisns
+
+        real_response = client.post("/students/bulk", json=payloads)
+        assert real_response.status_code == 200
+        real_body = real_response.json()
+        assert real_body["succeeded"][0]["item"]["nisn"] == "1000000001"
+
+    # --- update -------------------------------------------------------
+
+    def test_dry_run_update_does_not_persist_changes(
+        self, client, seeded_students_and_classes, db_session
+    ):
+        target = seeded_students_and_classes[0]
+        original_name = target.name
+        original_nisn = target.nisn
+
+        payload = [
+            {
+                "id": target.id,
+                "name": "Renamed Dry",
+                "nisn": target.nisn,
+                "class_id": target.class_id,
+                "current": target.current,
+            },
+        ]
+
+        response = client.put("/students/bulk", json=payload, params={"dry_run": True})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["succeeded"]) == 1
+        assert body["succeeded"][0]["item"]["name"] == "Renamed Dry"
+
+        db_session.expire_all()
+        refreshed = db_session.get(Student, target.id)
+        assert refreshed.name == original_name
+        assert refreshed.nisn == original_nisn
+
+    def test_dry_run_update_still_detects_collisions(
+        self, client, seeded_students_and_classes, db_session
+    ):
+        """A dry-run update that collides with another existing student's
+        nisn still fails validation -- dry_run doesn't relax the checks,
+        it only withholds the commit."""
+        students = seeded_students_and_classes
+        student_a, student_b = students[0], students[1]
+
+        payload = [
+            {
+                "id": student_a.id,
+                "name": student_a.name,
+                "nisn": student_b.nisn,
+                "class_id": student_a.class_id,
+                "current": student_a.current,
+            },
+        ]
+
+        response = client.put("/students/bulk", json=payload, params={"dry_run": True})
+
+        assert response.status_code == 422
+        body = response.json()
+        assert "nisn" in body["failed"][0]["error"].lower()
+
+        db_session.expire_all()
+        assert db_session.get(Student, student_a.id).nisn != student_b.nisn
+
+    def test_dry_run_update_swap_validates_but_does_not_persist(
+        self, client, seeded_students_and_classes, db_session
+    ):
+        """The in-batch swap logic (deferred-constraint check) still needs
+        to run under dry_run so the caller finds out the swap WOULD
+        succeed -- but the actual nisn values must be untouched
+        afterward."""
+        students = seeded_students_and_classes
+        student_x, student_y = students[0], students[1]
+        original_x_nisn = student_x.nisn
+        original_y_nisn = student_y.nisn
+
+        payload = [
+            {
+                "id": student_x.id,
+                "name": student_x.name,
+                "nisn": original_y_nisn,
+                "class_id": student_x.class_id,
+                "current": student_x.current,
+            },
+            {
+                "id": student_y.id,
+                "name": student_y.name,
+                "nisn": original_x_nisn,
+                "class_id": student_y.class_id,
+                "current": student_y.current,
+            },
+        ]
+
+        response = client.put("/students/bulk", json=payload, params={"dry_run": True})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["succeeded"]) == 2
+        assert len(body.get("failed", [])) == 0
+
+        db_session.expire_all()
+        refreshed_x = db_session.get(Student, student_x.id)
+        refreshed_y = db_session.get(Student, student_y.id)
+        assert refreshed_x.nisn == original_x_nisn
+        assert refreshed_y.nisn == original_y_nisn
+
+    def test_dry_run_update_nonexistent_id_still_fails(
+        self, client, seeded_students_and_classes, db_session
+    ):
+        real_student = seeded_students_and_classes[0]
+
+        payload = [
+            {
+                "id": real_student.id,
+                "name": real_student.name,
+                "nisn": real_student.nisn,
+                "class_id": real_student.class_id,
+                "current": real_student.current,
+            },
+            {
+                "id": 999999,
+                "name": "Ghost",
+                "nisn": "1000009999",
+                "class_id": None,
+                "current": True,
+            },
+        ]
+
+        response = client.put("/students/bulk", json=payload, params={"dry_run": True})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["succeeded"]) == 1
+        assert body["succeeded"][0]["index"] == 0
+        assert len(body["failed"]) == 1
+        assert body["failed"][0]["index"] == 1
+
+    # --- delete ---------------------------------------------------------
+
+    def test_dry_run_delete_does_not_remove_rows(
+        self, client, seeded_students_and_classes, db_session
+    ):
+        students = seeded_students_and_classes
+        target_ids = [students[0].id, students[1].id]
+
+        response = client.post(
+            "/students/bulk-delete", json={"ids": target_ids}, params={"dry_run": True}
+        )
+
+        assert response.status_code == 204
+        assert response.content == b""
+
+        for student_id in target_ids:
+            assert db_session.get(Student, student_id) is not None
+
+    def test_dry_run_delete_still_422s_on_missing_ids(
+        self, client, seeded_students_and_classes, db_session
+    ):
+        """The pre-check (all ids must exist) still runs under dry_run --
+        it's validation, not a mutation, so there's no reason to relax
+        it."""
+        real_id = seeded_students_and_classes[0].id
+        fake_id = 999999
+
+        response = client.post(
+            "/students/bulk-delete",
+            json={"ids": [real_id, fake_id]},
+            params={"dry_run": True},
+        )
+
+        assert response.status_code == 422
+        body = response.json()
+        assert body["missing_ids"] == [fake_id]
+
+        assert db_session.get(Student, real_id) is not None
+
+    def test_dry_run_delete_empty_list_is_still_a_204_noop(self, client):
+        response = client.post(
+            "/students/bulk-delete", json={"ids": []}, params={"dry_run": True}
+        )
+
+        assert response.status_code == 204
+        assert response.content == b""
+
+    def test_dry_run_delete_duplicate_ids_deduped_same_as_real_run(
+        self, client, seeded_students_and_classes, db_session
+    ):
+        """Dedup-before-existence-check still applies under dry_run --
+        sending the same real id twice isn't treated as an error, and (as
+        with every other dry_run case here) nothing actually gets
+        deleted."""
+        target = seeded_students_and_classes[0]
+
+        response = client.post(
+            "/students/bulk-delete",
+            json={"ids": [target.id, target.id]},
+            params={"dry_run": True},
+        )
+
+        assert response.status_code == 204
+        assert db_session.get(Student, target.id) is not None
