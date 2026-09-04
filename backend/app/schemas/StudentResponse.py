@@ -1,8 +1,10 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class StudentResponse(BaseModel):
     """Response schema for individual items of GET /students."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
     nisn: str = Field(

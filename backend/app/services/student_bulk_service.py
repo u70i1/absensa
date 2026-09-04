@@ -7,6 +7,7 @@ from app.schemas.BulkStudentRequest import (
     BulkStudentRequest,
     BulkStudentRequestWithId,
 )
+from app.schemas.StudentResponse import StudentResponse
 from app.services.exceptions import (
     AppException,
     ClassNotFound,
@@ -57,7 +58,9 @@ def validate_new_student(
         raise ClassNotFound()
 
 
-def create_students_bulk(db: Session, payload: list[BulkStudentRequest]) -> dict:
+def create_students_bulk(
+    db: Session, payload: list[BulkStudentRequest], dry_run: bool
+) -> dict:
     """Create one or more students in one transaction. Returns the
     succeeded/failed envelope never raises; per-item AppExceptions are
     caught here and folded into the failed list."""
@@ -86,13 +89,22 @@ def create_students_bulk(db: Session, payload: list[BulkStudentRequest]) -> dict
         new_students_meta.append((index, new_student))
 
     db.add_all(new_students)
-    db.commit()
+    db.flush()
 
-    # Refresh after commit so the response includes DB-generated fields (e.g. id)
     succeeded = []
     for index, new_student in new_students_meta:
         db.refresh(new_student)
-        succeeded.append({"index": index, "item": new_student})
+        succeeded.append(
+            {
+                "index": index,
+                "item": StudentResponse.model_validate(new_student).model_dump(),
+            }
+        )
+
+    if dry_run:
+        db.rollback()
+    else:
+        db.commit()
 
     return bulk_response_or_422(succeeded, failed)
 
@@ -131,7 +143,9 @@ def validate_updated_student(
         raise ClassNotFound()
 
 
-def update_students_bulk(db: Session, payload: list[BulkStudentRequestWithId]) -> dict:
+def update_students_bulk(
+    db: Session, payload: list[BulkStudentRequestWithId], dry_run: bool
+) -> dict:
     """Update multiple students in a single transaction. Returns the
     succeeded/failed envelope never raises out; per-item AppExceptions
     are caught here."""
@@ -175,12 +189,18 @@ def update_students_bulk(db: Session, payload: list[BulkStudentRequestWithId]) -
 
     db.execute(text("SET CONSTRAINTS students_nisn_key DEFERRED"))
     db.execute(update(Student), updating_students)
-    db.commit()
+
+    if dry_run:
+        db.rollback()
+    else:
+        db.commit()
 
     return bulk_response_or_422(succeeded, failed)
 
 
-def delete_students_bulk(db: Session, payload: BulkStudentIdOnly) -> list[int] | None:
+def delete_students_bulk(
+    db: Session, payload: BulkStudentIdOnly, dry_run: bool
+) -> list[int] | None:
     """Deletes all given ids, or none at all if any id is missing
     (all-or-nothing, unlike create/update). Returns the list of missing
     ids if any were missing, or None on success the router translates
@@ -195,5 +215,8 @@ def delete_students_bulk(db: Session, payload: BulkStudentIdOnly) -> list[int] |
     if missing_ids:
         return missing_ids
 
-    db.execute(delete(Student).where(Student.id.in_(payload_ids)))
+    if dry_run:
+        db.rollback()
+    else:
+        db.execute(delete(Student).where(Student.id.in_(payload_ids)))
     return None
