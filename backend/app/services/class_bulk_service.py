@@ -6,6 +6,7 @@ from app.schemas.BulkClassRequest import (
     BulkClassRequest,
     BulkClassRequestWithId,
 )
+from app.schemas.ClassResponse import ClassResponse
 from app.services.exceptions import AppException, ClassNameTooLong, DuplicateClass
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
@@ -34,7 +35,7 @@ def validate_new_class(
             detail=f"missing fields: {', '.join(missing)}", status_code=422
         )
 
-    if len(class_.class_name) > CLASS_NAME_MAX_LENGTH: # type: ignore
+    if len(class_.class_name) > CLASS_NAME_MAX_LENGTH:  # type: ignore
         raise ClassNameTooLong()
 
     if class_name_batch_counts[class_.class_name] > 1:
@@ -44,7 +45,9 @@ def validate_new_class(
         raise DuplicateClass()
 
 
-def create_classes_bulk(db: Session, payload: list[BulkClassRequest]) -> dict:
+def create_classes_bulk(
+    db: Session, payload: list[BulkClassRequest], dry_run: bool
+) -> dict:
     """Create one or more classes in one transaction. Returns the
     succeeded/failed envelope — never raises; per-item AppExceptions are
     caught here and folded into the failed list."""
@@ -67,12 +70,22 @@ def create_classes_bulk(db: Session, payload: list[BulkClassRequest]) -> dict:
         new_classes_meta.append((index, new_class))
 
     db.add_all(new_classes)
-    db.commit()
+    db.flush()
 
     succeeded = []
     for index, new_class in new_classes_meta:
         db.refresh(new_class)
-        succeeded.append({"index": index, "item": new_class})
+        succeeded.append(
+            {
+                "index": index,
+                "item": ClassResponse.model_validate(new_class).model_dump(),
+            }
+        )
+
+    if dry_run:
+        db.rollback()
+    else:
+        db.commit()
 
     return bulk_response_or_422(succeeded, failed)
 
@@ -95,7 +108,7 @@ def validate_updated_class(
             detail=f"missing fields: {', '.join(missing)}", status_code=422
         )
 
-    if len(class_.class_name) > CLASS_NAME_MAX_LENGTH: # type: ignore
+    if len(class_.class_name) > CLASS_NAME_MAX_LENGTH:  # type: ignore
         raise ClassNameTooLong()
 
     if class_.class_id not in class_ids_db:
@@ -108,7 +121,9 @@ def validate_updated_class(
         raise DuplicateClass()
 
 
-def update_classes_bulk(db: Session, payload: list[BulkClassRequestWithId]) -> dict:
+def update_classes_bulk(
+    db: Session, payload: list[BulkClassRequestWithId], dry_run: bool
+) -> dict:
     """Update multiple classes in a single transaction. Returns the
     succeeded/failed envelope — never raises out; per-item AppExceptions
     are caught here."""
@@ -149,12 +164,18 @@ def update_classes_bulk(db: Session, payload: list[BulkClassRequestWithId]) -> d
 
     db.execute(text("SET CONSTRAINTS classes_class_name_key DEFERRED"))
     db.execute(update(Class), updating_classes)
-    db.commit()
+
+    if dry_run:
+        db.rollback()
+    else:
+        db.commit()
 
     return bulk_response_or_422(succeeded, failed)
 
 
-def delete_classes_bulk(db: Session, payload: BulkClassIdOnly) -> list[int] | None:
+def delete_classes_bulk(
+    db: Session, payload: BulkClassIdOnly, dry_run: bool
+) -> list[int] | None:
     """Deletes all given ids, or none at all if any id is missing
     (all-or-nothing). Returns the list of missing ids if any were missing,
     or None on success — the router translates that into the 422/204 response."""
@@ -168,5 +189,8 @@ def delete_classes_bulk(db: Session, payload: BulkClassIdOnly) -> list[int] | No
     if missing_ids:
         return missing_ids
 
-    db.execute(delete(Class).where(Class.class_id.in_(payload_ids)))
+    if dry_run:
+        db.rollback()
+    else:
+        db.execute(delete(Class).where(Class.class_id.in_(payload_ids)))
     return None

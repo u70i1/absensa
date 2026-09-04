@@ -748,14 +748,14 @@ class TestBulkDryRun:
         target = db_session.scalars(select(Class)).first()
         original_name = target.class_name
 
-        payload = [{"class_id": target.class_id, "class_name": "Renamed Dry"}]
+        payload = [{"class_id": target.class_id, "class_name": "renamdry"}]
 
         response = client.put("/classes/bulk", json=payload, params={"dry_run": True})
 
         assert response.status_code == 200
         body = response.json()
         assert len(body["succeeded"]) == 1
-        assert body["succeeded"][0]["item"]["class_name"] == "Renamed Dry"
+        assert body["succeeded"][0]["item"]["class_name"] == "renamdry"
 
         db_session.expire_all()
         assert db_session.get(Class, target.class_id).class_name == original_name
