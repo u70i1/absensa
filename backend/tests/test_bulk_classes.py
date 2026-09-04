@@ -635,3 +635,215 @@ class TestBulkDeleteResponseShape:
         assert set(body.keys()) == {"missing_ids"}
         assert isinstance(body["missing_ids"], list)
         assert fake_id in body["missing_ids"]
+
+class TestBulkDryRun:
+    """dry_run=true should exercise all the same validation as a real
+    request and return an identical response, but must not persist
+    anything to the database."""
+
+    # --- create -----------------------------------------------------------
+
+    def test_dry_run_create_does_not_persist_rows(self, client, db_session):
+        """Response looks exactly like a real success, but nothing lands
+        in the DB."""
+        payloads = [make_class_payload(class_name=f"DryC{i}") for i in range(3)]
+
+        response = client.post("/classes/bulk", json=payloads, params={"dry_run": True})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["succeeded"]) == 3
+        assert len(body["failed"]) == 0
+
+        # succeeded items still look shaped like real ones...
+        for item in body["succeeded"]:
+            assert "class_id" in item["item"]
+
+        # ...but nothing was actually written.
+        db_names = set(db_session.scalars(select(Class.class_name)).all())
+        for payload in payloads:
+            assert payload["class_name"] not in db_names
+
+    def test_dry_run_create_still_reports_row_level_failures(self, client, class_factory, db_session):
+        """Validation still runs in dry-run mode: a DB collision is still
+        reported as failed, and nothing changes either way."""
+        class_factory(class_name="Existing")
+
+        payloads = [
+            make_class_payload(class_name="Valid Dry"),
+            make_class_payload(class_name="Existing"),
+        ]
+
+        response = client.post("/classes/bulk", json=payloads, params={"dry_run": True})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["succeeded"]) == 1
+        assert body["succeeded"][0]["index"] == 0
+        assert len(body["failed"]) == 1
+        assert body["failed"][0]["index"] == 1
+        assert body["failed"][0]["error"] == "duplicate_class"
+
+        db_names = set(db_session.scalars(select(Class.class_name)).all())
+        assert "Valid Dry" not in db_names
+
+    def test_dry_run_create_still_422s_when_every_row_fails(self, client, class_factory, db_session):
+        """Status-code rule (200 vs 422) is unaffected by dry_run -- it's
+        still driven by whether `succeeded` ended up empty."""
+        class_factory(class_name="Existing")
+        payloads = [make_class_payload(class_name="Existing")]
+
+        response = client.post("/classes/bulk", json=payloads, params={"dry_run": True})
+
+        assert response.status_code == 422
+        body = response.json()
+        assert body["succeeded"] == []
+        assert len(body["failed"]) == 1
+
+    def test_dry_run_create_in_batch_collisions_still_detected(self, client, db_session):
+        """In-batch class_name collisions are still caught under dry_run,
+        and (per contract) both colliding rows fail -- neither is
+        speculatively created."""
+        payloads = [
+            make_class_payload(class_name="DryDupe"),
+            make_class_payload(class_name="DryDupe"),
+        ]
+
+        response = client.post("/classes/bulk", json=payloads, params={"dry_run": True})
+
+        assert response.status_code == 422
+        body = response.json()
+        assert len(body["failed"]) == 2
+        for failed_item in body["failed"]:
+            assert failed_item["error"] == "duplicate class_name in batch"
+
+        db_names = set(db_session.scalars(select(Class.class_name)).all())
+        assert "DryDupe" not in db_names
+
+    def test_dry_run_create_matches_real_run_response_for_same_input(self, client, db_session):
+        """Sanity check: dry_run and a real run against the same input
+        produce the same succeeded/failed shape (aside from class_id
+        values, which a real run assigns and a dry run may fabricate or
+        omit -- see assumption below)."""
+        payloads = [make_class_payload(class_name="Compare Me")]
+
+        dry_response = client.post("/classes/bulk", json=payloads, params={"dry_run": True})
+        assert dry_response.status_code == 200
+        dry_body = dry_response.json()
+        assert len(dry_body["succeeded"]) == 1
+        assert dry_body["succeeded"][0]["item"]["class_name"] == "Compare Me"
+
+        # confirm it's still absent, then do the real thing and confirm parity
+        db_names = set(db_session.scalars(select(Class.class_name)).all())
+        assert "Compare Me" not in db_names
+
+        real_response = client.post("/classes/bulk", json=payloads)
+        assert real_response.status_code == 200
+        real_body = real_response.json()
+        assert real_body["succeeded"][0]["item"]["class_name"] == "Compare Me"
+
+    # --- update -------------------------------------------------------
+
+    def test_dry_run_update_does_not_persist_changes(self, client, seeded_students_and_classes, db_session):
+        target = db_session.scalars(select(Class)).first()
+        original_name = target.class_name
+
+        payload = [{"class_id": target.class_id, "class_name": "renamdry"}]
+
+        response = client.put("/classes/bulk", json=payload, params={"dry_run": True})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["succeeded"]) == 1
+        assert body["succeeded"][0]["item"]["class_name"] == "renamdry"
+
+        db_session.expire_all()
+        assert db_session.get(Class, target.class_id).class_name == original_name
+
+    def test_dry_run_update_still_detects_collisions(self, client, seeded_students_and_classes, db_session):
+        """A dry-run rename that collides with another existing row still
+        fails validation -- dry_run doesn't relax the checks, it only
+        withholds the commit."""
+        classes = db_session.scalars(select(Class)).all()
+        class_a, class_b = classes[0], classes[1]
+
+        payload = [{"class_id": class_a.class_id, "class_name": class_b.class_name}]
+
+        response = client.put("/classes/bulk", json=payload, params={"dry_run": True})
+
+        assert response.status_code == 422
+        body = response.json()
+        assert body["failed"][0]["error"] == "duplicate_class"
+
+        db_session.expire_all()
+        assert db_session.get(Class, class_a.class_id).class_name != class_b.class_name
+
+    def test_dry_run_update_swap_validates_but_does_not_persist(
+        self, client, seeded_students_and_classes, db_session
+    ):
+        """The in-batch swap logic (deferred-constraint check) still needs
+        to run under dry_run so the caller finds out the swap WOULD
+        succeed -- but the actual class_name values must be untouched
+        afterward."""
+        classes = db_session.scalars(select(Class)).all()
+        class_x, class_y = classes[0], classes[1]
+        original_x_name = class_x.class_name
+        original_y_name = class_y.class_name
+
+        payload = [
+            {"class_id": class_x.class_id, "class_name": original_y_name},
+            {"class_id": class_y.class_id, "class_name": original_x_name},
+        ]
+
+        response = client.put("/classes/bulk", json=payload, params={"dry_run": True})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["succeeded"]) == 2
+        assert len(body.get("failed", [])) == 0
+
+        db_session.expire_all()
+        refreshed_x = db_session.get(Class, class_x.class_id)
+        refreshed_y = db_session.get(Class, class_y.class_id)
+        assert refreshed_x.class_name == original_x_name
+        assert refreshed_y.class_name == original_y_name
+
+    # --- delete ---------------------------------------------------------
+
+    def test_dry_run_delete_does_not_remove_rows(self, client, seeded_students_and_classes, db_session):
+        classes = db_session.scalars(select(Class)).all()
+        target_ids = [classes[0].class_id, classes[1].class_id]
+
+        response = client.post(
+            "/classes/bulk-delete", json={"ids": target_ids}, params={"dry_run": True}
+        )
+
+        assert response.status_code == 204
+        assert response.content == b""
+
+        for class_id in target_ids:
+            assert db_session.get(Class, class_id) is not None
+
+    def test_dry_run_delete_still_422s_on_missing_ids(self, client, seeded_students_and_classes, db_session):
+        """The pre-check (all ids must exist) still runs under dry_run --
+        it's validation, not a mutation, so there's no reason to relax it."""
+        real_id = db_session.scalars(select(Class)).first().class_id
+        fake_id = 999999
+
+        response = client.post(
+            "/classes/bulk-delete",
+            json={"ids": [real_id, fake_id]},
+            params={"dry_run": True},
+        )
+
+        assert response.status_code == 422
+        body = response.json()
+        assert body["missing_ids"] == [fake_id]
+
+        assert db_session.get(Class, real_id) is not None
+
+    def test_dry_run_delete_empty_list_is_still_a_204_noop(self, client):
+        response = client.post("/classes/bulk-delete", json={"ids": []}, params={"dry_run": True})
+
+        assert response.status_code == 204
+        assert response.content == b""

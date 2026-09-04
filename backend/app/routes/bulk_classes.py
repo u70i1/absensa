@@ -19,9 +19,13 @@ router = APIRouter()
     response_model=BulkClassResponse,
     responses={422: {"description": "All items failed"}},
 )
-def post_class_bulk(payload: list[BulkClassRequest], db: Session = Depends(get_db)):
+def post_class_bulk(
+    payload: list[BulkClassRequest],
+    dry_run: bool = False,
+    db: Session = Depends(get_db),
+):
     """Create one or more classes in one request."""
-    result = class_bulk_service.create_classes_bulk(db, payload)
+    result = class_bulk_service.create_classes_bulk(db, payload, dry_run)
     if result["failed"] and not result["succeeded"]:
         return JSONResponse(status_code=422, content=jsonable_encoder(result))
     return result
@@ -33,10 +37,12 @@ def post_class_bulk(payload: list[BulkClassRequest], db: Session = Depends(get_d
     responses={422: {"description": "All items failed"}},
 )
 def put_class_bulk(
-    payload: list[BulkClassRequestWithId], db: Session = Depends(get_db)
+    payload: list[BulkClassRequestWithId],
+    dry_run: bool = False,
+    db: Session = Depends(get_db),
 ):
     """Update multiple classes in one request."""
-    result = class_bulk_service.update_classes_bulk(db, payload)
+    result = class_bulk_service.update_classes_bulk(db, payload, dry_run)
     if result["failed"] and not result["succeeded"]:
         return JSONResponse(status_code=422, content=jsonable_encoder(result))
     return result
@@ -47,9 +53,11 @@ def put_class_bulk(
     status_code=204,
     responses={422: {"description": "If at least one item failed"}},
 )
-def delete_class_bulk(payload: BulkClassIdOnly, db: Session = Depends(get_db)):
+def delete_class_bulk(
+    payload: BulkClassIdOnly, dry_run: bool = False, db: Session = Depends(get_db)
+):
     """Delete multiple classes in one request."""
-    missing_ids = class_bulk_service.delete_classes_bulk(db, payload)
+    missing_ids = class_bulk_service.delete_classes_bulk(db, payload, dry_run)
     if missing_ids:
         return JSONResponse(
             status_code=422, content=jsonable_encoder({"missing_ids": missing_ids})

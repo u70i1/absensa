@@ -4,7 +4,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 
-def delete_scans_bulk(db: Session, payload: BulkScanIdOnly):
+def delete_scans_bulk(db: Session, payload: BulkScanIdOnly, dry_run: bool):
     payload_ids = set(payload.ids)
     if not payload_ids:
         return
@@ -17,5 +17,8 @@ def delete_scans_bulk(db: Session, payload: BulkScanIdOnly):
     if missing_ids:
         return missing_ids
 
-    db.execute(delete(ScanLog).where(ScanLog.scan_id.in_(payload_ids)))
+    if dry_run:
+        db.rollback()
+    else:
+        db.execute(delete(ScanLog).where(ScanLog.scan_id.in_(payload_ids)))
     return None

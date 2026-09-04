@@ -115,3 +115,79 @@ class TestDeleteBulk:
             select(ScanLog).where(ScanLog.scan_id == log1.scan_id)
         )
         assert remaining_log is None
+
+
+class TestDeleteBulkDryRun:
+    """dry_run=true should run the same existence pre-check but must not
+    actually delete anything."""
+
+    ENDPOINT = "/scans/delete-bulk"
+
+    def test_dry_run_does_not_delete_existing_rows(
+        self,
+        client,
+        db_session,
+        existing_student,
+        scan_log_factory,
+    ):
+        log1 = scan_log_factory(student=existing_student)
+        log2 = scan_log_factory(student=existing_student)
+
+        response = client.post(
+            self.ENDPOINT,
+            json={"ids": [log1.scan_id, log2.scan_id]},
+            params={"dry_run": True},
+        )
+
+        assert response.status_code == 204
+        assert response.content == b""
+
+        remaining_ids = set(
+            db_session.scalars(
+                select(ScanLog.scan_id).where(
+                    ScanLog.scan_id.in_([log1.scan_id, log2.scan_id])
+                )
+            ).all()
+        )
+        assert remaining_ids == {log1.scan_id, log2.scan_id}
+
+    def test_dry_run_still_422s_on_missing_ids(
+        self,
+        client,
+        db_session,
+        existing_student,
+        scan_log_factory,
+    ):
+        """The pre-check is validation, not a mutation, so dry_run doesn't
+        change whether missing ids get reported."""
+        log1 = scan_log_factory(student=existing_student)
+        max_scan_id = db_session.scalar(select(func.max(ScanLog.scan_id)))
+        nonexistent_id = (max_scan_id or 0) + 1
+
+        response = client.post(
+            self.ENDPOINT,
+            json={"ids": [log1.scan_id, nonexistent_id]},
+            params={"dry_run": True},
+        )
+
+        assert response.status_code == 422
+        body = response.json()
+        assert body["missing_ids"] == [nonexistent_id]
+
+        remaining_log = db_session.scalar(
+            select(ScanLog).where(ScanLog.scan_id == log1.scan_id)
+        )
+        assert remaining_log is not None
+
+    def test_dry_run_empty_ids_is_still_a_204_noop(self, client, db_session):
+        response = client.post(
+            self.ENDPOINT,
+            json={"ids": []},
+            params={"dry_run": True},
+        )
+
+        assert response.status_code == 204
+        assert response.content == b""
+
+        count = db_session.scalar(select(func.count()).select_from(ScanLog))
+        assert count == 0
