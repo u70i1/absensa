@@ -10,8 +10,8 @@ router = APIRouter()
 
 
 @router.post("/scans/delete-bulk", status_code=204)
-def delete_scans_bulk(payload: BulkScanIdOnly, db: Session = Depends(get_db)):
-    missing_ids = scan_bulk_service.delete_scans_bulk(db, payload)
+def delete_scans_bulk(payload: BulkScanIdOnly, dry_run: bool = False, db: Session = Depends(get_db)):
+    missing_ids = scan_bulk_service.delete_scans_bulk(db, payload, dry_run)
     if missing_ids:
         return JSONResponse(
             status_code=422, content=jsonable_encoder({"missing_ids": missing_ids})
