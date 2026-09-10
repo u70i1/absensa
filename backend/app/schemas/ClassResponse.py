@@ -7,4 +7,5 @@ class ClassResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     class_id: int
+    grade: int
     class_name: str

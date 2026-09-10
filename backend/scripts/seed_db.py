@@ -4,11 +4,11 @@ from app.models.student import Student
 from sqlalchemy import select
 
 SEED_CLASS = [
-    {"class_name": "X-Mossy"},
-    {"class_name": "X-Bottom"},
-    {"class_name": "XI-Flock"},
-    {"class_name": "XI-Barn"},
-    {"class_name": "XII-Farm"},
+    {"grade": 10,"class_name": "X-Mossy"},
+    {"grade": 10,"class_name": "X-Bottom"},
+    {"grade": 11,"class_name": "XI-Flock"},
+    {"grade": 11,"class_name": "XI-Barn"},
+    {"grade": 12,"class_name": "XII-Farm"},
 ]
 
 SEED_STUDENT = [
@@ -44,7 +44,7 @@ def seed() -> None:
         print("Adding classes")
         classes = []
         for c in SEED_CLASS:
-            classes.append(Class(class_name=c["class_name"]))
+            classes.append(Class(grade=c["grade"], class_name=c["class_name"]))
 
         db.add_all(classes)
         db.flush()

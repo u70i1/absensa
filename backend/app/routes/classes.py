@@ -29,13 +29,13 @@ def get_classes_students(
 @router.post("/classes", status_code=201, response_model=ClassResponse)
 def post_class(payload: ClassRequest, db: Session = Depends(get_db)):
     """Create new Class item in the database"""
-    return class_service.post_class(db, payload.class_name)
+    return class_service.post_class(db, payload.class_name, payload.grade)
 
 
 @router.put("/classes/{class_id}", response_model=ClassResponse)
 def update_class(class_id: int, payload: ClassRequest, db: Session = Depends(get_db)):
     """Update the class_name of an existing class item from "classes" table"""
-    return class_service.update_class(db, class_id, payload.class_name)
+    return class_service.update_class(db, class_id, payload.class_name, payload.grade)
 
 
 @router.delete("/classes/{class_id}", status_code=204)
