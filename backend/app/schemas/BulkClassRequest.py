@@ -5,6 +5,7 @@ class BulkClassRequest(BaseModel):
     """Single item from request payload schema for POST /classes/bulk."""
 
     class_name: str | None = Field(None)
+    grade: int | None = Field(None)
 
 
 class BulkClassRequestWithId(BulkClassRequest):

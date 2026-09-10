@@ -101,8 +101,8 @@ def client(db_session):
 def class_factory(db_session):
     """Seed a single class entry"""
 
-    def _make_class(class_name="Flock A"):
-        class_ = Class(class_name=class_name)
+    def _make_class(class_name="Flock A", grade=10):
+        class_ = Class(class_name=class_name, grade=grade)
         db_session.add(class_)
         db_session.commit()
         db_session.refresh(class_)
@@ -169,13 +169,21 @@ SEED_STUDENTS = [
     {"name": "Alan", "class_index": 3, "nisn": "1000000100"},
 ]
 
-SEED_CLASSES = ["10A", "10B", "10C", "10D"]
+SEED_CLASSES = [
+    {"grade": 10, "class_name": "10A"},
+    {"grade": 10, "class_name": "10B"},
+    {"grade": 10, "class_name": "10C"},
+    {"grade": 10, "class_name": "10D"},
+]
 
 
 @pytest.fixture
 def seeded_students_and_classes(db_session):
     """Insert SEED_STUDENTS and SEED_CLASSES and return them."""
-    classes = [Class(class_name=class_) for class_ in SEED_CLASSES]
+    classes = [
+        Class(grade=entry["grade"], class_name=entry["class_name"])
+        for entry in SEED_CLASSES
+    ]
     db_session.add_all(classes)
 
     db_session.flush()
@@ -195,8 +203,8 @@ def seeded_students_and_classes(db_session):
 
 @pytest.fixture
 def existing_class(class_factory):
-    """A default class (11B) for most tests."""
-    return class_factory(class_name="11B")
+    """A default class (grade 11, "11B") for most tests."""
+    return class_factory(grade=11, class_name="11B")
 
 
 @pytest.fixture

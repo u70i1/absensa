@@ -37,12 +37,13 @@ def make_class_payload(**overrides: Any) -> dict[str, Any]:
     """Generate a valid class payload dictionary.
 
     Args:
-        **overrides: Override any payload field. The only intended use is
-            `class_name` (str), which defaults to "XI-B".
+        **overrides: Override any payload field. Common overrides:
+            - `grade` (int): Default is `10`.
+            - `class_name` (str): Default is `"XI-B"`.
 
     Returns:
-        A dict with the key `class_name`.
+        A dict with the keys `grade` and `class_name`.
     """
-    payload = {"class_name": "XI-B"}
+    payload = {"grade": 10, "class_name": "XI-B"}
     payload.update(overrides)
     return payload

@@ -1,3 +1,4 @@
+
 from collections import Counter
 
 from app.models.class_ import Class
@@ -13,23 +14,25 @@ from sqlalchemy.orm import Session
 
 from .helpers import bulk_response_or_422, check_missing_fields, fail
 
-CLASS_NAME_MAX_LENGTH = 10
+CLASS_NAME_MAX_LENGTH = 20
 
 
-def count_class_names(classes) -> Counter:
-    """Count class_name occurrences across a batch, for in-batch duplicate detection."""
-    return Counter(class_.class_name for class_ in classes)
+def count_class_keys(keys) -> Counter:
+    """Count (grade, class_name) occurrences across a batch, for in-batch duplicate detection."""
+    return Counter(keys)
 
 
 def validate_new_class(
     class_: BulkClassRequest,
-    class_names_db: set,
-    class_name_batch_counts: Counter,
+    class_keys_db: set,
+    class_key_batch_counts: Counter,
 ) -> None:
     """Create-time checks, raising the FIRST AppException found.
     Mirrors validate_new_student's structure/ordering."""
 
-    missing = check_missing_fields(required={"class_name"}, input=class_.model_dump())
+    missing = check_missing_fields(
+        required={"class_name", "grade"}, input=class_.model_dump()
+    )
     if missing:
         raise AppException(
             detail=f"missing fields: {', '.join(missing)}", status_code=422
@@ -38,10 +41,12 @@ def validate_new_class(
     if len(class_.class_name) > CLASS_NAME_MAX_LENGTH:  # type: ignore
         raise ClassNameTooLong()
 
-    if class_name_batch_counts[class_.class_name] > 1:
+    key = (class_.grade, class_.class_name)
+
+    if class_key_batch_counts[key] > 1:
         raise DuplicateClass(detail="duplicate class_name in batch")
 
-    if class_.class_name in class_names_db:
+    if key in class_keys_db:
         raise DuplicateClass()
 
 
@@ -51,8 +56,15 @@ def create_classes_bulk(
     """Create one or more classes in one transaction. Returns the
     succeeded/failed envelope — never raises; per-item AppExceptions are
     caught here and folded into the failed list."""
-    class_names_db = set(db.scalars(select(Class.class_name)).all())
-    class_name_batch_counts = count_class_names(payload)
+    class_keys_db = {
+        (grade, class_name)
+        for grade, class_name in db.execute(
+            select(Class.grade, Class.class_name)
+        ).all()
+    }
+    class_key_batch_counts = count_class_keys(
+        (class_.grade, class_.class_name) for class_ in payload
+    )
 
     failed = []
     new_classes_meta = []  # (index, Class) pairs pending insert
@@ -60,12 +72,12 @@ def create_classes_bulk(
 
     for index, class_ in enumerate(payload):
         try:
-            validate_new_class(class_, class_names_db, class_name_batch_counts)
+            validate_new_class(class_, class_keys_db, class_key_batch_counts)
         except AppException as exc:
             failed.append(fail(index, exc.detail, class_))
             continue
 
-        new_class = Class(class_name=class_.class_name)
+        new_class = Class(class_name=class_.class_name, grade=class_.grade)
         new_classes.append(new_class)
         new_classes_meta.append((index, new_class))
 
@@ -93,8 +105,9 @@ def create_classes_bulk(
 def validate_updated_class(
     class_: BulkClassRequestWithId,
     class_ids_db: set,
-    class_name_batch_counts: Counter,
-    class_name_counts_after_transaction: Counter,
+    effective_key: tuple,
+    class_key_batch_counts: Counter,
+    class_key_counts_after_transaction: Counter,
 ) -> None:
     """Update-time checks. Kept separate from validate_new_class for the same
     reason validate_updated_student is separate from validate_new_student —
@@ -114,10 +127,10 @@ def validate_updated_class(
     if class_.class_id not in class_ids_db:
         raise AppException(detail="cannot find class_id", status_code=422)
 
-    if class_name_batch_counts[class_.class_name] > 1:
+    if class_key_batch_counts[effective_key] > 1:
         raise DuplicateClass(detail="duplicate class_name in batch")
 
-    if class_name_counts_after_transaction[class_.class_name] > 1:
+    if class_key_counts_after_transaction[effective_key] > 1:
         raise DuplicateClass()
 
 
@@ -128,16 +141,32 @@ def update_classes_bulk(
     succeeded/failed envelope — never raises out; per-item AppExceptions
     are caught here."""
 
-    # Simulates the transaction to avoid false collisions when swapping values
-    before_transaction = dict(
-        db.execute(select(Class.class_id, Class.class_name)).all()  # type: ignore
-    )
-    class_names_payload = {class_.class_id: class_.class_name for class_ in payload}
-    after_transaction = before_transaction | class_names_payload
+    # Simulates the transaction to avoid false collisions when swapping
+    # values. Uniqueness is on (grade, class_name) together now, so both
+    # are tracked per class_id.
+    before_transaction = {
+        class_id: (grade, class_name)
+        for class_id, grade, class_name in db.execute(
+            select(Class.class_id, Class.grade, Class.class_name)
+        ).all()
+    }
+    class_ids_db = set(before_transaction)
 
-    class_ids_db = set(db.scalars(select(Class.class_id)).all())
-    class_name_batch_counts = count_class_names(payload)
-    class_name_counts_after_transaction = Counter(after_transaction.values())
+    # Each row's (grade, class_name) after its own update -- a row that
+    # omits "grade" keeps the class's current grade.
+    effective_keys = {
+        class_.class_id: (
+            class_.grade
+            if class_.grade is not None
+            else before_transaction.get(class_.class_id, (None, None))[0],
+            class_.class_name,
+        )
+        for class_ in payload
+    }
+
+    after_transaction = before_transaction | effective_keys
+    class_key_batch_counts = count_class_keys(effective_keys.values())
+    class_key_counts_after_transaction = Counter(after_transaction.values())
 
     failed = []
     succeeded = []
@@ -148,21 +177,24 @@ def update_classes_bulk(
             validate_updated_class(
                 class_,
                 class_ids_db,
-                class_name_batch_counts,
-                class_name_counts_after_transaction,
+                effective_keys[class_.class_id],
+                class_key_batch_counts,
+                class_key_counts_after_transaction,
             )
         except AppException as exc:
             failed.append(fail(index, exc.detail, class_))
             continue
 
+        grade, class_name = effective_keys[class_.class_id]
         updating_class = {
             "class_id": class_.class_id,
-            "class_name": class_.class_name,
+            "class_name": class_name,
+            "grade": grade,
         }
         updating_classes.append(updating_class)
         succeeded.append({"index": index, "item": updating_class})
 
-    db.execute(text("SET CONSTRAINTS classes_class_name_key DEFERRED"))
+    db.execute(text("SET CONSTRAINTS uq_grade_class_name DEFERRED"))
     db.execute(update(Class), updating_classes)
 
     if dry_run:

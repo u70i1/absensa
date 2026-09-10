@@ -6,11 +6,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 
-def get_classes(db: Session, class_name: str, limit: int, page: int):
+def get_classes(
+    db: Session, class_name: str, limit: int, page: int, grade: int | None = None
+):
     filters = []
 
     if class_name is not None:
         filters.append(Class.class_name.ilike(f"%{class_name}%"))
+    if grade is not None:
+        filters.append(Class.grade == grade)
 
     classes = db.scalars(
         select(Class)
@@ -55,12 +59,16 @@ def get_classes_students(db: Session, class_id: int, query: StudentClassQuery):
     return results
 
 
-def post_class(db: Session, class_name: str):
-    class_exists = db.scalar(select(Class).where(Class.class_name == class_name))
+def post_class(db: Session, class_name: str, grade: int):
+    class_exists = db.scalar(
+        select(Class)
+        .where(Class.class_name == class_name)
+        .where(Class.grade == grade)
+    )
     if class_exists:
         raise DuplicateClass
 
-    new_class = Class(class_name=class_name)
+    new_class = Class(class_name=class_name, grade=grade)
 
     db.add(new_class)
     db.commit()
@@ -68,7 +76,7 @@ def post_class(db: Session, class_name: str):
     return new_class
 
 
-def update_class(db: Session, class_id: int, class_name: str):
+def update_class(db: Session, class_id: int, class_name: str, grade: int):
     to_update = db.get(Class, class_id)
     if not to_update:
         raise ClassNotFound(status_code=404)
@@ -76,12 +84,14 @@ def update_class(db: Session, class_id: int, class_name: str):
     class_exists = db.scalar(
         select(Class)
         .where(Class.class_name == class_name)
+        .where(Class.grade == grade)
         .where(Class.class_id != class_id)
     )
     if class_exists:
         raise DuplicateClass
 
     to_update.class_name = class_name
+    to_update.grade = grade
 
     db.commit()
 

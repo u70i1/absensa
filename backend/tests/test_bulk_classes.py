@@ -268,7 +268,7 @@ class TestBulkCreateEdgeCases:
         exceeds it should fail per-row, not 500."""
         payloads = [
             make_class_payload(class_name="Valid"),
-            make_class_payload(class_name="Way Too Long Name"),
+            make_class_payload(class_name="Way Too Long Name 1000000000000000000000"),
         ]
 
         response = client.post("/classes/bulk", json=payloads)
@@ -535,7 +535,7 @@ class TestBulkUpdateEdgeCases:
         payload = [
             {"class_id": class_x.class_id, "class_name": original_y_name},
             {"class_id": class_y.class_id, "class_name": original_x_name},
-            {"class_id": class_z.class_id, "class_name": "Way Too Long Name"},  # broken: exceeds max_length
+            {"class_id": class_z.class_id, "class_name": "Way Too Long Name100000000000000"},  # broken: exceeds max_length
         ]
 
         response = client.put("/classes/bulk", json=payload)

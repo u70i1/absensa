@@ -59,7 +59,7 @@ class TestCreateClass:
     def test_create_class_name_too_long_rejected(self, client):
         # column is String(10) -- one char over should 400/422, not a raw
         # DB error.
-        response = client.post(CLASSES_URL, json=make_class_payload(class_name="X" * 11))
+        response = client.post(CLASSES_URL, json=make_class_payload(class_name="X" * 21))
         assert response.status_code in (400, 422)
 
     def test_create_class_name_at_max_length_accepted(self, client):
@@ -171,7 +171,7 @@ class TestUpdateClass:
     def test_update_class_name_too_long_rejected(self, client, existing_class):
         response = client.put(
             f"{CLASSES_URL}/{existing_class.class_id}",
-            json={"grade": existing_class.grade, "class_name": "X" * 11},
+            json={"grade": existing_class.grade, "class_name": "X" * 21},
         )
         assert response.status_code in (400, 422)
 
