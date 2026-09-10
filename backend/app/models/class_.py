@@ -13,11 +13,17 @@ class Class(Base):
     class_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     grade: Mapped[int] = mapped_column(Integer)
     class_name: Mapped[str] = mapped_column(
-        String(10), comment=("Short, unique name identifying the student group")
+        String(20), comment=("Short, unique name identifying the student group")
     )
 
     __table_args__ = (
-        UniqueConstraint("grade", "class_name", name="uq_grade_class_name"),
+        UniqueConstraint(
+            "grade",
+            "class_name",
+            name="uq_grade_class_name",
+            initially="IMMEDIATE",
+            deferrable=True,
+        ),
     )
     students: Mapped[list["Student"]] = relationship(  # noqa: F821 # pyright: ignore[reportUndefinedVariable]
         back_populates="class_", passive_deletes=True
