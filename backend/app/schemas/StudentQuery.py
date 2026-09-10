@@ -12,3 +12,15 @@ class StudentQuery(BaseModel):
         None,
         description="National student ID number (Indonesia); always exactly 10 digits",
     )
+
+
+class StudentClassQuery(BaseModel):
+    """Query model for GET /classes/{class_id}/students"""
+
+    limit: int = Field(10, ge=1, le=100)
+    page: int = Field(1, ge=1)
+    name: str | None = Field(None)
+    nisn: str | None = Field(
+        None,
+        description="National student ID number (Indonesia); always exactly 10 digits",
+    )
