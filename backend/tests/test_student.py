@@ -16,8 +16,8 @@ from tests.helpers import make_student_payload
 
 @pytest.fixture
 def existing_class(class_factory):
-    """A default class (XII-A) for most tests."""
-    return class_factory(class_name="XII-A")
+    """A default class (grade 12, "XII-A") for most tests."""
+    return class_factory(grade=12, class_name="XII-A")
 
 
 @pytest.fixture

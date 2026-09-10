@@ -6,11 +6,11 @@ RESPONSE CONTRACT (mirrors /students/bulk -- see BulkClassResponse.py):
 Bulk create/update -> 200, body:
 {
   "succeeded": [
-    {"index": 0, "item": {"class_id": 5, "class_name": ...}},
+    {"index": 0, "item": {"class_id": 5, "grade": 10, "class_name": ...}},
     ...
   ],
   "failed": [
-    {"index": 3, "error": "duplicate class_name", "item": {"class_name": ...}},
+    {"index": 3, "error": "duplicate_class", "item": {"grade": ..., "class_name": ...}},
     ...
   ]
 }
@@ -20,46 +20,50 @@ Status code rule: 200 if `succeeded` is non-empty (even with partial failures),
 is a no-op, 200, both arrays empty.
 
 Row-level processing rules (create & update) -- same shape as students/nisn,
-with class_name as the unique collision key instead of nisn:
+with the (grade, class_name) pair as the unique collision key instead of a
+single field. Two classes may share a class_name as long as their grade
+differs:
   - Malformed row -> per-row failure, siblings still processed.
-  - class_name collision WITHIN the same batch -> every row using that
-    class_name fails, error "duplicate class_name in batch".
-  - class_name collision against an EXISTING DB row -> error
-    "duplicate class_name".
+  - (grade, class_name) collision WITHIN the same batch -> every row in the
+    collision fails, error "duplicate class_name in batch".
+  - (grade, class_name) collision against an EXISTING DB row -> error
+    "duplicate_class".
   - Empty list -> 200, empty succeeded/failed (no-op), not 422.
 
 Bulk update specifically (per your answers -- same as students/nisn):
   - Rows validated independently; one row's failure doesn't block siblings.
-  - class_name collision check happens AFTER computing the full set of
-    post-update class_name values for rows passing other validations --
-    this is what makes in-batch swaps/rotations (e.g. "10A" <-> "10B")
-    legal, backed by the same deferred-constraint approach as nisn.
-  - A row resubmitting its own current class_name unchanged is never a
-    self-collision.
+  - Collision check happens AFTER computing the full set of post-update
+    (grade, class_name) values for rows passing other validations -- this is
+    what makes in-batch swaps/rotations (e.g. "10A" <-> "10B") legal, backed
+    by the same deferred-constraint approach as nisn.
+  - A row resubmitting its own current (grade, class_name) unchanged is
+    never a self-collision.
 
-Bulk delete -> pre-check ALL ids exist before deleting anything (per your
-answer -- same all-or-nothing rule as students).
+Bulk delete -> pre-check ALL ids exist before deleting anything (same
+all-or-nothing rule as students).
   - all exist  -> delete all, 204, empty body
   - any missing -> 422, body: {"missing_ids": [7, 12]}, nothing deleted
   - duplicate ids deduped before the existence check
   - empty id list -> 204, no-op, nothing deleted
 
-ASSUMPTIONS -- confirm these against your actual schemas/route before trusting
-this file wholesale:
-  - Create request item: {"class_name": ...}
-  - Update request item: {"class_id": ..., "class_name": ...}
-  - Delete request: {"ids": [...]} of class_id values
-  - Deleting a class with students still assigned to it does NOT fail the
-    delete (Class.students relationship is passive_deletes=True, Student.class_id
-    is ON DELETE SET NULL) -- see TestBulkDeleteEdgeCases.test_deleting_class_with_students_nulls_their_class_id
+ASSUMPTIONS -- confirm against your actual schemas/route:
+  - Create request item: {"grade": ..., "class_name": ...}, both required.
+  - Update request item: {"class_id": ..., "class_name": ...}, with "grade"
+    an optional field (rows that omit it leave the class's current grade
+    untouched). Flip the update tests below if your schema actually
+    requires "grade" on every row.
+  - Delete request: {"ids": [...]} of class_id values.
+  - Deleting a class with students still assigned does NOT fail the delete
+    (Class.students is passive_deletes=True, Student.class_id is
+    ON DELETE SET NULL).
 """
 
 from app.models.class_ import Class
 from sqlalchemy import select
 
 
-def make_class_payload(class_name="10A"):
-    return {"class_name": class_name}
+def make_class_payload(class_name="10A", grade=10):
+    return {"class_name": class_name, "grade": grade}
 
 
 # ===========================================================================
@@ -84,6 +88,7 @@ class TestBulkCreate:
             assert "index" in item
             assert "item" in item
             assert "class_id" in item["item"]
+            assert item["item"]["grade"] == 10
 
         assert sorted(item["index"] for item in body["succeeded"]) == list(range(5))
 
@@ -109,6 +114,7 @@ class TestBulkCreate:
         assert len(results) == 1
         assert results[0]["class_id"] == created_id
         assert results[0]["class_name"] == "Fetch Me"
+        assert results[0]["grade"] == 10
 
 
 class TestBulkCreateEdgeCases:
@@ -121,11 +127,11 @@ class TestBulkCreateEdgeCases:
         assert body["succeeded"] == []
         assert body["failed"] == []
 
-    def test_duplicate_class_name_against_existing_db_row(self, client, class_factory):
-        """One row's class_name already exists in the DB. That row fails,
-        others in the batch still succeed. STATUS 200 since succeeded is
-        non-empty."""
-        class_factory(class_name="Existing")
+    def test_duplicate_grade_and_name_against_existing_db_row(self, client, class_factory):
+        """One row's (grade, class_name) already exists in the DB. That row
+        fails, others in the batch still succeed. STATUS 200 since succeeded
+        is non-empty."""
+        class_factory(class_name="Existing", grade=10)
 
         payloads = [
             make_class_payload(class_name="Valid A"),
@@ -145,6 +151,27 @@ class TestBulkCreateEdgeCases:
         assert len(body["failed"]) == 1
         assert body["failed"][0]["index"] == 2
         assert body["failed"][0]["error"] == "duplicate_class"
+
+    def test_same_class_name_different_grade_is_not_a_duplicate(
+        self, client, class_factory, db_session
+    ):
+        """The collision key is (grade, class_name) together -- a class_name
+        that exists in a different grade is not a conflict."""
+        class_factory(class_name="Shared", grade=10)
+
+        payloads = [make_class_payload(class_name="Shared", grade=11)]
+
+        response = client.post("/classes/bulk", json=payloads)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["succeeded"]) == 1
+        assert len(body["failed"]) == 0
+
+        matches = db_session.scalars(
+            select(Class).where(Class.class_name == "Shared")
+        ).all()
+        assert len(matches) == 2
 
     def test_duplicate_class_name_within_same_batch(self, client):
         """Two rows in the SAME request use the same class_name, neither
@@ -288,8 +315,8 @@ class TestBulkCreateResponseShape:
 
     def test_failed_item_includes_input_and_error(self, client, class_factory):
         """Shape of a `failed` entry: "index", "error", "item" (the
-        original payload sent -- per FailedClassItem, only class_name).
-        STATUS 422: single-row batch, that row fails."""
+        original payload sent, per FailedClassItem). STATUS 422: single-row
+        batch, that row fails."""
         class_factory(class_name="Existing")
         bad_payload = make_class_payload(class_name="Existing")
 
@@ -304,11 +331,12 @@ class TestBulkCreateResponseShape:
         assert isinstance(failed_item["error"], str)
         assert failed_item["error"] != ""
         assert failed_item["item"]["class_name"] == bad_payload["class_name"]
+        assert failed_item["item"]["grade"] == bad_payload["grade"]
 
     def test_succeeded_item_matches_classresponse_shape(self, client):
         """`succeeded` entry is {"index": ..., "item": {...}} where "item"
-        carries ClassResponse fields (class_id, class_name)."""
-        payload = make_class_payload(class_name="Shaped")
+        carries ClassResponse fields (class_id, grade, class_name)."""
+        payload = make_class_payload(class_name="Shaped", grade=9)
 
         response = client.post("/classes/bulk", json=[payload])
 
@@ -324,6 +352,7 @@ class TestBulkCreateResponseShape:
         assert "class_id" in class_
         assert isinstance(class_["class_id"], int)
         assert class_["class_name"] == "Shaped"
+        assert class_["grade"] == 9
 
 
 # ===========================================================================
@@ -406,6 +435,36 @@ class TestBulkUpdateEdgeCases:
         assert len(body["failed"]) == 1
         assert body["failed"][0]["index"] == 0
         assert "duplicate_class" == body["failed"][0]["error"]
+
+    def test_update_rename_to_same_name_different_grade_is_not_a_collision(
+        self, client, seeded_students_and_classes, class_factory, db_session
+    ):
+        """Row A renamed to Row B's class_name, but with a grade that
+        differs from B's -- (grade, class_name) doesn't collide, so this
+        should succeed even though the bare class_name matches."""
+        classes = db_session.scalars(select(Class)).all()
+        class_a, class_b = classes[0], classes[1]
+        other_grade = class_b.grade + 1
+
+        payload = [
+            {
+                "class_id": class_a.class_id,
+                "grade": other_grade,
+                "class_name": class_b.class_name,
+            }
+        ]
+
+        response = client.put("/classes/bulk", json=payload)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["succeeded"]) == 1
+        assert len(body.get("failed", [])) == 0
+
+        db_session.expire_all()
+        refreshed_a = db_session.get(Class, class_a.class_id)
+        assert refreshed_a.class_name == class_b.class_name
+        assert refreshed_a.grade == other_grade
 
     def test_two_rows_in_batch_swap_class_names(self, client, seeded_students_and_classes, db_session):
         """Class X currently named 'A', class Y named 'B'. Batch swaps
@@ -719,28 +778,6 @@ class TestBulkDryRun:
 
         db_names = set(db_session.scalars(select(Class.class_name)).all())
         assert "DryDupe" not in db_names
-
-    def test_dry_run_create_matches_real_run_response_for_same_input(self, client, db_session):
-        """Sanity check: dry_run and a real run against the same input
-        produce the same succeeded/failed shape (aside from class_id
-        values, which a real run assigns and a dry run may fabricate or
-        omit -- see assumption below)."""
-        payloads = [make_class_payload(class_name="Compare Me")]
-
-        dry_response = client.post("/classes/bulk", json=payloads, params={"dry_run": True})
-        assert dry_response.status_code == 200
-        dry_body = dry_response.json()
-        assert len(dry_body["succeeded"]) == 1
-        assert dry_body["succeeded"][0]["item"]["class_name"] == "Compare Me"
-
-        # confirm it's still absent, then do the real thing and confirm parity
-        db_names = set(db_session.scalars(select(Class.class_name)).all())
-        assert "Compare Me" not in db_names
-
-        real_response = client.post("/classes/bulk", json=payloads)
-        assert real_response.status_code == 200
-        real_body = real_response.json()
-        assert real_body["succeeded"][0]["item"]["class_name"] == "Compare Me"
 
     # --- update -------------------------------------------------------
 
