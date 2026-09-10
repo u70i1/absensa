@@ -10,7 +10,7 @@ from .exceptions import ClassNotFound, DuplicateNisn, StudentNotFound
 def get_student(
     db: Session, query: StudentQuery
 ) -> list[Row[tuple[int, str, str, bool, str, int]]]:
-    """_Retrieve a single student items from "students" table._"""
+    """_Retrieve student items from "students" table._"""
     filters = []
 
     if query.name is not None:
