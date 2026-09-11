@@ -16,6 +16,7 @@ app.add_middleware(
 )
 
 
+# This should direct to login page
 @app.get("/")
 def root():
     return "Server is running"
