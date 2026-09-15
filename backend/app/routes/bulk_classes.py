@@ -1,10 +1,10 @@
 from app.db.session import get_db
-from app.schemas.BulkClassRequest import (
-    BulkClassIdOnly,
-    BulkClassRequest,
-    BulkClassRequestWithId,
+from app.schemas.class_ import (
+    ClassBulkCreateRequest,
+    ClassBulkDeleteRequest,
+    ClassBulkResponse,
+    ClassBulkUpdateRequest,
 )
-from app.schemas.BulkClassResponse import BulkClassResponse
 from app.services import class_bulk_service
 from fastapi import APIRouter, Depends
 from fastapi.encoders import jsonable_encoder
@@ -16,11 +16,11 @@ router = APIRouter()
 
 @router.post(
     "/classes/bulk",
-    response_model=BulkClassResponse,
+    response_model=ClassBulkResponse,
     responses={422: {"description": "All items failed"}},
 )
 def post_class_bulk(
-    payload: list[BulkClassRequest],
+    payload: list[ClassBulkCreateRequest],
     dry_run: bool = False,
     db: Session = Depends(get_db),
 ):
@@ -33,11 +33,11 @@ def post_class_bulk(
 
 @router.put(
     "/classes/bulk",
-    response_model=BulkClassResponse,
+    response_model=ClassBulkResponse,
     responses={422: {"description": "All items failed"}},
 )
 def put_class_bulk(
-    payload: list[BulkClassRequestWithId],
+    payload: list[ClassBulkUpdateRequest],
     dry_run: bool = False,
     db: Session = Depends(get_db),
 ):
@@ -54,7 +54,7 @@ def put_class_bulk(
     responses={422: {"description": "If at least one item failed"}},
 )
 def delete_class_bulk(
-    payload: BulkClassIdOnly, dry_run: bool = False, db: Session = Depends(get_db)
+    payload: ClassBulkDeleteRequest, dry_run: bool = False, db: Session = Depends(get_db)
 ):
     """Delete multiple classes in one request."""
     missing_ids = class_bulk_service.delete_classes_bulk(db, payload, dry_run)

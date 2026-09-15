@@ -1,6 +1,6 @@
 from app.models.class_ import Class
 from app.models.student import Student
-from app.schemas.StudentQuery import StudentClassQuery
+from app.schemas.student import ClassStudentListQuery
 from app.services.exceptions import ClassNotFound, DuplicateClass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,7 +29,7 @@ def get_classes(
     return results
 
 
-def get_classes_students(db: Session, class_id: int, query: StudentClassQuery):
+def get_classes_students(db: Session, class_id: int, query: ClassStudentListQuery):
     """_Retrieve student items from "students" table._"""
     filters = []
     if query.name is not None:

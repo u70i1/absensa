@@ -1,9 +1,7 @@
 from typing import Annotated
 
 from app.db.session import get_db
-from app.schemas.ScanQuery import ScanQuery
-from app.schemas.ScanRequest import ScanRequest
-from app.schemas.ScanResponse import ScanResponse
+from app.schemas.scan import ScanCreateRequest, ScanListQuery, ScanResponse
 from app.services import scan_service
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -19,7 +17,7 @@ router = APIRouter()
         409: {"description": "Student is already scanned today"},
     },
 )
-def post_scan(payload: ScanRequest, db: Session = Depends(get_db)):
+def post_scan(payload: ScanCreateRequest, db: Session = Depends(get_db)):
     """Create a scan item"""
     return scan_service.post_scan(db, payload.nisn)
 
@@ -28,7 +26,7 @@ def post_scan(payload: ScanRequest, db: Session = Depends(get_db)):
     "/scans",
     response_model=list[ScanResponse],
 )
-def get_scan(query: Annotated[ScanQuery, Query()], db: Session = Depends(get_db)):
+def get_scan(query: Annotated[ScanListQuery, Query()], db: Session = Depends(get_db)):
     """Get items from "scan_logs" table"""
     return scan_service.get_scan(db, **query.model_dump())
 

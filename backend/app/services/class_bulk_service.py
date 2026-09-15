@@ -2,12 +2,12 @@
 from collections import Counter
 
 from app.models.class_ import Class
-from app.schemas.BulkClassRequest import (
-    BulkClassIdOnly,
-    BulkClassRequest,
-    BulkClassRequestWithId,
+from app.schemas.class_ import (
+    ClassBulkCreateRequest,
+    ClassBulkDeleteRequest,
+    ClassBulkUpdateRequest,
+    ClassResponse,
 )
-from app.schemas.ClassResponse import ClassResponse
 from app.services.exceptions import AppException, ClassNameTooLong, DuplicateClass
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
@@ -23,7 +23,7 @@ def count_class_keys(keys) -> Counter:
 
 
 def validate_new_class(
-    class_: BulkClassRequest,
+    class_: ClassBulkCreateRequest,
     class_keys_db: set,
     class_key_batch_counts: Counter,
 ) -> None:
@@ -51,7 +51,7 @@ def validate_new_class(
 
 
 def create_classes_bulk(
-    db: Session, payload: list[BulkClassRequest], dry_run: bool
+    db: Session, payload: list[ClassBulkCreateRequest], dry_run: bool
 ) -> dict:
     """Create one or more classes in one transaction. Returns the
     succeeded/failed envelope — never raises; per-item AppExceptions are
@@ -103,7 +103,7 @@ def create_classes_bulk(
 
 
 def validate_updated_class(
-    class_: BulkClassRequestWithId,
+    class_: ClassBulkUpdateRequest,
     class_ids_db: set,
     effective_key: tuple,
     class_key_batch_counts: Counter,
@@ -135,7 +135,7 @@ def validate_updated_class(
 
 
 def update_classes_bulk(
-    db: Session, payload: list[BulkClassRequestWithId], dry_run: bool
+    db: Session, payload: list[ClassBulkUpdateRequest], dry_run: bool
 ) -> dict:
     """Update multiple classes in a single transaction. Returns the
     succeeded/failed envelope — never raises out; per-item AppExceptions
@@ -206,7 +206,7 @@ def update_classes_bulk(
 
 
 def delete_classes_bulk(
-    db: Session, payload: BulkClassIdOnly, dry_run: bool
+    db: Session, payload: ClassBulkDeleteRequest, dry_run: bool
 ) -> list[int] | None:
     """Deletes all given ids, or none at all if any id is missing
     (all-or-nothing). Returns the list of missing ids if any were missing,
