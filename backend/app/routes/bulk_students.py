@@ -1,10 +1,10 @@
 from app.db.session import get_db
-from app.schemas.BulkStudentRequest import (
-    BulkStudentIdOnly,
-    BulkStudentRequest,
-    BulkStudentRequestWithId,
+from app.schemas.student import (
+    StudentBulkCreateRequest,
+    StudentBulkDeleteRequest,
+    StudentBulkResponse,
+    StudentBulkUpdateRequest,
 )
-from app.schemas.BulkStudentResponse import BulkStudentResponse
 from app.services import student_bulk_service
 from fastapi import APIRouter, Depends
 from fastapi.encoders import jsonable_encoder
@@ -16,11 +16,11 @@ router = APIRouter()
 
 @router.post(
     "/students/bulk",
-    response_model=BulkStudentResponse,
+    response_model=StudentBulkResponse,
     responses={422: {"description": "All items failed"}},
 )
 def post_students_bulk(
-    payload: list[BulkStudentRequest],
+    payload: list[StudentBulkCreateRequest],
     dry_run: bool = False,
     db: Session = Depends(get_db),
 ):
@@ -31,9 +31,9 @@ def post_students_bulk(
     return result
 
 
-@router.put("/students/bulk", response_model=BulkStudentResponse)
+@router.put("/students/bulk", response_model=StudentBulkResponse)
 def update_students_bulk(
-    payload: list[BulkStudentRequestWithId],
+    payload: list[StudentBulkUpdateRequest],
     dry_run: bool = False,
     db: Session = Depends(get_db),
 ):
@@ -46,7 +46,7 @@ def update_students_bulk(
 
 @router.post("/students/bulk-delete", status_code=204)
 def delete_students_bulk(
-    payload: BulkStudentIdOnly, dry_run: bool = False, db: Session = Depends(get_db)
+    payload: StudentBulkDeleteRequest, dry_run: bool = False, db: Session = Depends(get_db)
 ):
     missing_ids = student_bulk_service.delete_students_bulk(db, payload, dry_run)
     if missing_ids:

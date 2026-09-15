@@ -1,6 +1,6 @@
 from app.models.class_ import Class
 from app.models.student import Student
-from app.schemas.StudentQuery import StudentQuery
+from app.schemas.student import StudentListQuery
 from sqlalchemy import Row, select
 from sqlalchemy.orm import Session
 
@@ -8,7 +8,7 @@ from .exceptions import ClassNotFound, DuplicateNisn, StudentNotFound
 
 
 def get_student(
-    db: Session, query: StudentQuery
+    db: Session, query: StudentListQuery
 ) -> list[Row[tuple[int, str, str, bool, str, int]]]:
     """_Retrieve student items from "students" table._"""
     filters = []

@@ -1,9 +1,7 @@
 from typing import Annotated
 
 from app.db.session import get_db
-from app.schemas.StudentQuery import StudentQuery
-from app.schemas.StudentRequest import StudentRequest
-from app.schemas.StudentResponse import StudentResponse
+from app.schemas.student import StudentListQuery, StudentResponse, StudentWriteRequest
 from app.services import student_service
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -12,7 +10,7 @@ router = APIRouter()
 
 
 @router.get("/students", response_model=list[StudentResponse])
-def get_student(query: Annotated[StudentQuery, Query()], db: Session = Depends(get_db)):
+def get_student(query: Annotated[StudentListQuery, Query()], db: Session = Depends(get_db)):
     return student_service.get_student(db, query)
 
 
@@ -22,7 +20,7 @@ def get_student(query: Annotated[StudentQuery, Query()], db: Session = Depends(g
     status_code=201,
     responses={422: {"description": "Invalid `class_id`"}},
 )
-def post_student(payload: StudentRequest, db: Session = Depends(get_db)):
+def post_student(payload: StudentWriteRequest, db: Session = Depends(get_db)):
     """Create a student item into "students" table"""
     return student_service.post_student(db, **payload.model_dump())
 
@@ -36,7 +34,7 @@ def post_student(payload: StudentRequest, db: Session = Depends(get_db)):
     },
 )
 def put_student(
-    student_id: int, payload: StudentRequest, db: Session = Depends(get_db)
+    student_id: int, payload: StudentWriteRequest, db: Session = Depends(get_db)
 ):
     return student_service.edit_student(db, student_id, **payload.model_dump())
 

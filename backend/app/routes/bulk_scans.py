@@ -1,5 +1,5 @@
 from app.db.session import get_db
-from app.schemas.BulkScanRequest import BulkScanIdOnly
+from app.schemas.scan import ScanBulkDeleteRequest
 from app.services import scan_bulk_service
 from fastapi import APIRouter, Depends
 from fastapi.encoders import jsonable_encoder
@@ -10,7 +10,9 @@ router = APIRouter()
 
 
 @router.post("/scans/delete-bulk", status_code=204)
-def delete_scans_bulk(payload: BulkScanIdOnly, dry_run: bool = False, db: Session = Depends(get_db)):
+def delete_scans_bulk(
+    payload: ScanBulkDeleteRequest, dry_run: bool = False, db: Session = Depends(get_db)
+):
     missing_ids = scan_bulk_service.delete_scans_bulk(db, payload, dry_run)
     if missing_ids:
         return JSONResponse(

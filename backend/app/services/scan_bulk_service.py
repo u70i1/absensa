@@ -1,10 +1,10 @@
 from app.models.scan_log import ScanLog
-from app.schemas.BulkScanRequest import BulkScanIdOnly
+from app.schemas.scan import ScanBulkDeleteRequest
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 
-def delete_scans_bulk(db: Session, payload: BulkScanIdOnly, dry_run: bool):
+def delete_scans_bulk(db: Session, payload: ScanBulkDeleteRequest, dry_run: bool):
     payload_ids = set(payload.ids)
     if not payload_ids:
         return
