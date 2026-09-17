@@ -48,7 +48,7 @@ button:disabled {
 .page-button:not(:disabled):hover:not(:active) {
   transform: translateY(-2px);
 }
-button:not(:disabled):not(.filter-chip):active,
+.button:not(:disabled):not(.filter-chip):active,
 .page-button:not(:disabled):active {
   transform: translateY(2px);
   opacity: 0.6;
