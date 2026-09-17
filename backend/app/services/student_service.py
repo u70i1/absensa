@@ -51,10 +51,8 @@ def get_student_by_id(db: Session, student_id: int) -> Student:
     return student
 
 
-def get_student(db: Session, query: StudentListQuery):
-    """Retrieve a page of students using the shared list filters."""
-
-    stmt = (
+def _student_list_statement(query: StudentListQuery):
+    return (
         select(
             Student.id,
             Student.name,
@@ -66,15 +64,23 @@ def get_student(db: Session, query: StudentListQuery):
         )
         .outerjoin(Class, Class.class_id == Student.class_id)
         .where(*_student_filters(query))
-        .offset((query.page - 1) * query.limit)
-        .limit(query.limit)
         .order_by(Student.name)
     )
-    students = db.execute(stmt).all()
 
-    results = list(students)
 
-    return results
+def get_student(db: Session, query: StudentListQuery):
+    """Retrieve a page of students using the shared list filters."""
+    stmt = (
+        _student_list_statement(query)
+        .offset((query.page - 1) * query.limit)
+        .limit(query.limit)
+    )
+    return list(db.execute(stmt).all())
+
+
+def get_students_for_export(db: Session, query: StudentListQuery):
+    """Retrieve every student matching the list filters, without pagination."""
+    return list(db.execute(_student_list_statement(query)).all())
 
 
 def post_student(

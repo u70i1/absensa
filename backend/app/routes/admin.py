@@ -6,11 +6,11 @@ from urllib.parse import urlencode
 
 from app.db.session import get_db
 from app.schemas.student import StudentListQuery, StudentWriteRequest
-from app.services import class_service, student_service
+from app.services import class_service, export_service, student_service
 from app.services.exceptions import AppException, StudentNotFound
 from app.templating import templates
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -40,7 +40,7 @@ def list_url(query: StudentListQuery, **changes) -> str:
     return f"{STUDENTS_URL}?{urlencode(values)}"
 
 
-def dashboard_context(db: Session, query: StudentListQuery) -> dict:
+def normalize_filters(db: Session, query: StudentListQuery):
     classes = class_service.get_class_options(db, query.grade)
     if query.unassigned:
         query = query.model_copy(
@@ -51,6 +51,11 @@ def dashboard_context(db: Session, query: StudentListQuery) -> dict:
         c.class_id == query.class_id for c in classes
     ):
         query = query.model_copy(update={"class_id": None, "page": 1})
+    return query, classes
+
+
+def dashboard_context(db: Session, query: StudentListQuery) -> dict:
+    query, classes = normalize_filters(db, query)
     total = student_service.count_students(db, query)
     pages = max(1, ceil(total / PAGE_SIZE))
     if query.page > pages:
@@ -136,16 +141,37 @@ def students(request: Request, db: Db):
 
 
 @router.get("/students/export", name="admin_students_export")
-def export_students(request: Request):
-    """Will be added later."""
-    return render_modal(
-        request,
-        "modals/message.html",
-        {
-            "title": "Ekspor data",
-            "error": "Ekspor data belum tersedia. Silakan coba lagi nanti.",
+def export_students(request: Request, db: Db):
+    try:
+        query = list_query(request)
+    except ValidationError:
+        return query_error(request)
+    query, classes = normalize_filters(db, query)
+    selected_class = next(
+        (class_ for class_ in classes if class_.class_id == query.class_id), None
+    )
+    filters = []
+    if query.q:
+        filters.append(f'Pencarian "{query.q}"')
+    if query.unassigned:
+        filters.append("Tanpa kelas")
+    elif selected_class:
+        filters.append(f"Kelas {selected_class.class_name}")
+    elif query.grade is not None:
+        filters.append(f"Jenjang {query.grade}")
+    elif query.class_name:
+        filters.append(f'Nama kelas "{query.class_name}"')
+
+    students = student_service.get_students_for_export(db, query)
+    content = export_service.build_students_workbook(
+        students, ", ".join(filters) or "Semua siswa"
+    )
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": 'attachment; filename="absensa_students_export.xlsx"'
         },
-        501,
     )
 
 

@@ -44,8 +44,8 @@ button:not(.filter-chip),
     color var(--motion-hover-duration) var(--motion-interaction-easing),
     box-shadow var(--motion-hover-duration) var(--motion-interaction-easing);
 }
-.button:not(:disabled):not(.filter-chip):hover,
-.page-button:not(:disabled):hover {
+.button:not(:disabled):not(.filter-chip):hover:not(:active),
+.page-button:not(:disabled):hover:not(:active) {
   transform: translateY(-2px);
 }
 button:not(:disabled):not(.filter-chip):active,
@@ -149,7 +149,7 @@ dd {
   padding: var(--space-10) var(--space-dashboard-inline);
 }
 h1 {
-  margin-bottom: var(--space-9);
+  margin-bottom: var(--space-8);
   font-size: var(--font-size-page-title);
   font-weight: var(--font-weight-bold);
   letter-spacing: var(--letter-spacing-page-title);
@@ -158,7 +158,7 @@ h1 {
 #student-results {
   display: flex;
   flex-direction: column;
-  gap: var(--space-9);
+  gap: var(--space-8);
 }
 .student-filters {
   display: flex;

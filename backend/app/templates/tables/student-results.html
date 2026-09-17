@@ -17,8 +17,8 @@
       <button type="submit" class="sr-only focus-visible-button">Cari</button>
     </form>
     <div class="control-actions">
-      <button class="button tertiary" type="button" hx-get="{{ url_for('admin_students_export') }}"
-        hx-target="#modal-content" hx-swap="innerHTML" aria-haspopup="dialog">&gt; Ekspor data</button>
+      <a class="button tertiary" href="{{ url_for('admin_students_export') }}?{{ request.url.query }}"
+        download>&gt; Ekspor data</a>
       <button id="add-student" class="button primary" type="button"
         hx-get="{{ url_for('admin_student_new') }}?{{ request.url.query }}" hx-target="#modal-content"
         hx-swap="innerHTML" aria-haspopup="dialog">+ Tambah Siswa</button>
