@@ -20,6 +20,12 @@ STUDENT_COLUMNS = (
     ("STATUS", "current"),
     ("NOMOR WALI", "guardian_phone"),
 )
+CLASS_TEMPLATE = TEMPLATE_DIR / "absensa_classes_export_template.xlsx"
+CLASS_COLUMNS = (
+    ("ID KELAS", "class_id"),
+    ("JENJANG", "grade"),
+    ("NAMA KELAS", "class_name"),
+)
 
 
 def _copy_cell_style(source, target) -> None:
@@ -97,6 +103,59 @@ def build_students_workbook(students, filter_summary: str) -> bytes:
     last_row = max(2, len(students) + 1)
     last_column = get_column_letter(len(STUDENT_COLUMNS))
     sheet.tables["StudentsExportTable"].ref = f"A1:{last_column}{last_row}"
+
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
+def build_classes_workbook(classes, filter_summary: str) -> bytes:
+    """Populate the class template while retaining its styles and validation."""
+    workbook = load_workbook(CLASS_TEMPLATE)
+    sheet = workbook["classes"]
+    classes = list(classes)
+    expected_headers = tuple(header for header, _ in CLASS_COLUMNS)
+    actual_headers = tuple(
+        sheet.cell(row=1, column=column).value
+        for column in range(1, len(CLASS_COLUMNS) + 1)
+    )
+    if actual_headers != expected_headers:
+        raise ValueError(
+            "Class export template columns do not match the configured mapping: "
+            f"expected {expected_headers}, found {actual_headers}."
+        )
+
+    exported_at = datetime.now(ZoneInfo(settings.timezone))
+    _replace_metadata(
+        workbook,
+        {
+            "{{ filter_summary }}": filter_summary,
+            "{{ exported_at }}": exported_at.strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "{{ row_count }}": len(classes),
+        },
+    )
+
+    style_cells = tuple(
+        sheet.cell(row=2, column=column)
+        for column in range(1, len(CLASS_COLUMNS) + 1)
+    )
+    for row_number, class_ in enumerate(classes, start=2):
+        if row_number > 2:
+            sheet.row_dimensions[row_number].height = sheet.row_dimensions[2].height
+        for column, (_, field) in enumerate(CLASS_COLUMNS, start=1):
+            cell = sheet.cell(row=row_number, column=column)
+            _copy_cell_style(style_cells[column - 1], cell)
+            cell.value = getattr(class_, field)
+            if isinstance(cell.value, str):
+                cell.data_type = "s"
+
+    if not classes:
+        for column in range(1, len(CLASS_COLUMNS) + 1):
+            sheet.cell(row=2, column=column).value = None
+
+    last_row = max(2, len(classes) + 1)
+    last_column = get_column_letter(len(CLASS_COLUMNS))
+    sheet.tables["ClassesExportTable"].ref = f"A1:{last_column}{last_row}"
 
     output = BytesIO()
     workbook.save(output)

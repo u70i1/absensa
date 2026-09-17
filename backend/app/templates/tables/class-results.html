@@ -27,9 +27,12 @@
       </select>
       <button type="submit" class="sr-only focus-visible-button">Cari</button>
     </form>
-    <button id="add-class" class="button class-add" type="button" hx-get="{{ url_for('admin_class_new') }}?{{ filter_query }}" hx-target="#modal-content" hx-swap="innerHTML" aria-haspopup="dialog">
-      <img src="{{ url_for('static', path='icons/class-plus.svg') }}" width="15" height="15" alt="">Tambah kelas
-    </button>
+    <div class="control-actions">
+      <a class="button tertiary" href="{{ url_for('admin_classes_export') }}?{{ filter_query }}" download>&gt; Ekspor data</a>
+      <button id="add-class" class="button class-add" type="button" hx-get="{{ url_for('admin_class_new') }}?{{ filter_query }}" hx-target="#modal-content" hx-swap="innerHTML" aria-haspopup="dialog">
+        <img src="{{ url_for('static', path='icons/class-plus.svg') }}" width="15" height="15" alt="">Tambah kelas
+      </button>
+    </div>
   </div>
   {% if message %}<p class="notice" role="status">{{ message }}</p>{% endif %}
   <div class="table-container class-table-container" tabindex="0" role="region" aria-label="Tabel kelas">

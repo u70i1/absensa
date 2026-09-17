@@ -3,12 +3,12 @@
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 
 from app.routes.admin import Db, form_data, render_modal
 from app.schemas.class_ import ClassListQuery, ClassWriteRequest
-from app.services import class_service
+from app.services import class_service, export_service
 from app.services.exceptions import AppException
 from app.templating import templates
 
@@ -74,6 +74,30 @@ def classes(request: Request, db: Db):
     except ValidationError:
         return invalid_filters(request)
     return render_directory(request, db, query)
+
+
+@router.get("/export", name="admin_classes_export")
+def export_classes(request: Request, db: Db):
+    try:
+        query = class_query(request)
+    except ValidationError:
+        return invalid_filters(request)
+    filters = []
+    if query.class_name:
+        filters.append(f'Pencarian "{query.class_name}"')
+    if query.grade is not None:
+        filters.append(f"Jenjang {query.grade}")
+    content = export_service.build_classes_workbook(
+        class_service.get_class_directory(db, query.class_name, query.grade),
+        ", ".join(filters) or "Semua kelas",
+    )
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": 'attachment; filename="absensa_classes_export.xlsx"'
+        },
+    )
 
 
 def form_response(request, class_=None, values=None, errors=None, status_code=200):
