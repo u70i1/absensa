@@ -36,6 +36,7 @@ class ClassListQuery(PaginationQueryBase):
 
     class_name: str | None = Field(None, alias="class")
     grade: int | None = None
+    empty: bool = False
 
 
 class ClassBulkCreateRequest(BaseModel):

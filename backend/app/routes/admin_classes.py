@@ -23,7 +23,9 @@ def class_query(request: Request) -> ClassListQuery:
 
 
 def directory_url(query: ClassListQuery) -> str:
-    values = query.model_dump(by_alias=True, exclude={"page", "limit"}, exclude_none=True)
+    values = query.model_dump(
+        by_alias=True, exclude={"page", "limit"}, exclude_none=True, exclude_defaults=True
+    )
     return "/admin/classes" + (f"?{urlencode(values)}" if values else "")
 
 
@@ -56,10 +58,11 @@ def render_directory(request, db, query, message=None):
         request=request,
         name="tables/class-results.html" if fragment else "class-dashboard.html",
         context={"query": query, "classes": class_service.get_class_directory(
-            db, query.class_name, query.grade), "summary": class_service.get_class_summary(db),
+            db, query.class_name, query.grade, query.empty), "summary": class_service.get_class_summary(db),
             "grades": class_service.get_class_grades(db), "message": message,
             "filter_query": urlencode(query.model_dump(
-                by_alias=True, exclude={"page", "limit"}, exclude_none=True))},
+                by_alias=True, exclude={"page", "limit"}, exclude_none=True,
+                exclude_defaults=True))},
     )
     response.headers["Vary"] = "HX-Request, HX-History-Restore-Request"
     if fragment:
@@ -87,8 +90,10 @@ def export_classes(request: Request, db: Db):
         filters.append(f'Pencarian "{query.class_name}"')
     if query.grade is not None:
         filters.append(f"Jenjang {query.grade}")
+    if query.empty:
+        filters.append("Kelas kosong")
     content = export_service.build_classes_workbook(
-        class_service.get_class_directory(db, query.class_name, query.grade),
+        class_service.get_class_directory(db, query.class_name, query.grade, query.empty),
         ", ".join(filters) or "Semua kelas",
     )
     return Response(

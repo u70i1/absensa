@@ -1,15 +1,15 @@
 <section id="class-results" aria-label="Daftar kelas" hx-target="this" hx-swap="outerHTML" hx-sync="this:replace" hx-history-elt>
   <div class="class-summary">
-    <div class="class-summary-card">
+    {% if summary.empty %}<a class="class-summary-card class-metric-link" href="{{ url_for('admin_classes') }}?empty=true" aria-label="Lihat {{ summary.empty }} kelas kosong">{% else %}<div class="class-summary-card">{% endif %}
       <span class="class-metric-icon"><img src="{{ url_for('static', path='icons/class-metric.svg') }}" width="20" height="20" alt=""></span>
       <div><p class="class-metric-value"><strong>{{ summary.occupied }} dari {{ summary.total_classes }}</strong> <span>kelas</span></p>
         <p class="class-metric-description">memiliki siswa terdaftar · <strong>{{ summary.empty }}</strong> kelas kosong</p></div>
-    </div>
-    <div class="class-summary-card">
+    {% if summary.empty %}</a>{% else %}</div>{% endif %}
+    {% if summary.unassigned %}<a class="class-summary-card class-metric-link" href="{{ url_for('admin_students') }}?page=1&amp;unassigned=True" aria-label="Lihat {{ summary.unassigned }} siswa butuh penempatan">{% else %}<div class="class-summary-card">{% endif %}
       <span class="class-metric-icon"><img src="{{ url_for('static', path='icons/class-metric-students.svg') }}" width="20" height="20" alt=""></span>
       <div><p class="class-metric-value"><strong>{{ summary.assigned }} dari {{ summary.total_students }}</strong> <span>siswa</span></p>
         <p class="class-metric-description">terdaftar di kelas · <strong>{{ summary.unassigned }}</strong> siswa butuh penempatan</p></div>
-    </div>
+    {% if summary.unassigned %}</a>{% else %}</div>{% endif %}
   </div>
   <div class="control-bar class-toolbar">
     <form class="class-filters" method="get" action="{{ url_for('admin_classes') }}"
@@ -25,6 +25,7 @@
         {% for grade in grades %}<option value="{{ grade }}" {% if query.grade == grade %}selected{% endif %}>Jenjang {{ grade }}</option>{% endfor %}
         {% if query.grade is not none and query.grade not in grades %}<option value="{{ query.grade }}" selected>Jenjang {{ query.grade }}</option>{% endif %}
       </select>
+      {% if query.empty %}<input type="hidden" name="empty" value="true">{% endif %}
       <button type="submit" class="sr-only focus-visible-button">Cari</button>
     </form>
     <div class="control-actions">
@@ -56,5 +57,5 @@
       </tbody>
     </table>
   </div>
-  <p class="table-summary" role="status" aria-live="polite">Menampilkan {{ classes|length }} kelas {% if query.grade is not none %}dari jenjang {{ query.grade }}{% else %}dari semua jenjang{% endif %}{% if query.class_name %} untuk “{{ query.class_name }}”{% endif %}</p>
+  <p class="table-summary" role="status" aria-live="polite">Menampilkan {{ classes|length }} kelas{% if query.empty %} kosong{% endif %} {% if query.grade is not none %}dari jenjang {{ query.grade }}{% else %}dari semua jenjang{% endif %}{% if query.class_name %} untuk “{{ query.class_name }}”{% endif %}</p>
 </section>

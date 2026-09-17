@@ -27,9 +27,10 @@ def get_class_options(db: Session, grade: int | None = None) -> list[Class]:
 
 
 def get_classes(
-    db: Session, class_name: str, limit: int, page: int, grade: int | None = None
+    db: Session, class_name: str, limit: int, page: int, grade: int | None = None,
+    empty: bool = False,
 ):
-    filters = _class_filters(class_name, grade)
+    filters = _class_filters(class_name, grade, empty)
 
     classes = db.scalars(
         select(Class)
@@ -42,24 +43,28 @@ def get_classes(
     return list(classes)
 
 
-def _class_filters(class_name: str | None, grade: int | None):
+def _class_filters(class_name: str | None, grade: int | None, empty: bool = False):
     filters = []
 
     if class_name is not None:
         filters.append(Class.class_name.ilike(f"%{class_name}%"))
     if grade is not None:
         filters.append(Class.grade == grade)
+    if empty:
+        filters.append(~Class.students.any())
 
     return filters
 
 
-def get_class_directory(db: Session, class_name: str | None, grade: int | None):
+def get_class_directory(
+    db: Session, class_name: str | None, grade: int | None, empty: bool = False
+):
     """Scrollable class directory, including classes with no students."""
     return db.execute(
         select(Class.class_id, Class.class_name, Class.grade,
                func.count(Student.id).label("student_count"))
         .outerjoin(Student, Student.class_id == Class.class_id)
-        .where(*_class_filters(class_name, grade))
+        .where(*_class_filters(class_name, grade, empty))
         .group_by(Class.class_id)
         .order_by(Class.grade, Class.class_name, Class.class_id)
     ).all()

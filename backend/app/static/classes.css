@@ -28,6 +28,25 @@
   border-radius: var(--class-radius-surface);
   background: var(--color-surface);
 }
+.class-metric-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform var(--motion-hover-duration) var(--motion-interaction-easing),
+    background-color var(--motion-hover-duration) var(--motion-interaction-easing),
+    box-shadow var(--motion-hover-duration) var(--motion-interaction-easing);
+}
+.class-metric-link:hover,
+.class-metric-link:focus-visible {
+  background: var(--color-surface-container-low);
+  box-shadow: var(--shadow-focus);
+}
+.class-metric-link:hover {
+  transform: translateY(-2px);
+}
+.class-metric-link:active {
+  transform: translateY(1px);
+}
 .class-metric-icon {
   display: inline-flex;
   align-items: center;
@@ -168,7 +187,10 @@
   padding: var(--space-11) var(--space-9);
 }
 @media (prefers-reduced-motion: reduce) {
-  .class-grade, .class-table tbody tr {
+  .class-metric-link, .class-grade, .class-table tbody tr {
     transition: none;
+  }
+  .class-metric-link:hover, .class-metric-link:active {
+    transform: none;
   }
 }
