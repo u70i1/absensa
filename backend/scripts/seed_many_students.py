@@ -83,6 +83,7 @@ def seed_student_data(count: int, seed: int | None = None) -> None:
                     nisn=nisn,
                     class_id=class_.class_id,
                     current=True,
+                    guardian_phone=f"628{fake.numerify(text='##########')}",
                 )
             )
         db.add_all(students)

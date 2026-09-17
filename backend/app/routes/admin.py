@@ -230,8 +230,12 @@ def save_student(
             student = student_service.get_student_by_id(db, student_id)
         except StudentNotFound:
             return missing_student(request, 422)
-    values = {key: data.get(key) for key in ("name", "nisn", "class_id", "current")}
+    values = {
+        key: data.get(key)
+        for key in ("name", "nisn", "class_id", "current", "guardian_phone")
+    }
     values["class_id"] = values["class_id"] or None
+    values["guardian_phone"] = values["guardian_phone"] or None
     errors = {}
     try:
         payload = StudentWriteRequest.model_validate(values)

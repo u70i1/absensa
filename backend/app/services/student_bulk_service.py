@@ -18,6 +18,7 @@ from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
 from .helpers import bulk_response_or_422, check_missing_fields, fail
+from .student_service import _normalize_guardian_phone
 
 
 def count_nisns(students) -> Counter:
@@ -76,7 +77,7 @@ def create_students_bulk(
         try:
             validate_new_student(student, nisns_db, class_ids_db, nisn_batch_counts)
         except AppException as exc:
-            failed.append(fail(index, exc.detail, student))
+            failed.append(fail(index, exc.detail, student.model_dump(exclude_unset=True)))
             continue
 
         new_student = Student(
@@ -84,6 +85,7 @@ def create_students_bulk(
             nisn=student.nisn,
             class_id=student.class_id,
             current=student.current,
+            guardian_phone=_normalize_guardian_phone(student.guardian_phone),
         )
         new_students.append(new_student)
         new_students_meta.append((index, new_student))
@@ -174,7 +176,7 @@ def update_students_bulk(
                 nisn_counts_after_transaction,
             )
         except AppException as exc:
-            failed.append(fail(index, exc.detail, student))
+            failed.append(fail(index, exc.detail, student.model_dump(exclude_unset=True)))
             continue
 
         updating_student = {
@@ -183,6 +185,7 @@ def update_students_bulk(
             "nisn": student.nisn,
             "class_id": student.class_id,
             "current": student.current,
+            "guardian_phone": _normalize_guardian_phone(student.guardian_phone),
         }
         updating_students.append(updating_student)
         succeeded.append({"index": index, "item": updating_student})

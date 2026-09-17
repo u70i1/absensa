@@ -7,7 +7,7 @@
       <span class="student-nisn">NISN {{ student.nisn }}</span>
     </button></td>
   <td>{{ student.class_name or '—' }}</td>
-  <td><span aria-label="Nomor wali belum tersedia">—</span></td>
+  <td><span aria-label="Nomor wali">{{ student.guardian_phone or '—' }}</span></td>
   <td>
     <div class="row-actions">
       <button type="button" class="text-action edit-action" aria-label="Edit {{ student.name }}" aria-haspopup="dialog"

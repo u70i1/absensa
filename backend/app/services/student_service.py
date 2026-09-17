@@ -7,6 +7,11 @@ from sqlalchemy.orm import Session
 from .exceptions import ClassNotFound, DuplicateNisn, StudentNotFound
 
 
+def _normalize_guardian_phone(value: str | None) -> str | None:
+    """Store the already-validated, digits-only guardian number or NULL."""
+    return value or None
+
+
 def _student_filters(query: StudentListQuery):
     """Shared predicates for the JSON list, dashboard, and filtered count."""
     filters = []
@@ -55,6 +60,7 @@ def get_student(db: Session, query: StudentListQuery):
             Student.name,
             Student.nisn,
             Student.current,
+            Student.guardian_phone,
             Class.class_name,
             Class.class_id,
         )
@@ -72,7 +78,12 @@ def get_student(db: Session, query: StudentListQuery):
 
 
 def post_student(
-    db: Session, nisn: str, name: str, class_id: int | None, current: bool
+    db: Session,
+    nisn: str,
+    name: str,
+    class_id: int | None,
+    current: bool,
+    guardian_phone: str | None = None,
 ) -> Student:
     """_summary_
 
@@ -97,6 +108,7 @@ def post_student(
         nisn=nisn,
         class_id=class_id,
         current=current,
+        guardian_phone=_normalize_guardian_phone(guardian_phone),
     )
 
     db.add(new_student)
@@ -112,6 +124,7 @@ def edit_student(
     name: str,
     class_id: int | None,
     current: bool,
+    guardian_phone: str | None = None,
 ) -> Student:
     """_Edit one student_
 
@@ -140,6 +153,7 @@ def edit_student(
     to_update.class_id = class_id
     to_update.nisn = nisn
     to_update.current = current
+    to_update.guardian_phone = _normalize_guardian_phone(guardian_phone)
 
     db.commit()
 

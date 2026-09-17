@@ -17,6 +17,7 @@ router = APIRouter()
 @router.post(
     "/students/bulk",
     response_model=StudentBulkResponse,
+    response_model_exclude_unset=True,
     responses={422: {"description": "All items failed"}},
 )
 def post_students_bulk(
@@ -31,7 +32,11 @@ def post_students_bulk(
     return result
 
 
-@router.put("/students/bulk", response_model=StudentBulkResponse)
+@router.put(
+    "/students/bulk",
+    response_model=StudentBulkResponse,
+    response_model_exclude_unset=True,
+)
 def update_students_bulk(
     payload: list[StudentBulkUpdateRequest],
     dry_run: bool = False,

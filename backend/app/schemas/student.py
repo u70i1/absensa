@@ -8,7 +8,18 @@ from app.schemas.base import (
     OrmResponseBase,
     PaginationQueryBase,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def normalize_guardian_phone(value: object) -> str | None:
+    """Accept an optional Indonesian guardian phone number in digits-only form."""
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str) or not value.isascii() or not value.isdecimal():
+        raise ValueError("Nomor wali hanya boleh berisi angka.")
+    if not value.startswith(("628", "08")):
+        raise ValueError("Nomor wali harus diawali 628 atau 08.")
+    return value
 
 
 class StudentBase(BaseModel):
@@ -22,10 +33,24 @@ class StudentBase(BaseModel):
     name: str = Field(min_length=1)
     class_id: int | None = None
     current: bool = Field(description="Indicate if a student is graduated or not")
+    guardian_phone: str | None = Field(
+        default=None, max_length=32, description="Phone number of the student's guardian."
+    )
+
+    def model_dump(self, *args, **kwargs):
+        values = super().model_dump(*args, **kwargs)
+        if self.guardian_phone is None and "guardian_phone" not in self.model_fields_set:
+            values.pop("guardian_phone", None)
+        return values
 
 
 class StudentWriteRequest(StudentBase):
     """Create or replace a student through POST/PUT /students."""
+
+    @field_validator("guardian_phone", mode="before")
+    @classmethod
+    def validate_guardian_phone(cls, value: object) -> str | None:
+        return normalize_guardian_phone(value)
 
 
 class StudentResponse(StudentBase, OrmResponseBase):
@@ -67,6 +92,18 @@ class StudentBulkCreateRequest(BaseModel):
     name: str | None = Field(None, min_length=1)
     class_id: int | None = None
     current: bool | None = None
+    guardian_phone: str | None = Field(default=None, max_length=32)
+
+    def model_dump(self, *args, **kwargs):
+        values = super().model_dump(*args, **kwargs)
+        if self.guardian_phone is None and "guardian_phone" not in self.model_fields_set:
+            values.pop("guardian_phone", None)
+        return values
+
+    @field_validator("guardian_phone", mode="before")
+    @classmethod
+    def validate_guardian_phone(cls, value: object) -> str | None:
+        return normalize_guardian_phone(value)
 
 
 class StudentBulkUpdateRequest(StudentBulkCreateRequest):
@@ -97,3 +134,12 @@ class StudentBulkResponse(
     BulkResponseBase[StudentBulkSuccessResponse, StudentBulkFailureResponse]
 ):
     """Results of POST/PUT /students/bulk."""
+
+    def model_dump(self, *args, **kwargs):
+        values = super().model_dump(*args, **kwargs)
+        for branch in ("succeeded", "failed"):
+            for result in values.get(branch, []):
+                item = result.get("item", {})
+                if item.get("guardian_phone") is None:
+                    item.pop("guardian_phone", None)
+        return values

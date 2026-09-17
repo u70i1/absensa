@@ -53,6 +53,14 @@
     {% if errors.class_id %}<p class="field-error" id="class-error">{{ errors.class_id }}</p>{% endif %}
   </div>
   <div class="form-field">
+    <label for="student-guardian-phone">Nomor wali</label>
+    <input id="student-guardian-phone" name="guardian_phone" value="{{ values.guardian_phone or '' }}"
+      maxlength="32" inputmode="numeric" autocomplete="tel" pattern="(?:628|08)[0-9]+"
+      title="Gunakan angka saja, diawali 628 atau 08."
+      {% if errors.guardian_phone %}aria-invalid="true" aria-describedby="guardian-phone-error"{% endif %}>
+    {% if errors.guardian_phone %}<p class="field-error" id="guardian-phone-error">{{ errors.guardian_phone }}</p>{% endif %}
+  </div>
+  <div class="form-field">
     <label for="student-current">Status siswa</label>
     <select id="student-current" name="current" {% if errors.current %}aria-invalid="true"
       aria-describedby="current-error" {% endif %}>

@@ -63,6 +63,7 @@ def get_classes_students(db: Session, class_id: int, query: ClassStudentListQuer
             Student.name,
             Student.nisn,
             Student.current,
+            Student.guardian_phone,
             Class.class_name,
             Class.class_id,
         )

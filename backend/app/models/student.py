@@ -27,6 +27,9 @@ class Student(Base):
         default=True,
         comment="Indicate if a student is still in school or not",
     )
+    guardian_phone: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, comment="Phone number of the student's guardian."
+    )
     scan_logs: Mapped[list["ScanLog"]] = relationship(  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
         back_populates="student", order_by="ScanLog.timestamp", passive_deletes=True
     )
