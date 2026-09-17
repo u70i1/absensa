@@ -1,0 +1,57 @@
+<section id="class-results" aria-label="Daftar kelas" hx-target="this" hx-swap="outerHTML" hx-sync="this:replace" hx-history-elt>
+  <div class="class-summary">
+    <div class="class-summary-card">
+      <span class="class-metric-icon"><img src="{{ url_for('static', path='icons/class-metric.svg') }}" width="20" height="20" alt=""></span>
+      <div><p class="class-metric-value"><strong>{{ summary.occupied }} dari {{ summary.total_classes }}</strong> <span>kelas</span></p>
+        <p class="class-metric-description">memiliki siswa terdaftar · <strong>{{ summary.empty }}</strong> kelas kosong</p></div>
+    </div>
+    <div class="class-summary-card">
+      <span class="class-metric-icon"><img src="{{ url_for('static', path='icons/class-metric-students.svg') }}" width="20" height="20" alt=""></span>
+      <div><p class="class-metric-value"><strong>{{ summary.assigned }} dari {{ summary.total_students }}</strong> <span>siswa</span></p>
+        <p class="class-metric-description">terdaftar di kelas · <strong>{{ summary.unassigned }}</strong> siswa butuh penempatan</p></div>
+    </div>
+  </div>
+  <div class="control-bar class-toolbar">
+    <form class="class-filters" method="get" action="{{ url_for('admin_classes') }}"
+          hx-get="{{ url_for('admin_classes') }}" hx-trigger="submit, input changed delay:350ms from:input[type='search'], change from:select, search from:input[type='search']">
+      <div class="search-box">
+        <label class="sr-only" for="class-search">Cari kelas</label>
+        <img class="search-icon" src="{{ url_for('static', path='icons/class-search.svg') }}" width="16" height="16" alt="">
+        <input id="class-search" type="search" name="class" value="{{ query.class_name or '' }}" placeholder="Cari kelas" autocomplete="off">
+      </div>
+      <label class="sr-only" for="class-grade">Jenjang</label>
+      <select id="class-grade" name="grade" class="class-grade">
+        <option value="">Semua jenjang</option>
+        {% for grade in grades %}<option value="{{ grade }}" {% if query.grade == grade %}selected{% endif %}>Jenjang {{ grade }}</option>{% endfor %}
+        {% if query.grade is not none and query.grade not in grades %}<option value="{{ query.grade }}" selected>Jenjang {{ query.grade }}</option>{% endif %}
+      </select>
+      <button type="submit" class="sr-only focus-visible-button">Cari</button>
+    </form>
+    <button id="add-class" class="button class-add" type="button" hx-get="{{ url_for('admin_class_new') }}?{{ filter_query }}" hx-target="#modal-content" hx-swap="innerHTML" aria-haspopup="dialog">
+      <img src="{{ url_for('static', path='icons/class-plus.svg') }}" width="15" height="15" alt="">Tambah kelas
+    </button>
+  </div>
+  {% if message %}<p class="notice" role="status">{{ message }}</p>{% endif %}
+  <div class="table-container class-table-container" tabindex="0" role="region" aria-label="Tabel kelas">
+    <table class="class-table">
+      <thead><tr><th scope="col">ID</th><th scope="col">Kelas</th><th scope="col">Siswa</th><th scope="col" class="actions-heading">Tindakan</th></tr></thead>
+      <tbody>
+        {% for class in classes %}
+        <tr>
+          <td>{{ class.class_id }}</td>
+          <td><span class="student-name">{{ class.class_name }}</span><p class="class-description">Kelas {{ class.grade }} · {{ class.class_name }}</p></td>
+          <td><span class="class-student-count{% if not class.student_count %} is-empty{% endif %}">
+            <img src="{{ url_for('static', path='icons/class-occupied.svg' if class.student_count else 'icons/class-empty.svg') }}" width="7" height="7" alt="">
+            {{ (class.student_count|string ~ ' siswa') if class.student_count else 'Kosong' }}
+          </span></td>
+          <td><div class="row-actions">
+            <button type="button" class="text-action edit-action" aria-label="Edit kelas {{ class.class_name }}" aria-haspopup="dialog" hx-get="{{ url_for('admin_class_edit', class_id=class.class_id) }}?{{ filter_query }}" hx-target="#modal-content" hx-swap="innerHTML"><img src="{{ url_for('static', path='icons/pen.svg') }}" width="14" height="14" alt="">Edit</button>
+            <button type="button" class="text-action delete-action" aria-label="Hapus kelas {{ class.class_name }}" aria-haspopup="dialog" hx-get="{{ url_for('admin_class_delete_confirmation', class_id=class.class_id) }}?{{ filter_query }}" hx-target="#modal-content" hx-swap="innerHTML"><img src="{{ url_for('static', path='icons/trash.svg') }}" width="14" height="14" alt="">Hapus</button>
+          </div></td>
+        </tr>
+        {% else %}<tr class="class-empty-row"><td colspan="4">Tidak ada kelas{% if query.class_name or query.grade is not none %} yang sesuai dengan pencarian{% endif %}.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="table-summary" role="status" aria-live="polite">Menampilkan {{ classes|length }} kelas {% if query.grade is not none %}dari jenjang {{ query.grade }}{% else %}dari semua jenjang{% endif %}{% if query.class_name %} untuk “{{ query.class_name }}”{% endif %}</p>
+</section>

@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block page_title %}Dashboard Kelas{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', path='classes.css') }}">{% endblock %}
+{% block body_class %}class-dashboard-page{% endblock %}
+{% block content %}
+  {% set active_tab = 'classes' %}
+  {% include 'navigation/admin-header.html' %}
+  <main class="dashboard class-dashboard" data-dashboard-home="{{ url_for('admin_classes') }}">
+    <h1>Dashboard Kelas</h1>
+    {% include 'tables/class-results.html' %}
+  </main>
+{% endblock %}

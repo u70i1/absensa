@@ -90,4 +90,20 @@
   --motion-interaction-easing: ease-out;
   --shadow-focus: 0 0 0 3px var(--color-primary-fixed);
   --shadow-error-focus: 0 0 0 3px var(--color-error-container);
+  /* Class dashboard values from Figma frame 23:3. */
+  --color-metric-value: #102521;
+  --color-metric-description: #667a75;
+  --color-class-description: #91a09c;
+  --color-class-empty: #a96208;
+  --font-size-metric: 22px;
+  --class-radius-surface: 14px;
+  --class-radius-control: 10px;
+  --class-summary-height: 92px;
+  --class-metric-icon-size: 46px;
+  --class-search-width: 320px;
+  --class-row-height: 60px;
+  --class-control-height: 41px;
+  --class-column-id: 48px;
+  --class-column-count: 300px;
+  --class-column-actions: 172px;
 }

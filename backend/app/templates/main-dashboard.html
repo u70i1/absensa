@@ -1,16 +1,8 @@
 {% extends 'base.html' %}
 {% block page_title %}Dashboard Siswa{% endblock %}
 {% block content %}
-  <header class="top-header">
-    <nav aria-label="Navigasi admin" class="top-tabs">
-      <a class="top-tab selected" href="{{ url_for('admin_students') }}" aria-current="page">Siswa</a>
-      <span class="top-tab" aria-disabled="true">Kelas</span>
-      <span class="top-tab" aria-disabled="true">Impor</span>
-      <span class="top-tab" aria-disabled="true">WhatsApp Gateway</span>
-      <span class="top-tab" aria-disabled="true">Akses &amp; Perangkat</span>
-    </nav>
-    <span class="top-tab" aria-disabled="true" title="Login belum tersedia">Logout</span>
-  </header>
+  {% set active_tab = 'students' %}
+  {% include 'navigation/admin-header.html' %}
   <main class="dashboard">
     <h1>Dashboard Siswa</h1>
     {% include 'tables/student-results.html' %}

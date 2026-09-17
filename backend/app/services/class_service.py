@@ -2,7 +2,7 @@ from app.models.class_ import Class
 from app.models.student import Student
 from app.schemas.student import ClassStudentListQuery
 from app.services.exceptions import ClassNotFound, DuplicateClass
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 
@@ -29,12 +29,7 @@ def get_class_options(db: Session, grade: int | None = None) -> list[Class]:
 def get_classes(
     db: Session, class_name: str, limit: int, page: int, grade: int | None = None
 ):
-    filters = []
-
-    if class_name is not None:
-        filters.append(Class.class_name.ilike(f"%{class_name}%"))
-    if grade is not None:
-        filters.append(Class.grade == grade)
+    filters = _class_filters(class_name, grade)
 
     classes = db.scalars(
         select(Class)
@@ -44,9 +39,52 @@ def get_classes(
         .order_by(Class.class_id.desc())
     ).all()
 
-    results = list(classes)
+    return list(classes)
 
-    return results
+
+def _class_filters(class_name: str | None, grade: int | None):
+    filters = []
+
+    if class_name is not None:
+        filters.append(Class.class_name.ilike(f"%{class_name}%"))
+    if grade is not None:
+        filters.append(Class.grade == grade)
+
+    return filters
+
+
+def get_class_directory(db: Session, class_name: str | None, grade: int | None):
+    """Scrollable class directory, including classes with no students."""
+    return db.execute(
+        select(Class.class_id, Class.class_name, Class.grade,
+               func.count(Student.id).label("student_count"))
+        .outerjoin(Student, Student.class_id == Class.class_id)
+        .where(*_class_filters(class_name, grade))
+        .group_by(Class.class_id)
+        .order_by(Class.grade, Class.class_name, Class.class_id)
+    ).all()
+
+
+def get_class_summary(db: Session) -> dict:
+    total_classes = db.scalar(select(func.count(Class.class_id))) or 0
+    occupied = db.scalar(select(func.count(func.distinct(Student.class_id)))) or 0
+    total_students, assigned = db.execute(
+        select(func.count(Student.id), func.count(Student.class_id))
+    ).one()
+    return dict(total_classes=total_classes, occupied=occupied,
+                empty=total_classes - occupied, total_students=total_students,
+                assigned=assigned, unassigned=total_students - assigned)
+
+
+def get_class_grades(db: Session) -> list[int]:
+    return list(db.scalars(select(Class.grade).distinct().order_by(Class.grade)))
+
+
+def get_class_by_id(db: Session, class_id: int) -> Class:
+    class_ = db.get(Class, class_id)
+    if class_ is None:
+        raise ClassNotFound(status_code=404)
+    return class_
 
 
 def get_classes_students(db: Session, class_id: int, query: ClassStudentListQuery):

@@ -1,8 +1,8 @@
 {% extends 'base.html' %}
-{% block page_title %}Siswa{% endblock %}
+{% block page_title %}{{ dialog_title or 'Siswa' }}{% endblock %}
 {% block content %}
-  <main class="standalone-dialog" hx-disable>
-    <a href="{{ url_for('admin_students') }}">Kembali ke daftar siswa</a>
+  <main class="standalone-dialog" hx-disable data-dashboard-home="{{ back_url or url_for('admin_students') }}">
+    <a href="{{ back_url or url_for('admin_students') }}">{{ back_label or 'Kembali ke daftar siswa' }}</a>
     <div class="dialog-card">{% include modal_template %}</div>
   </main>
 {% endblock %}

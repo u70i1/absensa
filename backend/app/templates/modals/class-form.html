@@ -1,0 +1,19 @@
+<div class="modal-heading">
+  <h2 id="modal-title" tabindex="-1">{{ 'Edit Kelas' if class_ else 'Tambah Kelas' }}</h2>
+  <p>{{ 'Perbarui nama dan jenjang kelas.' if class_ else 'Masukkan nama dan jenjang kelas baru.' }}</p>
+</div>
+{% set action = url_for('admin_class_update', class_id=class_.class_id) if class_ else url_for('admin_class_create') %}
+<form class="student-form" method="post" action="{{ action }}?{{ request.url.query }}" hx-post="{{ action }}?{{ request.url.query }}" hx-target="#modal-content" hx-swap="innerHTML" hx-disabled-elt="find button[type='submit']" hx-sync="this:drop">
+  {% if errors %}<div class="form-errors" role="alert">{{ errors.get('form', 'Periksa kembali data yang ditandai di bawah.') }}</div>{% endif %}
+  <div class="form-field">
+    <label for="class-name">Nama kelas</label>
+    <input id="class-name" name="class_name" value="{{ values.class_name or '' }}" required minlength="1" maxlength="20" autocomplete="off" {% if errors.class_name %}aria-invalid="true" aria-describedby="class-name-error"{% endif %}>
+    {% if errors.class_name %}<p id="class-name-error" class="field-error">{{ errors.class_name }}</p>{% endif %}
+  </div>
+  <div class="form-field">
+    <label for="class-form-grade">Jenjang</label>
+    <input id="class-form-grade" name="grade" type="number" min="1" max="20" step="1" value="{{ values.grade or '' }}" required {% if errors.grade %}aria-invalid="true" aria-describedby="class-grade-error"{% endif %}>
+    {% if errors.grade %}<p id="class-grade-error" class="field-error">{{ errors.grade }}</p>{% endif %}
+  </div>
+  <div class="modal-actions"><button type="button" class="button secondary" data-close-modal>Batal</button><button type="submit" class="button primary">{{ 'Simpan Perubahan' if class_ else 'Tambah Kelas' }}</button></div>
+</form>

@@ -3,7 +3,7 @@ let modalOpener = null;
 
 function closeModal() {
   if (!modal.open) {
-    window.location.assign("/admin/students");
+    window.location.assign(document.querySelector("[data-dashboard-home]")?.dataset.dashboardHome || "/admin/students");
     return;
   }
   if (modal.classList.contains("is-closing")) return;
@@ -67,7 +67,7 @@ modal.addEventListener("click", (event) => {
 modal.addEventListener("close", () => {
   document.getElementById("modal-content").replaceChildren();
   if (modalOpener?.isConnected) modalOpener.focus();
-  else document.getElementById("add-student")?.focus();
+  else document.querySelector("#add-student, #add-class")?.focus();
   modalOpener = null;
 });
 
@@ -88,9 +88,9 @@ document.addEventListener("htmx:beforeSwap", (event) => {
 });
 
 document.addEventListener("htmx:afterSwap", (event) => {
-  if (event.detail.target?.id === "student-results") {
+  if (["student-results", "class-results"].includes(event.detail.target?.id)) {
     document
-      .querySelector("#student-results .table-container")
+      .querySelector("#student-results .table-container, #class-results .table-container")
       ?.classList.add("interaction-feedback");
     return;
   }
@@ -109,6 +109,9 @@ document.addEventListener("htmx:afterSwap", (event) => {
 });
 
 document.addEventListener("studentSaved", () => {
+  if (modal.open) closeModal();
+});
+document.addEventListener("classSaved", () => {
   if (modal.open) closeModal();
 });
 

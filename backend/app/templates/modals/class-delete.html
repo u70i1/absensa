@@ -1,0 +1,7 @@
+<div class="modal-heading">
+  <h2 id="modal-title" tabindex="-1">Hapus Kelas</h2>
+  <p>Hapus kelas <strong>{{ class_.class_name }}</strong> (jenjang {{ class_.grade }})? Siswa di kelas ini akan menjadi tidak memiliki kelas. Data siswa tetap tersimpan.</p>
+</div>
+<form method="post" action="{{ url_for('admin_class_delete', class_id=class_.class_id) }}?{{ request.url.query }}" hx-post="{{ url_for('admin_class_delete', class_id=class_.class_id) }}?{{ request.url.query }}" hx-target="#modal-content" hx-swap="innerHTML" hx-disabled-elt="find button[type='submit']" hx-sync="this:drop">
+  <div class="modal-actions"><button type="button" class="button secondary" data-close-modal>Batal</button><button type="submit" class="button destructive">Hapus Kelas</button></div>
+</form>

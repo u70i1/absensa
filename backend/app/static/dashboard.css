@@ -34,7 +34,7 @@ button {
 button:disabled {
   cursor: default;
 }
-button:not(.filter-chip),
+.button:not(.filter-chip),
 .page-button {
   transition:
     transform var(--motion-press-duration) var(--motion-interaction-easing),

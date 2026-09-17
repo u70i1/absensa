@@ -35,6 +35,7 @@ class ClassListQuery(PaginationQueryBase):
     """Pagination and filters for GET /classes."""
 
     class_name: str | None = Field(None, alias="class")
+    grade: int | None = None
 
 
 class ClassBulkCreateRequest(BaseModel):
