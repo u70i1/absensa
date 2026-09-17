@@ -62,7 +62,7 @@ def get_student(db: Session, query: StudentListQuery):
         .where(*_student_filters(query))
         .offset((query.page - 1) * query.limit)
         .limit(query.limit)
-        .order_by(Student.nisn.desc())
+        .order_by(Student.name)
     )
     students = db.execute(stmt).all()
 
