@@ -320,7 +320,6 @@ button.htmx-request:not(:disabled),
 }
 .table-container {
   height: var(--table-height);
-  width: 60%;
   overflow: auto;
   background: var(--color-surface);
   border: var(--border-surface);
