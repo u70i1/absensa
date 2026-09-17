@@ -4,11 +4,11 @@ from app.models.student import Student
 from sqlalchemy import select
 
 SEED_CLASS = [
-    {"grade": 10,"class_name": "X-Mossy"},
-    {"grade": 10,"class_name": "X-Bottom"},
-    {"grade": 11,"class_name": "XI-Flock"},
-    {"grade": 11,"class_name": "XI-Barn"},
-    {"grade": 12,"class_name": "XII-Farm"},
+    {"grade": 10, "class_name": "X-Mossy"},
+    {"grade": 10, "class_name": "X-Bottom"},
+    {"grade": 11, "class_name": "XI-Flock"},
+    {"grade": 11, "class_name": "XI-Barn"},
+    {"grade": 12, "class_name": "XII-Farm"},
 ]
 
 SEED_STUDENT = [

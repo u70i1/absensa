@@ -1,0 +1,35 @@
+<section id="student-results" aria-label="Daftar siswa" hx-target="this" hx-swap="outerHTML" hx-sync="this:replace"
+  hx-history-elt>
+  {% include 'filters/student-filters.html' %}
+  <div class="control-bar">
+    <form class="search-box" role="search" action="{{ url_for('admin_students') }}" method="get"
+      hx-get="{{ url_for('admin_students') }}"
+      hx-trigger="submit, input changed delay:350ms from:input[type='search'], search from:input[type='search']">
+      <label for="student-search" class="sr-only">Cari berdasarkan nama atau NISN</label>
+      <img src="{{ url_for('static', path='icons/search.png') }}" class="search-icon" alt="" width="16" height="16">
+      <input id="student-search" type="search" name="q" value="{{ query.q or '' }}"
+        placeholder="Cari berdasarkan nama atau NISN" autocomplete="off">
+      {% for key, value in query.model_dump(by_alias=True).items() if key not in ['limit', 'q', 'page'] %}
+        {% if value is not none and value != false and value != '' %}<input type="hidden" name="{{ key }}"
+          value="{{ value }}">{% endif %}
+      {% endfor %}
+      <input type="hidden" name="page" value="1">
+      <button type="submit" class="sr-only focus-visible-button">Cari</button>
+    </form>
+    <div class="control-actions">
+      <button class="button tertiary" type="button" hx-get="{{ url_for('admin_students_export') }}"
+        hx-target="#modal-content" hx-swap="innerHTML" aria-haspopup="dialog">&gt; Ekspor data</button>
+      <button id="add-student" class="button primary" type="button"
+        hx-get="{{ url_for('admin_student_new') }}?{{ request.url.query }}" hx-target="#modal-content"
+        hx-swap="innerHTML" aria-haspopup="dialog">+ Tambah Siswa</button>
+    </div>
+  </div>
+  {% if message %}<p class="notice" role="status">{{ message }}</p>{% endif %}
+  {% include 'tables/student-table.html' %}
+  <p class="table-summary" role="status" aria-live="polite">
+    Menampilkan {{ students|length }} dari {{ total }} siswa{% if selected_class %} di kelas
+    {{ selected_class.class_name }}{% elif query.grade %} di jenjang {{ query.grade }}{% elif query.unassigned %} tanpa
+    kelas{% endif %}
+  </p>
+  {% include 'pagination/students.html' %}
+</section>

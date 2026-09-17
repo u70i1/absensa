@@ -1,11 +1,16 @@
 from app.core.config import settings
 from app.routes import api_router
 from app.services.exceptions import AppException
+from app.templating import APP_DIR, templates
 from fastapi import FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 app = FastAPI(title="absensa")
+app.mount("/admin/static", StaticFiles(directory=APP_DIR / "static"), name="static")
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,6 +28,15 @@ def root():
 
 
 app.include_router(api_router)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def application_http_error(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == 404:
+        return templates.TemplateResponse(
+            request=request, name="404.html", status_code=404,
+        )
+    return await http_exception_handler(request, exc)
 
 
 @app.exception_handler(AppException)

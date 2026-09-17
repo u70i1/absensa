@@ -1,0 +1,19 @@
+<nav class="pagination" aria-label="Halaman siswa">
+  <p>Data ke {{ start }}-{{ end }}</p>
+  <div class="page-controls">
+    {% if query.page > 1 %}
+      <a class="page-button" href="{{ list_url(page=query.page - 1) }}"
+        hx-get="{{ list_url(page=query.page - 1) }}">Sebelumnya</a>
+    {% else %}<button class="page-button" type="button" disabled>Sebelumnya</button>{% endif %}
+    {% for number in page_numbers %}
+      {% if not loop.first and number > page_numbers[loop.index0 - 1] + 1 %}<span aria-hidden="true">…</span>{% endif %}
+      <a class="page-button{% if number == query.page %} active{% endif %}" href="{{ list_url(page=number) }}"
+        hx-get="{{ list_url(page=number) }}" aria-label="Halaman {{ number }}"
+        {% if number == query.page %}aria-current="page" {% endif %}>{{ number }}</a>
+    {% endfor %}
+    {% if query.page < pages %}
+      <a class="page-button" href="{{ list_url(page=query.page + 1) }}"
+        hx-get="{{ list_url(page=query.page + 1) }}">Selanjutnya</a>
+    {% else %}<button class="page-button" type="button" disabled>Selanjutnya</button>{% endif %}
+  </div>
+</nav>

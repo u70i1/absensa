@@ -49,6 +49,10 @@ class StudentListQuery(ClassStudentListQuery):
     """Pagination and filters for GET /students, including class name."""
 
     class_name: str | None = Field(None, alias="class")
+    grade: int | None = None
+    class_id: int | None = None
+    unassigned: bool = False
+    q: str | None = Field(None, description="Search by name substring or exact NISN.")
 
 
 class StudentBulkCreateRequest(BaseModel):
