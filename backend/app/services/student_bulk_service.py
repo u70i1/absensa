@@ -2,12 +2,12 @@ from collections import Counter
 
 from app.models.class_ import Class
 from app.models.student import Student
-from app.schemas.BulkStudentRequest import (
-    BulkStudentIdOnly,
-    BulkStudentRequest,
-    BulkStudentRequestWithId,
+from app.schemas.student import (
+    StudentBulkCreateRequest,
+    StudentBulkDeleteRequest,
+    StudentBulkUpdateRequest,
+    StudentResponse,
 )
-from app.schemas.StudentResponse import StudentResponse
 from app.services.exceptions import (
     AppException,
     ClassNotFound,
@@ -31,7 +31,7 @@ def class_id_is_valid(class_id: int | None, class_ids_db: set) -> bool:
 
 
 def validate_new_student(
-    student: BulkStudentRequest,
+    student: StudentBulkCreateRequest,
     nisns_db: set,
     class_ids_db: set,
     nisn_batch_counts: Counter,
@@ -59,7 +59,7 @@ def validate_new_student(
 
 
 def create_students_bulk(
-    db: Session, payload: list[BulkStudentRequest], dry_run: bool
+    db: Session, payload: list[StudentBulkCreateRequest], dry_run: bool
 ) -> dict:
     """Create one or more students in one transaction. Returns the
     succeeded/failed envelope never raises; per-item AppExceptions are
@@ -110,7 +110,7 @@ def create_students_bulk(
 
 
 def validate_updated_student(
-    student: BulkStudentRequestWithId,
+    student: StudentBulkUpdateRequest,
     student_ids_db: set,
     class_ids_db: set,
     nisn_batch_counts: Counter,
@@ -144,7 +144,7 @@ def validate_updated_student(
 
 
 def update_students_bulk(
-    db: Session, payload: list[BulkStudentRequestWithId], dry_run: bool
+    db: Session, payload: list[StudentBulkUpdateRequest], dry_run: bool
 ) -> dict:
     """Update multiple students in a single transaction. Returns the
     succeeded/failed envelope never raises out; per-item AppExceptions
@@ -199,7 +199,7 @@ def update_students_bulk(
 
 
 def delete_students_bulk(
-    db: Session, payload: BulkStudentIdOnly, dry_run: bool
+    db: Session, payload: StudentBulkDeleteRequest, dry_run: bool
 ) -> list[int] | None:
     """Deletes all given ids, or none at all if any id is missing
     (all-or-nothing, unlike create/update). Returns the list of missing

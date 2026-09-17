@@ -1,9 +1,29 @@
 from app.models.class_ import Class
 from app.models.student import Student
-from app.schemas.StudentQuery import StudentClassQuery
+from app.schemas.student import ClassStudentListQuery
 from app.services.exceptions import ClassNotFound, DuplicateClass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+
+def get_student_grades(db: Session) -> list[int]:
+    """Only grades represented by students, ordered for the Jenjang filter."""
+    return list(
+        db.scalars(
+            select(Class.grade)
+            .join(Student, Student.class_id == Class.class_id)
+            .distinct()
+            .order_by(Class.grade)
+        )
+    )
+
+
+def get_class_options(db: Session, grade: int | None = None) -> list[Class]:
+    """Unpaginated class choices for filters and student forms."""
+    stmt = select(Class).order_by(Class.grade, Class.class_name, Class.class_id)
+    if grade is not None:
+        stmt = stmt.where(Class.grade == grade)
+    return list(db.scalars(stmt))
 
 
 def get_classes(
@@ -29,7 +49,7 @@ def get_classes(
     return results
 
 
-def get_classes_students(db: Session, class_id: int, query: StudentClassQuery):
+def get_classes_students(db: Session, class_id: int, query: ClassStudentListQuery):
     """_Retrieve student items from "students" table._"""
     filters = []
     if query.name is not None:
@@ -61,9 +81,7 @@ def get_classes_students(db: Session, class_id: int, query: StudentClassQuery):
 
 def post_class(db: Session, class_name: str, grade: int):
     class_exists = db.scalar(
-        select(Class)
-        .where(Class.class_name == class_name)
-        .where(Class.grade == grade)
+        select(Class).where(Class.class_name == class_name).where(Class.grade == grade)
     )
     if class_exists:
         raise DuplicateClass

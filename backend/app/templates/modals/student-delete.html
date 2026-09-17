@@ -1,0 +1,13 @@
+<div class="modal-heading">
+  <h2 id="modal-title" tabindex="-1">Hapus Siswa</h2>
+  <p>Hapus <strong>{{ student.name }}</strong> (NISN {{ student.nisn }}) dari daftar siswa?</p>
+</div>
+<form method="post" action="{{ url_for('admin_student_delete', student_id=student.id) }}?{{ request.url.query }}"
+  hx-post="{{ url_for('admin_student_delete', student_id=student.id) }}?{{ request.url.query }}"
+  hx-target="#modal-content" hx-swap="innerHTML" hx-disabled-elt="find button[type='submit']" hx-sync="this:drop">
+  <p>Data siswa yang dihapus tidak dapat dikembalikan.</p>
+  <div class="modal-actions">
+    <button type="button" class="button secondary" data-close-modal autofocus>Batal</button>
+    <button type="submit" class="button destructive">Hapus Siswa</button>
+  </div>
+</form>

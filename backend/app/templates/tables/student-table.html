@@ -1,0 +1,24 @@
+<div class="table-container" tabindex="0" role="region" aria-label="Tabel siswa, gulir untuk melihat data berikutnya">
+  <table class="student-table">
+    <caption class="sr-only">Siswa beserta NISN, kelas, nomor wali, dan tindakan</caption>
+    <thead>
+      <tr>
+        <th scope="col">FOTO</th>
+        <th scope="col">NAMA</th>
+        <th scope="col">KELAS</th>
+        <th scope="col">NOMOR WALI</th>
+        <th scope="col" class="actions-heading">TINDAKAN</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for student in students %}{% include 'tables/student-row.html' %}
+      {% else %}<tr class="empty-row">
+          <td colspan="5">
+            <strong>Belum ada siswa yang ditampilkan</strong>
+            <p>{% if query.q or query.name or query.nisn or query.grade or query.class_id or query.unassigned %}Coba
+            kata pencarian atau filter lain.{% else %}Tambahkan siswa untuk mulai mengelola data.{% endif %}</p>
+          </td>
+      </tr>{% endfor %}
+    </tbody>
+  </table>
+</div>

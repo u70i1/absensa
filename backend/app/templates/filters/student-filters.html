@@ -1,0 +1,30 @@
+<div class="student-filters">
+  <nav class="filter-row" aria-label="Filter jenjang">
+    {% set all_url = list_url(grade=none, class_id=none, unassigned=false, page=1, **{'class': none}) %}
+    <a class="filter-chip{% if query.grade is none and not query.unassigned %} active{% endif %}" href="{{ all_url }}"
+      hx-get="{{ all_url }}" {% if query.grade is none and not query.unassigned %}aria-current="true" {% endif %}>Semua
+      Jenjang</a>
+    {% for grade in grades %}
+      {% set grade_url = list_url(grade=grade, class_id=none, unassigned=false, page=1, **{'class': none}) %}
+      <a class="filter-chip{% if query.grade == grade %} active{% endif %}" href="{{ grade_url }}"
+        hx-get="{{ grade_url }}" {% if query.grade == grade %}aria-current="true" {% endif %}>Kelas {{ grade }}</a>
+    {% endfor %}
+    {% set unassigned_url = list_url(grade=none, class_id=none, unassigned=true, page=1, **{'class': none}) %}
+    <a class="filter-chip{% if query.unassigned %} active{% endif %}" href="{{ unassigned_url }}"
+      hx-get="{{ unassigned_url }}" {% if query.unassigned %}aria-current="true" {% endif %}>Tidak memiliki kelas</a>
+  </nav>
+  {% if not query.unassigned %}
+    <nav class="filter-row class-filters" aria-label="Filter kelas">
+      {% set all_classes_url = list_url(class_id=none, page=1, **{'class': none}) %}
+      <a class="filter-chip{% if query.class_id is none %} active{% endif %}" href="{{ all_classes_url }}"
+        hx-get="{{ all_classes_url }}" {% if query.class_id is none %}aria-current="true" {% endif %}>Semua Kelas</a>
+      {% for class in classes %}
+        {% set class_url = list_url(class_id=class.class_id, page=1, **{'class': none}) %}
+        <a class="filter-chip{% if query.class_id == class.class_id %} active{% endif %}" href="{{ class_url }}"
+          hx-get="{{ class_url }}" {% if query.class_id == class.class_id %}aria-current="true" {% endif %}
+          aria-label="{{ class.class_name }}, jenjang {{ class.grade }}">{{ class.class_name }}{% if query.grade is none %}
+          · {{ class.grade }}{% endif %}</a>
+      {% endfor %}
+    </nav>
+  {% endif %}
+</div>

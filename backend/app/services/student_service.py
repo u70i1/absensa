@@ -1,16 +1,14 @@
 from app.models.class_ import Class
 from app.models.student import Student
-from app.schemas.StudentQuery import StudentQuery
-from sqlalchemy import Row, select
+from app.schemas.student import StudentListQuery
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .exceptions import ClassNotFound, DuplicateNisn, StudentNotFound
 
 
-def get_student(
-    db: Session, query: StudentQuery
-) -> list[Row[tuple[int, str, str, bool, str, int]]]:
-    """_Retrieve student items from "students" table._"""
+def _student_filters(query: StudentListQuery):
+    """Shared predicates for the JSON list, dashboard, and filtered count."""
     filters = []
 
     if query.name is not None:
@@ -19,6 +17,37 @@ def get_student(
         filters.append(Class.class_name.ilike(f"%{query.class_name}%"))
     if query.nisn is not None:
         filters.append(Student.nisn == query.nisn)
+    if query.grade is not None:
+        filters.append(Class.grade == query.grade)
+    if query.class_id is not None:
+        filters.append(Student.class_id == query.class_id)
+    if query.unassigned:
+        filters.append(Student.class_id.is_(None))
+    if query.q:
+        filters.append(or_(Student.name.ilike(f"%{query.q}%"), Student.nisn == query.q))
+    return filters
+
+
+def count_students(db: Session, query: StudentListQuery) -> int:
+    return (
+        db.scalar(
+            select(func.count(Student.id))
+            .outerjoin(Class, Class.class_id == Student.class_id)
+            .where(*_student_filters(query))
+        )
+        or 0
+    )
+
+
+def get_student_by_id(db: Session, student_id: int) -> Student:
+    student = db.get(Student, student_id)
+    if student is None:
+        raise StudentNotFound()
+    return student
+
+
+def get_student(db: Session, query: StudentListQuery):
+    """Retrieve a page of students using the shared list filters."""
 
     stmt = (
         select(
@@ -30,10 +59,10 @@ def get_student(
             Class.class_id,
         )
         .outerjoin(Class, Class.class_id == Student.class_id)
-        .where(*filters)
+        .where(*_student_filters(query))
         .offset((query.page - 1) * query.limit)
         .limit(query.limit)
-        .order_by(Student.nisn.desc())
+        .order_by(Student.name)
     )
     students = db.execute(stmt).all()
 
@@ -77,7 +106,12 @@ def post_student(
 
 
 def edit_student(
-    db: Session, student_id: int, nisn: str, name: str, class_id: int, current: bool
+    db: Session,
+    student_id: int,
+    nisn: str,
+    name: str,
+    class_id: int | None,
+    current: bool,
 ) -> Student:
     """_Edit one student_
 
@@ -89,9 +123,7 @@ def edit_student(
     Returns:
         Student: _Student model from the database_
     """
-    to_update = db.get(Student, student_id)
-    if not to_update:
-        raise StudentNotFound()
+    to_update = get_student_by_id(db, student_id)
 
     if class_id:
         class_exist = db.get(Class, class_id)
@@ -113,16 +145,14 @@ def edit_student(
 
     return to_update
 
+
 def delete_student(db: Session, student_id: int):
     """_Delete a single student_
 
     Raises:
         StudentNotFound
     """
-    to_delete = db.get(Student, student_id)
-
-    if not to_delete:
-        raise StudentNotFound()
+    to_delete = get_student_by_id(db, student_id)
 
     db.delete(to_delete)
     db.commit()

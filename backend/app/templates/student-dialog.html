@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block page_title %}Siswa{% endblock %}
+{% block content %}
+  <main class="standalone-dialog" hx-disable>
+    <a href="{{ url_for('admin_students') }}">Kembali ke daftar siswa</a>
+    <div class="dialog-card">{% include modal_template %}</div>
+  </main>
+{% endblock %}

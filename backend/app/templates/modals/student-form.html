@@ -1,0 +1,68 @@
+<div class="modal-heading">
+  <h2 id="modal-title" tabindex="-1">{{ 'Edit Siswa' if student else 'Tambah Siswa' }}</h2>
+  <p>{{ 'Perbarui identitas dan kelas siswa.' if student else 'Masukkan identitas siswa yang akan ditambahkan.' }}
+  </p>
+</div>
+{% if student %}
+  <form class="photo-upload" method="post" action="/photo" enctype="multipart/form-data" hx-post="/photo"
+    hx-encoding="multipart/form-data" hx-swap="none" hx-disabled-elt="find button[type='submit']" hx-sync="this:drop"
+    data-photo-upload>
+    <span class="avatar avatar-large" aria-hidden="true">{{ student.name|initials }}</span>
+    <input type="hidden" name="student_id" value="{{ student.id }}">
+    <div class="form-field">
+      <label for="student-photo">Foto siswa</label>
+      <input id="student-photo" type="file" name="photo" accept="image/*" required aria-describedby="photo-status">
+      <button type="submit" class="button secondary">Unggah Foto</button>
+      <p id="photo-status" class="field-help" role="status" aria-live="polite"></p>
+    </div>
+  </form>
+{% endif %}
+{% set action = url_for('admin_student_update', student_id=student.id) if student else url_for('admin_student_create') %}
+<form class="student-form" method="post" action="{{ action }}?{{ request.url.query }}"
+  hx-post="{{ action }}?{{ request.url.query }}" hx-target="#modal-content" hx-swap="innerHTML"
+  hx-disabled-elt="find button[type='submit']" hx-sync="this:drop">
+  {% if errors %}<div class="form-errors" role="alert">
+    {{ errors.get('form', 'Periksa kembali data yang ditandai di bawah.') }}</div>{% endif %}
+  <div class="form-field">
+    <label for="student-name">Nama lengkap</label>
+    <input id="student-name" name="name" value="{{ values.name or '' }}" required minlength="1" autocomplete="off"
+      {% if errors.name %}aria-invalid="true" aria-describedby="name-error" {% endif %}>
+    {% if errors.name %}<p class="field-error" id="name-error">{{ errors.name }}</p>{% endif %}
+  </div>
+  <div class="form-field">
+    <label for="student-nisn">NISN</label>
+    <input id="student-nisn" name="nisn" value="{{ values.nisn or '' }}" required minlength="10" maxlength="10"
+      inputmode="numeric" autocomplete="off" aria-describedby="nisn-help{% if errors.nisn %} nisn-error{% endif %}"
+      {% if errors.nisn %}aria-invalid="true" {% endif %}>
+    <p class="field-help" id="nisn-help">Nomor induk siswa nasional, tepat 10 karakter.</p>
+    {% if errors.nisn %}<p class="field-error" id="nisn-error">{{ errors.nisn }}</p>{% endif %}
+  </div>
+  <div class="form-field">
+    <label for="student-class">Kelas</label>
+    <select id="student-class" name="class_id" {% if errors.class_id %}aria-invalid="true"
+      aria-describedby="class-error" {% endif %}>
+      <option value="">Tidak memiliki kelas</option>
+      {% for group in classes|groupby('grade') %}
+        <optgroup label="Jenjang {{ group.grouper }}">
+          {% for class in group.list %}<option value="{{ class.class_id }}"
+              {% if values.class_id|string == class.class_id|string %}selected{% endif %}>{{ class.class_name }}</option>
+          {% endfor %}
+        </optgroup>
+      {% endfor %}
+    </select>
+    {% if errors.class_id %}<p class="field-error" id="class-error">{{ errors.class_id }}</p>{% endif %}
+  </div>
+  <div class="form-field">
+    <label for="student-current">Status siswa</label>
+    <select id="student-current" name="current" {% if errors.current %}aria-invalid="true"
+      aria-describedby="current-error" {% endif %}>
+      <option value="true" {% if values.current in [true, 'true'] %}selected{% endif %}>Aktif</option>
+      <option value="false" {% if values.current in [false, 'false'] %}selected{% endif %}>Lulus / tidak aktif</option>
+    </select>
+    {% if errors.current %}<p class="field-error" id="current-error">{{ errors.current }}</p>{% endif %}
+  </div>
+  <div class="modal-actions">
+    <button type="button" class="button secondary" data-close-modal>Batal</button>
+    <button type="submit" class="button primary">{{ 'Simpan Perubahan' if student else '+ Tambah Siswa' }}</button>
+  </div>
+</form>
