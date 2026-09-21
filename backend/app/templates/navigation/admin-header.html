@@ -6,5 +6,7 @@
     <span class="top-tab" aria-disabled="true">WhatsApp Gateway</span>
     <span class="top-tab" aria-disabled="true">Akses &amp; Perangkat</span>
   </nav>
-  <span class="top-tab" aria-disabled="true" title="Login belum tersedia">Logout</span>
+  <form class="logout-form" method="post" action="{{ url_for('admin_logout') }}">
+    <button class="top-tab logout-button" type="submit">Logout</button>
+  </form>
 </header>

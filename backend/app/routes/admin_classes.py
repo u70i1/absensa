@@ -1,18 +1,26 @@
 """Class dashboard HTML routes using the existing class services."""
 
+from datetime import datetime
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 
+from app.core.admin_auth import require_admin
+from app.core.config import settings
 from app.routes.admin import Db, form_data, render_modal
 from app.schemas.class_ import ClassListQuery, ClassWriteRequest
 from app.services import class_service, export_service
 from app.services.exceptions import AppException
 from app.templating import templates
 
-router = APIRouter(prefix="/admin/classes", default_response_class=HTMLResponse)
+router = APIRouter(
+    prefix="/admin/classes",
+    default_response_class=HTMLResponse,
+    dependencies=[Depends(require_admin)],
+)
 
 
 def class_query(request: Request) -> ClassListQuery:
@@ -96,11 +104,12 @@ def export_classes(request: Request, db: Db):
         class_service.get_class_directory(db, query.class_name, query.grade, query.empty),
         ", ".join(filters) or "Semua kelas",
     )
+    filename = datetime.now(ZoneInfo(settings.timezone)).strftime("ekspor-kelas-%Y-%m-%d.xlsx")
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
-            "Content-Disposition": 'attachment; filename="absensa_classes_export.xlsx"'
+            "Content-Disposition": f'attachment; filename="{filename}"'
         },
     )
 

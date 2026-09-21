@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +17,8 @@ class Settings(BaseSettings):
     timezone: str
     cors_origin: str = "http://localhost:5173"
     photos_dir: str = "photos"
+    admin_session_hours: int = Field(12, ge=1, le=720)
+    admin_cookie_secure: bool = False
 
 
 settings = Settings() # pyright: ignore[reportCallIssue]

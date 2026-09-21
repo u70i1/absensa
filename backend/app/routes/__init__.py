@@ -1,6 +1,7 @@
 """Shortcut to all routes."""
 
 from app.routes.admin import router as admin_router
+from app.routes.admin_auth import router as admin_auth_router
 from app.routes.admin_classes import router as admin_classes_router
 from app.routes.bulk_classes import router as bulk_classes_router
 from app.routes.bulk_scans import router as bulk_scans_router
@@ -17,5 +18,6 @@ api_router.include_router(bulk_scans_router)
 api_router.include_router(class_router)
 api_router.include_router(student_router)
 api_router.include_router(scan_router)
+api_router.include_router(admin_auth_router)
 api_router.include_router(admin_router)
 api_router.include_router(admin_classes_router)

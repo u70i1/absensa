@@ -4,6 +4,7 @@ from math import ceil
 from typing import Annotated
 from urllib.parse import urlencode
 
+from app.core.admin_auth import require_admin
 from app.db.session import get_db
 from app.schemas.student import StudentListQuery, StudentWriteRequest
 from app.services import class_service, export_service, student_service
@@ -14,7 +15,11 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-router = APIRouter(prefix="/admin", default_response_class=HTMLResponse)
+router = APIRouter(
+    prefix="/admin",
+    default_response_class=HTMLResponse,
+    dependencies=[Depends(require_admin)],
+)
 Db = Annotated[Session, Depends(get_db)]
 PAGE_SIZE = 50
 STUDENTS_URL = "/admin/students"

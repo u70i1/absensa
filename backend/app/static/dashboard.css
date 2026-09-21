@@ -118,6 +118,7 @@ dd {
   font-weight: var(--font-weight-semibold);
 }
 .top-tab[href],
+.logout-button,
 .standalone-dialog > a {
   transition:
     background-color var(--motion-hover-duration)
@@ -126,12 +127,22 @@ dd {
     opacity var(--motion-press-duration) var(--motion-interaction-easing);
 }
 .top-tab[href]:hover,
-.top-tab[href]:focus-visible {
+.top-tab[href]:focus-visible,
+.logout-button:hover,
+.logout-button:focus-visible {
   background: var(--color-primary-fixed);
 }
 .top-tab[href]:active,
+.logout-button:active,
 .standalone-dialog > a:active {
   opacity: 0.6;
+}
+.logout-form {
+  height: 100%;
+}
+.logout-button {
+  border: 0;
+  background: transparent;
 }
 .standalone-dialog > a:hover {
   color: var(--color-surface-tint);
