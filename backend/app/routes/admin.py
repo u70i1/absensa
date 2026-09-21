@@ -1,10 +1,13 @@
 """Server-rendered student management; JSON and HTML share student services."""
 
+from datetime import datetime
 from math import ceil
 from typing import Annotated
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 from app.core.admin_auth import require_admin
+from app.core.config import settings
 from app.db.session import get_db
 from app.schemas.student import StudentListQuery, StudentWriteRequest
 from app.services import class_service, export_service, student_service
@@ -171,12 +174,13 @@ def export_students(request: Request, db: Db):
     content = export_service.build_students_workbook(
         students, ", ".join(filters) or "Semua siswa"
     )
+    filename = datetime.now(ZoneInfo(settings.timezone)).strftime(
+        "ekspor-siswa-%Y-%m-%d.xlsx"
+    )
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={
-            "Content-Disposition": 'attachment; filename="absensa_students_export.xlsx"'
-        },
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

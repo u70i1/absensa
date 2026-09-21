@@ -11,7 +11,7 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
 TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "export_templates"
-STUDENT_TEMPLATE = TEMPLATE_DIR / "absensa_students_export_template.xlsx"
+STUDENT_TEMPLATE = TEMPLATE_DIR / "students_export_template.xlsx"
 STUDENT_COLUMNS = (
     ("ID", "id"),
     ("NAMA", "name"),
@@ -20,7 +20,7 @@ STUDENT_COLUMNS = (
     ("STATUS", "current"),
     ("NOMOR WALI", "guardian_phone"),
 )
-CLASS_TEMPLATE = TEMPLATE_DIR / "absensa_classes_export_template.xlsx"
+CLASS_TEMPLATE = TEMPLATE_DIR / "classes_export_template.xlsx"
 CLASS_COLUMNS = (
     ("ID KELAS", "class_id"),
     ("JENJANG", "grade"),

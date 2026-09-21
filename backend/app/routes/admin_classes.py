@@ -4,10 +4,6 @@ from datetime import datetime
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from pydantic import ValidationError
-
 from app.core.admin_auth import require_admin
 from app.core.config import settings
 from app.routes.admin import Db, form_data, render_modal
@@ -15,6 +11,9 @@ from app.schemas.class_ import ClassListQuery, ClassWriteRequest
 from app.services import class_service, export_service
 from app.services.exceptions import AppException
 from app.templating import templates
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from pydantic import ValidationError
 
 router = APIRouter(
     prefix="/admin/classes",
