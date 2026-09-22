@@ -1,0 +1,24 @@
+<div class="import-table-scroll" tabindex="0" role="region" aria-label="{{ title }} {{ label }}">
+<table class="import-table">
+  <thead><tr>{% if batch.kind == 'students' %}<th>FOTO</th><th>NAMA / STATUS</th><th>KELAS</th><th>NOMOR WALI</th>{% else %}<th>ID KELAS</th><th>JENJANG</th><th>NAMA KELAS</th>{% endif %}<th>TINDAKAN</th></tr></thead>
+  <tbody>
+  {% for row in rows if row.action == action %}
+    {% set values = row['values'] %}
+    <tr data-import-row data-action="{{ action }}">
+    {% if batch.kind == 'students' %}
+      <td><span class="avatar" aria-hidden="true">{% if row.photo_path %}<img src="{{ url_for('admin_student_photo', student_id=values.id) }}?v={{ row.photo_path|urlencode }}" alt="">{% else %}{{ values.name|initials }}{% endif %}</span></td>
+      <td class="{% if action == 'update' and ('name' in row.changed or 'nisn' in row.changed or 'current' in row.changed) %}import-changed{% endif %}"><strong>{{ values.name }}</strong><small>NISN {{ values.nisn }}</small><small>{{ 'Aktif' if values.current else 'Tidak aktif' }} · Baris {{ row.row }}</small></td>
+      <td class="{% if action == 'update' and 'class_id' in row.changed %}import-changed{% endif %}">{{ row.class_name }}</td>
+      <td class="{% if action == 'update' and 'guardian_phone' in row.changed %}import-changed{% endif %}">{{ values.guardian_phone or '—' }}</td>
+    {% else %}
+      <td>{{ values.class_id or 'Baru' }}<small>Baris {{ row.row }}</small></td>
+      <td class="{% if action == 'update' and 'grade' in row.changed %}import-changed{% endif %}">{{ values.grade }}</td>
+      <td class="{% if action == 'update' and 'class_name' in row.changed %}import-changed{% endif %}"><strong>{{ values.class_name }}</strong></td>
+    {% endif %}
+      {% set checked = selected_rows is none or row.row in selected_rows %}
+      <td><label class="import-row-toggle"><input class="sr-only" type="checkbox" name="selected" value="{{ row.row }}" {% if checked %}checked{% endif %} aria-label="Impor baris {{ row.row }}"><span class="import-cancel-icon" aria-hidden="true"><img src="{{ url_for('static', path='icons/import-error.svg') }}" alt="" width="14" height="14"></span><span data-row-toggle>{{ 'Batalkan' if checked else 'Dibatalkan' }}</span></label></td>
+    </tr>
+  {% else %}<tr><td colspan="{{ 5 if batch.kind == 'students' else 4 }}" class="import-empty">Tidak ada data untuk {{ 'ditambahkan' if action == 'create' else 'diperbarui' }}.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>

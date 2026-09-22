@@ -1,0 +1,42 @@
+<section id="import-review" class="import-review" aria-labelledby="review-title" tabindex="-1">
+  {% if error %}<div class="import-error" role="alert"><img src="{{ url_for('static', path='icons/import-error.svg') }}" alt="" width="32" height="32"><div><strong>File tidak dapat diproses</strong><p>{{ error }}</p></div></div>{% endif %}
+  {% if batch and batch.state == 'applied' %}
+    <h2 id="review-title">Impor berhasil</h2>
+    <p role="status">{{ batch.payload.created }} data ditambahkan, {{ batch.payload.updated }} data diperbarui, {{ batch.payload.skipped }} baris dilewati.</p>
+    <a class="button primary" href="{{ url_for('admin_students' if batch.kind == 'students' else 'admin_classes') }}">Lihat data {{ 'siswa' if batch.kind == 'students' else 'kelas' }}</a>
+  {% elif batch and batch.state == 'pending' %}
+    {% set rows = batch.payload.rows %}
+    {% set errors = batch.payload.errors %}
+    {% set label = 'Siswa' if batch.kind == 'students' else 'Kelas' %}
+    <div class="review-heading">
+      <div><h2 id="review-title">{{ 'Konfirmasi perubahan data ' ~ label if rows else 'File tidak dapat diproses' }}</h2>
+        <p>{{ 'File berhasil diperiksa. Tinjau perubahan berikut sebelum menerapkannya.' if rows else 'Tidak ada baris data yang valid. Mohon cek datanya.' }}</p>
+      </div>
+      <div class="review-actions">
+        <form method="post" action="{{ url_for('admin_import_cancel', token=batch.token) }}"><button class="button secondary" type="submit">Batal</button></form>
+        {% if rows %}<button class="button primary" type="submit" form="import-confirm" data-confirm-import>Simpan Perubahan</button>{% endif %}
+      </div>
+    </div>
+    {% if rows %}
+      <div class="import-summary">
+        <div class="summary-create"><span>Tambah</span><strong><span data-count="create">{{ rows|selectattr('action', 'equalto', 'create')|list|length }}</span> {{ label|lower }}</strong></div>
+        <div class="summary-update"><span>Edit</span><strong><span data-count="update">{{ rows|selectattr('action', 'equalto', 'update')|list|length }}</span> {{ label|lower }}</strong></div>
+        <div class="summary-error"><span>Terjadi kesalahan</span><strong>{{ batch.payload.total - rows|length }} {{ label|lower }}</strong></div>
+      </div>
+      <form id="import-confirm" method="post" action="{{ url_for('admin_import_confirm', token=batch.token) }}">
+        <div class="import-tables">
+          {% for action, title in [('create', 'Tambah'), ('update', 'Edit')] %}
+          <div><h3>{{ title }}</h3>{% include 'tables/import-rows.html' %}</div>
+          {% endfor %}
+        </div>
+      </form>
+      <p class="review-note">Sel berwarna menunjukkan nilai yang akan diubah. Hanya baris yang dipilih akan disimpan{% if errors %}; baris bermasalah dilewati{% endif %}.</p>
+    {% endif %}
+    {% if errors %}<h3>Kesalahan yang terdeteksi:</h3><div class="import-errors" role="region" aria-label="Kesalahan dalam file" tabindex="0">
+      {% for item in errors %}<div class="import-error"><img src="{{ url_for('static', path='icons/import-error.svg') }}" alt="" width="32" height="32"><div><strong>Sel {{ item.cell }}; Sheet {{ item.sheet }}</strong><p>{{ item.message }}</p></div></div>{% endfor %}
+    </div>{% endif %}
+  {% else %}
+    <h2 id="review-title" class="sr-only">Pratinjau impor</h2>
+    <p>Perubahan hanya akan diterapkan setelah<br>Anda melakukan konfirmasi di sini.</p>
+  {% endif %}
+</section>

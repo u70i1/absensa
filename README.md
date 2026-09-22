@@ -22,6 +22,27 @@ alongside the database. Replacing a photo removes the previous file after
 the database update succeeds. Existing students keep their initials until
 a photo is uploaded.
 
+## Spreadsheet imports
+
+Open **Impor** in the admin navigation (`/admin/import`). Download the student
+or class template, or edit an existing export from `app/spreadsheet_templates/`.
+Upload one `.xlsx` file at a time (up to 10 MiB and 10,000 data rows).
+
+The `students` and `classes` sheets use the export columns unchanged. A blank
+ID creates a record; an existing ID updates that record. Empty rows and the
+“Tentang Ekspor” sheet are ignored. Formulas are rejected; NISN and guardian
+phone values should be stored as text to preserve leading zeros.
+
+Uploads produce a preview with separate create/update tables, highlighted
+changes, and cell-specific errors. Exclude individual rows before confirming.
+Only selected valid rows are saved, in one transaction. Photos are preserved.
+Canceling leaves student/class data unchanged. Previews expire after one hour,
+belong to the uploading admin, detect stale edits, and cannot be applied twice.
+Expired previews are cleaned up when another file is uploaded.
+
+Install `backend/requirements.txt` and run `.venv/bin/alembic upgrade head`
+from `backend/` before using this page; the migration adds `import_batches`.
+
 ## Current To-Do
 
 ### Auth & Access

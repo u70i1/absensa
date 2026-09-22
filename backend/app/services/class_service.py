@@ -124,7 +124,7 @@ def get_classes_students(db: Session, class_id: int, query: ClassStudentListQuer
     return results
 
 
-def post_class(db: Session, class_name: str, grade: int):
+def post_class(db: Session, class_name: str, grade: int, *, commit: bool = True):
     class_exists = db.scalar(
         select(Class).where(Class.class_name == class_name).where(Class.grade == grade)
     )
@@ -134,12 +134,15 @@ def post_class(db: Session, class_name: str, grade: int):
     new_class = Class(class_name=class_name, grade=grade)
 
     db.add(new_class)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
 
     return new_class
 
 
-def update_class(db: Session, class_id: int, class_name: str, grade: int):
+def update_class(db: Session, class_id: int, class_name: str, grade: int, *, commit: bool = True):
     to_update = db.get(Class, class_id)
     if not to_update:
         raise ClassNotFound(status_code=404)
@@ -156,7 +159,10 @@ def update_class(db: Session, class_id: int, class_name: str, grade: int):
     to_update.class_name = class_name
     to_update.grade = grade
 
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
 
     return to_update
 

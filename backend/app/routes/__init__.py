@@ -4,6 +4,7 @@ from app.routes.admin import router as admin_router
 from app.routes.admin_auth import router as admin_auth_router
 from app.routes.admin_classes import router as admin_classes_router
 from app.routes.admin_photos import router as admin_photos_router
+from app.routes.admin_import import router as admin_import_router
 from app.routes.bulk_classes import router as bulk_classes_router
 from app.routes.bulk_scans import router as bulk_scans_router
 from app.routes.bulk_students import router as bulk_students_router
@@ -23,3 +24,4 @@ api_router.include_router(admin_auth_router)
 api_router.include_router(admin_router)
 api_router.include_router(admin_classes_router)
 api_router.include_router(admin_photos_router)
+api_router.include_router(admin_import_router)

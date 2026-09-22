@@ -10,7 +10,7 @@ from app.core.config import settings
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
-TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "export_templates"
+TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "spreadsheet_templates"
 STUDENT_TEMPLATE = TEMPLATE_DIR / "students_export_template.xlsx"
 STUDENT_COLUMNS = (
     ("ID", "id"),
@@ -26,6 +26,7 @@ CLASS_COLUMNS = (
     ("JENJANG", "grade"),
     ("NAMA KELAS", "class_name"),
 )
+NEW_ENTRY_ROWS = 100
 
 
 def _copy_cell_style(source, target) -> None:
@@ -33,6 +34,19 @@ def _copy_cell_style(source, target) -> None:
     target.number_format = source.number_format
     target.protection = copy(source.protection)
     target.alignment = copy(source.alignment)
+
+
+def _prepare_new_rows(sheet, column_count: int, last_data_row: int) -> None:
+    """Keep a styled entry area after exports, including text-only identifiers.
+
+    Validation and column number formats also cover rows beyond this area in
+    the source templates, without materializing a million empty cells.
+    """
+    last_entry_row = min(1048576, last_data_row + NEW_ENTRY_ROWS)
+    for row_number in range(last_data_row + 1, last_entry_row + 1):
+        sheet.row_dimensions[row_number].height = sheet.row_dimensions[2].height
+        for column in range(1, column_count + 1):
+            _copy_cell_style(sheet.cell(2, column), sheet.cell(row_number, column))
 
 
 def _replace_metadata(workbook, replacements: dict[str, object]) -> None:
@@ -102,7 +116,11 @@ def build_students_workbook(students, filter_summary: str) -> bytes:
 
     last_row = max(2, len(students) + 1)
     last_column = get_column_letter(len(STUDENT_COLUMNS))
-    sheet.tables["StudentsExportTable"].ref = f"A1:{last_column}{last_row}"
+    table = sheet.tables["StudentsExportTable"]
+    table.ref = f"A1:{last_column}{last_row}"
+    if table.autoFilter is not None:
+        table.autoFilter.ref = table.ref
+    _prepare_new_rows(sheet, len(STUDENT_COLUMNS), last_row)
 
     output = BytesIO()
     workbook.save(output)
@@ -155,7 +173,11 @@ def build_classes_workbook(classes, filter_summary: str) -> bytes:
 
     last_row = max(2, len(classes) + 1)
     last_column = get_column_letter(len(CLASS_COLUMNS))
-    sheet.tables["ClassesExportTable"].ref = f"A1:{last_column}{last_row}"
+    table = sheet.tables["ClassesExportTable"]
+    table.ref = f"A1:{last_column}{last_row}"
+    if table.autoFilter is not None:
+        table.autoFilter.ref = table.ref
+    _prepare_new_rows(sheet, len(CLASS_COLUMNS), last_row)
 
     output = BytesIO()
     workbook.save(output)

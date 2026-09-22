@@ -91,6 +91,7 @@ def post_student(
     class_id: int | None,
     current: bool,
     guardian_phone: str | None = None,
+    *, commit: bool = True,
 ) -> Student:
     """_summary_
 
@@ -119,7 +120,10 @@ def post_student(
     )
 
     db.add(new_student)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
 
     return new_student
 
@@ -132,6 +136,7 @@ def edit_student(
     class_id: int | None,
     current: bool,
     guardian_phone: str | None = None,
+    *, commit: bool = True,
 ) -> Student:
     """_Edit one student_
 
@@ -162,7 +167,10 @@ def edit_student(
     to_update.current = current
     to_update.guardian_phone = _normalize_guardian_phone(guardian_phone)
 
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
 
     return to_update
 
