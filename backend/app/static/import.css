@@ -118,3 +118,7 @@
   .review-actions > form, .review-actions > button, .review-actions > a { flex: 1; }
   .review-actions form button { width: 100%; }
 }
+
+.import-row-actions { display: flex; align-items: center; gap: 16px; }
+.import-row-actions .button { min-height: 32px; padding: 6px 12px; font-size: 12px; }
+.import-layout .student-modal { max-width: calc(100vw - 32px); }

@@ -7,7 +7,7 @@
     {% set row_key = row.key|default(row.row) %}
     <tr data-import-row data-action="{{ action }}">
     {% if row_kind == 'students' %}
-      <td class="{% if row.incoming_photo %}import-changed{% endif %}"><span class="avatar" aria-hidden="true">{% if row.incoming_photo %}<img src="{{ url_for('admin_import_photo', token=batch.token, nisn=values.nisn) }}" alt="">{% elif row.photo_path %}<img src="{{ url_for('admin_student_photo', student_id=values.id) }}?v={{ row.photo_path|urlencode }}" alt="">{% else %}{{ values.name|initials }}{% endif %}</span>{% if row.incoming_photo %}<small>Foto baru</small>{% endif %}</td>
+      <td class="{% if row.incoming_photo %}import-changed{% endif %}"><span class="avatar" aria-hidden="true">{% if row.incoming_photo %}<img src="{{ url_for('admin_import_photo', token=batch.token, nisn=row.photo_nisn|default(values.nisn)) }}" alt="">{% elif row.photo_path %}<img src="{{ url_for('admin_student_photo', student_id=values.id) }}?v={{ row.photo_path|urlencode }}" alt="">{% else %}{{ values.name|initials }}{% endif %}</span>{% if row.incoming_photo %}<small>Foto baru</small>{% endif %}</td>
       <td class="{% if action == 'update' and ('name' in row.changed or 'nisn' in row.changed or 'current' in row.changed) %}import-changed{% endif %}"><strong>{{ values.name }}</strong><small>NISN {{ values.nisn }}</small><small>{{ 'Aktif' if values.current else 'Tidak aktif' }} · Baris {{ row.row }}</small><small class="import-source">{{ row.file }}</small></td>
       <td class="{% if action == 'update' and 'class_id' in row.changed %}import-changed{% endif %}">{{ row.class_name }}</td>
       <td class="{% if action == 'update' and 'guardian_phone' in row.changed %}import-changed{% endif %}">{{ values.guardian_phone or '—' }}</td>
@@ -17,7 +17,9 @@
       <td class="{% if action == 'update' and 'class_name' in row.changed %}import-changed{% endif %}"><strong>{{ values.class_name }}</strong></td>
     {% endif %}
       {% set checked = selected_rows is none or row_key in selected_rows %}
-      <td><label class="import-row-toggle"><input class="sr-only" type="checkbox" name="selected" value="{{ row_key }}" {% if checked %}checked{% endif %} aria-label="Impor baris {{ row.row }}{% if row.file %} dari {{ row.file }}{% endif %}"><span class="import-cancel-icon" aria-hidden="true"><img src="{{ url_for('static', path='icons/import-error.svg') }}" alt="" width="14" height="14"></span><span data-row-toggle>{{ 'Batalkan' if checked else 'Dibatalkan' }}</span></label></td>
+      <td><div class="import-row-actions"><button type="button" class="button secondary"
+        hx-get="{{ url_for('admin_import_row_edit', token=batch.token, key=row_key) }}"
+        hx-target="#modal-content" hx-swap="innerHTML" aria-label="Edit baris {{ row.row }} dari {{ row.file }}">Edit</button><label class="import-row-toggle"><input class="sr-only" type="checkbox" name="selected" value="{{ row_key }}" {% if checked %}checked{% endif %} aria-label="Impor baris {{ row.row }}{% if row.file %} dari {{ row.file }}{% endif %}"><span class="import-cancel-icon" aria-hidden="true"><img src="{{ url_for('static', path='icons/import-error.svg') }}" alt="" width="14" height="14"></span><span data-row-toggle>{{ 'Batalkan' if checked else 'Dibatalkan' }}</span></label></div></td>
     </tr>
   {% else %}<tr><td colspan="{{ 5 if row_kind == 'students' else 4 }}" class="import-empty">Tidak ada data untuk {{ 'ditambahkan' if action == 'create' else 'diperbarui' }}.</td></tr>{% endfor %}
   </tbody>

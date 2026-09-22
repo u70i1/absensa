@@ -1,6 +1,7 @@
 """Review spreadsheets and archive photos, then apply selected rows atomically."""
 
 from collections import Counter
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
@@ -289,6 +290,54 @@ def get_preview_photo(db: Session, admin_id: int, token: str, nisn: str) -> byte
     return photo.content
 
 
+def get_editable_row(db: Session, admin_id: int, token: str, key: int, *, lock=False):
+    batch = get_preview(db, admin_id, token, lock=lock)
+    if batch.state != "pending":
+        raise AppException("Hanya pratinjau yang belum dikonfirmasi yang dapat diedit.", 409)
+    row = next((row for row in batch.payload["rows"] if row.get("key", row["row"]) == key), None)
+    if row is None:
+        raise AppException("Baris pratinjau tidak ditemukan.", 404)
+    return batch, row
+
+
+def edit_preview_row(db: Session, admin_id: int, token: str, key: int, values: dict, revision: int):
+    """Save a validated draft, retaining the original identity and stale-data snapshot."""
+    batch, original = get_editable_row(db, admin_id, token, key, lock=True)
+    if revision != original.get("revision", 0):
+        raise AppException("Baris ini sudah diedit. Tutup lalu buka kembali editor untuk melihat perubahan terbaru.", 409)
+    kind = original.get("kind", batch.kind)
+    id_field = "id" if kind == "students" else "class_id"
+    fields = [field for _, field in COLUMNS[kind] if field != id_field]
+    try:
+        parsed = {field: _value(field, values.get(field)) for field in fields}
+        parsed[id_field] = original["values"][id_field]
+        schema = StudentImportRow if kind == "students" else ClassImportRow
+        parsed = schema.model_validate(parsed).model_dump()
+    except ValidationError as exc:
+        raise AppException(" ".join(FIELD_ERRORS[str(error["loc"][0])] for error in exc.errors()), 422) from exc
+    except ValueError as exc:
+        raise AppException(str(exc), 422) from exc
+    payload = deepcopy(batch.payload)
+    candidate = next(row for row in payload["rows"] if row.get("key", row["row"]) == key)
+    candidate["values"] = parsed
+    group = [row for row in payload["rows"] if row.get("kind", batch.kind) == kind]
+    reviewed, errors = _review_rows(db, kind, group)
+    if errors:
+        raise AppException(errors[0]["message"], 422)
+    updated = next(row for row in reviewed if row.get("key", row["row"]) == key)
+    # Do not refresh 'before': editing a draft must never bypass stale-write checks.
+    candidate["changed"] = [field for field in fields if original["before"] is None or parsed[field] != original["before"][field]]
+    if kind == "students":
+        candidate["class_name"] = updated["class_name"]
+    if original.get("incoming_photo"):
+        candidate["photo_nisn"] = original.get("photo_nisn", original["values"]["nisn"])
+        candidate["changed"].append("photo_path")
+    candidate["revision"] = revision + 1
+    batch.payload = payload
+    db.commit()
+    return batch
+
+
 def apply_preview(db: Session, admin_id: int, token: str, selected: list[int]) -> ImportBatch:
     batch = get_preview(db, admin_id, token, lock=True)
     if batch.state == "applied":
@@ -327,7 +376,7 @@ def apply_preview(db: Session, admin_id: int, token: str, selected: list[int]) -
                     else:
                         student = student_service.edit_student(db, item_id, **values, commit=False)
                     if row.get("incoming_photo"):
-                        photo = db.get(ImportPhoto, (token, values["nisn"]))
+                        photo = db.get(ImportPhoto, (token, row.get("photo_nisn", values["nisn"])))
                         if photo is None:
                             raise AppException("Foto pratinjau tidak tersedia. Unggah arsip kembali.", 409)
                         path = student_photo_service.store_normalized_photo(photo.content)

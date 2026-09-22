@@ -4,12 +4,14 @@ from typing import Annotated, Literal
 
 from app.core.admin_auth import CurrentAdmin, require_admin
 from app.db.session import get_db
+from app.models.class_ import Class
 from app.services import export_service, import_service
 from app.services.exceptions import AppException
 from app.templating import templates
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.exceptions import HTTPException
@@ -19,17 +21,64 @@ Db = Annotated[Session, Depends(get_db)]
 Kind = Literal["students", "classes"]
 
 
-def render_import(request, batch=None, error=None, status_code=200, selected_rows=None):
+def render_import(request, batch=None, error=None, status_code=200, selected_rows=None, *, fragment=False):
     rows = batch.payload.get("rows", []) if batch else []
     groups = [
         {"kind": kind, "label": label, "rows": [row for row in rows if row.get("kind", batch.kind) == kind]}
         for kind, label in (("students", "Siswa"), ("classes", "Kelas"))
     ] if batch else []
     response = templates.TemplateResponse(
-        request=request, name="import-dashboard.html",
+        request=request, name="tables/import-review.html" if fragment else "import-dashboard.html",
         context={"batch": batch, "error": error, "selected_rows": selected_rows, "review_groups": groups}, status_code=status_code,
     )
     response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def render_row_editor(request, db, batch, row, *, values=None, error=None, status_code=200, revision=None):
+    if values is None:
+        values = dict(row["values"])
+        if "current" in values:
+            values["current"] = "Aktif" if values["current"] else "Tidak aktif"
+    response = templates.TemplateResponse(
+        request=request, name="modals/import-row-form.html",
+        context={"batch": batch, "row": row, "values": values, "error": error,
+                 "revision": row.get("revision", 0) if revision is None else revision,
+                 "kind": row.get("kind", batch.kind),
+                 "classes": list(db.scalars(select(Class).order_by(Class.grade, Class.class_name)))},
+        status_code=status_code,
+    )
+    response.headers.update({"Cache-Control": "no-store", "X-Admin-Fragment": "modal"})
+    return response
+
+
+@router.get("/{token}/rows/{key}/edit", name="admin_import_row_edit")
+def edit_import_row(request: Request, token: str, key: int, db: Db, admin: CurrentAdmin):
+    batch, row = import_service.get_editable_row(db, admin.id, token, key)
+    return render_row_editor(request, db, batch, row)
+
+
+@router.post("/{token}/rows/{key}/edit", name="admin_import_row_update")
+def update_import_row(
+    request: Request, token: str, key: int, db: Db, admin: CurrentAdmin,
+    revision: Annotated[int, Form()],
+    name: Annotated[str, Form()] = "", nisn: Annotated[str, Form()] = "",
+    class_id: Annotated[str, Form()] = "", current: Annotated[str, Form()] = "",
+    guardian_phone: Annotated[str, Form()] = "", grade: Annotated[str, Form()] = "",
+    class_name: Annotated[str, Form()] = "", selected: Annotated[list[int], Form()] = [],
+):
+    values = dict(name=name, nisn=nisn, class_id=class_id, current=current,
+                  guardian_phone=guardian_phone, grade=grade, class_name=class_name)
+    try:
+        batch = import_service.edit_preview_row(db, admin.id, token, key, values, revision)
+    except AppException as exc:
+        db.rollback()
+        batch, row = import_service.get_editable_row(db, admin.id, token, key)
+        return render_row_editor(request, db, batch, row, values=values, error=exc.detail,
+                                 status_code=exc.status_code, revision=revision)
+    response = render_import(request, batch, selected_rows=selected, fragment=True)
+    response.headers.update({"HX-Retarget": "#import-review", "HX-Reswap": "outerHTML",
+                             "HX-Trigger-After-Swap": "importRowSaved"})
     return response
 
 

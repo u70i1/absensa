@@ -58,8 +58,10 @@ document.querySelectorAll("[data-import-upload]").forEach((form) => {
   });
 });
 
-const confirmation = document.getElementById("import-confirm");
-if (confirmation) {
+function bindImportConfirmation() {
+  const confirmation = document.getElementById("import-confirm");
+  if (!confirmation || confirmation.dataset.bound) return;
+  confirmation.dataset.bound = "true";
   const submit = document.querySelector("[data-confirm-import]");
   confirmation.addEventListener("change", () => {
     const counts = { create: 0, update: 0 };
@@ -77,6 +79,13 @@ if (confirmation) {
   });
   confirmation.dispatchEvent(new Event("change"));
 }
+
+bindImportConfirmation();
+document.addEventListener("htmx:afterSwap", bindImportConfirmation);
+document.addEventListener("importRowSaved", () => {
+  document.querySelector("#student-modal [data-close-modal]")?.click();
+  document.getElementById("import-review")?.focus();
+});
 
 if (window.location.hash === "#import-review") document.getElementById("import-review")?.focus();
 window.addEventListener("pageshow", (event) => {
