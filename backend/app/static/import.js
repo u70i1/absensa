@@ -81,6 +81,20 @@ function bindImportConfirmation() {
 }
 
 bindImportConfirmation();
+// Delegate so refreshed preview rows behave the same after saving an edit.
+document.addEventListener("click", (event) => {
+  if (event.defaultPrevented || event.target.closest("[data-import-actions], a, button, input, label, select, textarea")) return;
+  const row = event.target.closest("[data-import-row]");
+  if (!row || window.getSelection()?.toString()) return;
+  row.focus({ preventScroll: true });
+  htmx.trigger(row, "editImportRow");
+});
+document.addEventListener("keydown", (event) => {
+  if (event.defaultPrevented || !event.target.matches("[data-import-row]")) return;
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  if (!event.repeat) htmx.trigger(event.target, "editImportRow");
+});
 document.addEventListener("htmx:afterSwap", bindImportConfirmation);
 document.addEventListener("importRowSaved", () => {
   document.querySelector("#student-modal [data-close-modal]")?.click();

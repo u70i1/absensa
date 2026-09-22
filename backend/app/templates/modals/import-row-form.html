@@ -1,7 +1,6 @@
 <div class="modal-heading">
   <h2 id="modal-title" tabindex="-1">Edit baris {{ row.row }}</h2>
   <p class="import-source">{{ row.file }} · {{ 'Siswa' if kind == 'students' else 'Kelas' }}</p>
-  <p>Perubahan disimpan ke pratinjau. Data diterapkan setelah konfirmasi impor.</p>
 </div>
 {% set action = url_for('admin_import_row_update', token=batch.token, key=row.key|default(row.row)) %}
 <form class="student-form" method="post" action="{{ action }}"

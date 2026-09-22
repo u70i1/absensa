@@ -119,6 +119,8 @@
   .review-actions form button { width: 100%; }
 }
 
-.import-row-actions { display: flex; align-items: center; gap: 16px; }
-.import-row-actions .button { min-height: 32px; padding: 6px 12px; font-size: 12px; }
+[data-import-row] { cursor: pointer; }
+[data-import-row]:hover > td:not([data-import-actions]) { box-shadow: inset 0 0 0 999px rgb(0 106 104 / 5%); }
+[data-import-row]:focus-visible { outline-offset: -2px; }
+[data-import-actions] { cursor: default; }
 .import-layout .student-modal { max-width: calc(100vw - 32px); }
