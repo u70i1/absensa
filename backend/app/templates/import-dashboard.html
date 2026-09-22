@@ -46,7 +46,7 @@
         <img src="{{ url_for('static', path='icons/import-spreadsheet.svg') }}" alt="" width="24" height="24">
         <div class="import-file-detail"><strong
             data-file-name>{{ batch.filename if pending else 'Tarik file ke sini atau pilih file' }}</strong><span
-            data-file-size>{{ 'File sudah diperiksa' if pending else 'Excel (.xlsx) hingga 10 MB atau arsip hingga 100 MB' }}</span>
+            data-file-size>{{ 'File sudah diperiksa' if pending else 'Excel (.xlsx) hingga 10 MB atau arsip (.zip, .rar, dsb) hingga 100 MB' }}</span>
         </div>
         <label class="button secondary import-picker">Pilih file<input type="file" name="file"
             accept=".xlsx,.zip,.rar,.7z,.tar,.gz,.tgz,.bz2,.tbz2,.xz,.txz" required
