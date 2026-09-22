@@ -1,44 +1,64 @@
 {% extends 'base.html' %}
 {% block page_title %}Impor Data{% endblock %}
 {% block styles %}
-<link rel="stylesheet" href="{{ url_for('static', path='import.css') }}">
-<script defer src="{{ url_for('static', path='import.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', path='import.css') }}">
+  <script defer src="{{ url_for('static', path='import.js') }}"></script>
 {% endblock %}
 {% block content %}
-{% set active_tab = 'import' %}
-{% include 'navigation/admin-header.html' %}
-<main class="import-page">
-  <div class="import-heading">
-    <div><h1>Impor data</h1><p>Tambah atau perbarui data secara massal menggunakan template Excel.</p></div>
-    <a class="import-link" href="#import-guide" data-import-guide><img src="{{ url_for('static', path='icons/import-external-link.svg') }}" alt="" width="16" height="16">Lihat dokumentasi tentang mengimpor data dari Excel</a>
-  </div>
-  <div class="import-cards">
-    {% for kind, label in [('students', 'Siswa'), ('classes', 'Kelas')] %}
+  {% set active_tab = 'import' %}
+  {% include 'navigation/admin-header.html' %}
+  <main class="import-page">
+    <div class="import-heading">
+      <div>
+        <h1>Impor data</h1>
+        <p>Tambah atau perbarui data siswa dan kelas dari Excel.</p>
+      </div>
+    </div>
+    <section class="import-templates" aria-labelledby="template-title">
+      <div class="import-section-heading">
+        <span class="import-step">1</span>
+        <div>
+          <h2 id="template-title">Siapkan template</h2>
+          <p>Unduh template kosong, atau ekspor file dari data yang sudah ada, lalu isi atau ubah datanya di Excel.
+          </p>
+        </div>
+      </div>
+      <div class="template-actions">
+        {% for kind, label in [('students', 'Siswa'), ('classes', 'Kelas')] %}
+          <a class="template-button" href="{{ url_for('admin_import_template', kind=kind) }}">
+            <img src="{{ url_for('static', path='icons/import-download.svg') }}" alt="" width="18" height="18">
+            <span><strong>Template {{ label }}</strong><small>Unduh file .xlsx</small></span>
+          </a>
+        {% endfor %}
+      </div>
+    </section>
     {% set pending = batch and batch.state == 'pending' %}
-    <form class="import-card" method="post" enctype="multipart/form-data" action="{{ url_for('admin_import_preview', kind=kind) }}" data-import-upload>
-      <div><h2>{{ label }}</h2><p>{{ 'Tambah siswa baru atau perbarui data siswa yang sudah terdaftar.' if kind == 'students' else 'Tambah kelas baru atau perbarui informasi kelas yang ada.' }}</p></div>
-      <a class="import-link" href="{{ url_for('admin_import_template', kind=kind) }}"><img src="{{ url_for('static', path='icons/import-download.svg') }}" alt="" width="16" height="16">Unduh Template Excel {{ label }}</a>
+    <form class="import-upload" method="post" enctype="multipart/form-data" action="{{ url_for('admin_import_preview') }}"
+      data-import-upload>
+      <div class="import-section-heading">
+        <span class="import-step">2</span>
+        <div>
+          <h2>Unggah file</h2>
+          <p>Sistem akan mengenali data siswa, kelas, dan foto secara otomatis.</p>
+        </div>
+      </div>
       <div class="import-file">
-        <img src="{{ url_for('static', path='icons/import-spreadsheet.svg') }}" alt="" width="20" height="20">
-        <div class="import-file-detail"><strong data-file-name>{{ batch.filename if pending and batch.kind == kind else 'Pilih file .xlsx' }}</strong><span data-file-size>{{ 'File sudah diperiksa' if pending and batch.kind == kind else 'Satu file · Maksimal 10 MB' }}</span></div>
-        <label class="button secondary import-picker">Pilih file<input type="file" name="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required aria-label="Pilih file Excel {{ label }}" {% if pending %}disabled{% endif %}></label>
+        <img src="{{ url_for('static', path='icons/import-spreadsheet.svg') }}" alt="" width="24" height="24">
+        <div class="import-file-detail"><strong
+            data-file-name>{{ batch.filename if pending else 'Pilih satu file untuk diperiksa' }}</strong><span
+            data-file-size>{{ 'File sudah diperiksa' if pending else 'Excel (.xlsx) hingga 10 MB atau arsip hingga 100 MB' }}</span>
+        </div>
+        <label class="button secondary import-picker">Pilih file<input type="file" name="file"
+            accept=".xlsx,.zip,.rar,.7z,.tar,.gz,.tgz,.bz2,.tbz2,.xz,.txz" required
+            aria-label="Pilih file Excel atau arsip" {% if pending %}disabled{% endif %}></label>
+      </div>
+      <div class="import-upload-footer">
+        <p class="import-format-note">Arsip dapat berisi beberapa Excel dan folder <code>photos/</code> opsional.</p>
+        <button class="button primary" type="submit"
+          {% if pending %}disabled{% endif %}>{{ 'Selesaikan konfirmasi di bawah' if pending else 'Periksa File' }}</button>
       </div>
       <p class="field-error" data-file-error role="alert" hidden></p>
-      <button class="button primary" type="submit" {% if pending %}disabled{% endif %}>{{ 'Selesaikan konfirmasi di bawah' if pending else 'Impor ' ~ label }}</button>
     </form>
-    {% endfor %}
-  </div>
-  {% include 'tables/import-review.html' %}
-  <details id="import-guide" class="import-guide">
-    <summary>Panduan mengimpor data</summary>
-    <ol>
-      <li>Unduh template Siswa atau Kelas, atau gunakan file hasil ekspor. Unggah satu file .xlsx dengan maksimal 10.000 baris data.</li>
-      <li>Pertahankan nama sheet (<code>students</code> atau <code>classes</code>), judul kolom, dan urutannya. Sheet “Tentang Ekspor” tidak diimpor.</li>
-      <li>Untuk mengedit, pertahankan ID yang sudah ada. Untuk membuat siswa atau kelas baru, kosongkan ID. Baris kosong diabaikan.</li>
-      <li>NISN harus tepat 10 digit dan disimpan sebagai teks. Pilih STATUS <strong>Aktif</strong> atau <strong>Tidak aktif</strong>. ID KELAS siswa harus sudah terdaftar, atau kosong jika belum memiliki kelas.</li>
-      <li>NOMOR WALI boleh kosong; jika diisi, gunakan angka saja, diawali 08 atau 628. JENJANG kelas: 1–20; NAMA KELAS: maksimal 20 karakter.</li>
-      <li>Gunakan nilai langsung, bukan rumus. Periksa ringkasan dan kesalahan, batalkan baris yang tidak diinginkan, lalu pilih <strong>Simpan Perubahan</strong>. Baris bermasalah tidak disimpan. Pratinjau berlaku selama satu jam.</li>
-    </ol>
-  </details>
-</main>
+    {% include 'tables/import-review.html' %}
+  </main>
 {% endblock %}

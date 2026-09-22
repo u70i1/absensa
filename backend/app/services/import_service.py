@@ -1,4 +1,4 @@
-"""Read one workbook, review changes, then apply selected rows atomically."""
+"""Review spreadsheets and archive photos, then apply selected rows atomically."""
 
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -9,10 +9,10 @@ from typing import BinaryIO
 from zipfile import ZipFile
 
 from app.models.class_ import Class
-from app.models.import_batch import ImportBatch
+from app.models.import_batch import ImportBatch, ImportPhoto
 from app.models.student import Student
 from app.schemas.import_ import ClassImportRow, StudentImportRow
-from app.services import class_service, student_service
+from app.services import class_service, import_archive_service, student_photo_service, student_service
 from app.services.exceptions import AppException
 from app.services.export_service import CLASS_COLUMNS, STUDENT_COLUMNS
 from openpyxl import load_workbook
@@ -68,7 +68,7 @@ def _value(field, value):
     return value
 
 
-def _read_rows(content: bytes, kind: str):
+def _read_rows(content: bytes, kind: str | None = None):
     try:
         with ZipFile(BytesIO(content)) as archive:
             entries = archive.infolist()
@@ -82,6 +82,11 @@ def _read_rows(content: bytes, kind: str):
     except Exception as exc:
         raise AppException("File Excel rusak atau bukan file .xlsx yang valid.", 422) from exc
     try:
+        detected = [name for name in COLUMNS if name in workbook.sheetnames]
+        if kind is None:
+            if len(detected) != 1:
+                raise AppException("File harus memiliki tepat satu sheet data: students atau classes.", 422)
+            kind = detected[0]
         if kind not in workbook.sheetnames:
             raise AppException(f"Sheet {kind} tidak ditemukan. Gunakan template yang sesuai.", 422)
         if any(name in workbook.sheetnames for name in COLUMNS if name != kind):
@@ -124,7 +129,7 @@ def _read_rows(content: bytes, kind: str):
                 parsed.append({"row": number, "values": values})
         if not used_rows:
             raise AppException("File tidak berisi data. Isi baris di bawah judul kolom terlebih dahulu.", 422)
-        return parsed, errors, used_rows
+        return kind, parsed, errors, used_rows
     except AppException:
         raise
     except Exception as exc:
@@ -161,7 +166,7 @@ def _review_rows(db: Session, kind: str, rows: list[dict]):
             row_errors.append(_error(kind, number, "nisn" if kind == "students" else "class_name", "NISN sudah digunakan atau berulang dalam file." if kind == "students" else "Kombinasi jenjang dan nama kelas sudah digunakan atau berulang dalam file."))
         if kind == "students" and values["class_id"] is not None and values["class_id"] not in classes:
             row_errors.append(_error(kind, number, "class_id", "Kelas tidak ditemukan. Gunakan ID kelas yang sudah terdaftar."))
-        errors.extend(row_errors)
+        errors.extend({**error, "file": row.get("file", "")} for error in row_errors)
         if row_errors:
             continue
         before = {field: getattr(existing[item_id], field) for field in fields} if item_id else None
@@ -175,25 +180,84 @@ def _review_rows(db: Session, kind: str, rows: list[dict]):
     return valid, errors
 
 
-def create_preview(db: Session, admin_id: int, kind: str, filename: str, source: BinaryIO) -> ImportBatch:
-    if kind not in COLUMNS:
+def create_preview(db: Session, admin_id: int, kind: str | None, filename: str, source: BinaryIO) -> ImportBatch:
+    if kind is not None and kind not in COLUMNS:
         raise AppException("Jenis impor tidak ditemukan.", 404)
-    if Path(filename).suffix.lower() != ".xlsx":
-        raise AppException("Pilih satu file dengan format .xlsx.", 422)
-    content = source.read(MAX_BYTES + 1)
-    if len(content) > MAX_BYTES:
-        raise AppException("Ukuran file maksimal 10 MB.", 413)
-    parsed, errors, total = _read_rows(content, kind)
-    valid, review_errors = _review_rows(db, kind, parsed)
+    archive = import_archive_service.is_archive(filename)
+    if not archive and Path(filename).suffix.lower() != ".xlsx":
+        raise AppException("Pilih file .xlsx, .zip, .rar, .7z, .tar, atau TAR terkompresi.", 422)
+    limit = import_archive_service.MAX_ARCHIVE_BYTES if archive else MAX_BYTES
+    content = source.read(limit + 1)
+    if len(content) > limit:
+        raise AppException("Ukuran file maksimal 100 MB untuk arsip atau 10 MB untuk Excel.", 413)
+    filename = filename.replace("\\", "/").rsplit("/", 1)[-1][:255]
+    workbooks, photos = import_archive_service.read_archive(content) if archive else ([(filename, content)], {})
+    grouped = {name: [] for name in COLUMNS}
+    errors, files = [], []
+    total = offset = expanded = 0
+    for name, workbook_content in workbooks:
+        try:
+            # Bound the combined XML expansion of all XLSX members as well.
+            try:
+                with ZipFile(BytesIO(workbook_content)) as workbook_zip:
+                    expanded += sum(entry.file_size for entry in workbook_zip.infolist())
+            except Exception:
+                raise AppException("File Excel rusak atau bukan file .xlsx yang valid.", 422)
+            if expanded > import_archive_service.MAX_EXPANDED_BYTES:
+                raise AppException("Total isi workbook terlalu besar setelah dibuka (maksimal 200 MB).", 413)
+            detected, parsed, file_errors, used = _read_rows(workbook_content, None if archive else kind)
+            total += used
+            if total > MAX_ROWS:
+                raise AppException("Maksimal 10.000 baris data untuk seluruh unggahan.", 413)
+            for row in parsed:
+                row.update(file=name, kind=detected, key=offset + row["row"])
+            grouped[detected].extend(parsed)
+            errors.extend({**error, "file": name} for error in file_errors)
+            files.append({"name": name, "kind": detected, "rows": used})
+            # Each sheet is bounded at 100,000 rows, so keys cannot collide.
+            offset += 100001
+        except AppException as exc:
+            if not archive or exc.status_code == 413:
+                raise
+            errors.append({"file": name, "cell": None, "sheet": None, "message": exc.detail})
+    valid = []
+    for detected, parsed in grouped.items():
+        reviewed, review_errors = _review_rows(db, detected, parsed)
+        valid.extend(reviewed)
+        errors.extend(review_errors)
+    staged_photos = {}
+    students = {row["values"]["nisn"]: row for row in valid if row["kind"] == "students"}
+    photo_bytes = 0
+    for nisn, (name, image_content) in photos.items():
+        try:
+            if nisn not in students:
+                raise AppException("Foto tidak memiliki baris siswa yang valid dengan NISN tersebut dalam unggahan ini.", 422)
+            normalized = student_photo_service.normalize_photo(BytesIO(image_content))
+            photo_bytes += len(normalized)
+            if photo_bytes > 50 * 1024 * 1024:
+                raise AppException("Total foto setelah diproses maksimal 50 MB.", 413)
+            staged_photos[nisn] = normalized
+            students[nisn]["incoming_photo"] = name
+            students[nisn]["changed"].append("photo_path")
+            if students[nisn]["before"] is not None:
+                students[nisn]["before"]["photo_path"] = students[nisn]["photo_path"]
+        except AppException as exc:
+            if exc.status_code == 413 and photo_bytes > 50 * 1024 * 1024:
+                raise
+            errors.append({"file": name, "cell": None, "sheet": "photos", "message": exc.detail})
     now = datetime.now(timezone.utc)
     db.execute(delete(ImportBatch).where(ImportBatch.expires_at < now))
+    detected_kinds = {item["kind"] for item in files}
+    batch_kind = next(iter(detected_kinds)) if len(detected_kinds) == 1 else "mixed"
     batch = ImportBatch(
-        token=token_urlsafe(32), admin_id=admin_id, kind=kind,
-        filename=filename.replace("\\", "/").rsplit("/", 1)[-1][:255], size=len(content),
-        payload={"rows": valid, "errors": errors + review_errors, "total": total},
+        token=token_urlsafe(32), admin_id=admin_id, kind=batch_kind,
+        filename=filename, size=len(content),
+        payload={"rows": valid, "errors": errors, "total": total, "files": files, "photo_count": len(staged_photos)},
         state="pending", expires_at=now + timedelta(hours=1),
     )
     db.add(batch)
+    db.flush()
+    db.add_all(ImportPhoto(batch_token=batch.token, nisn=nisn, content=data) for nisn, data in staged_photos.items())
     db.commit()
     return batch
 
@@ -213,7 +277,16 @@ def cancel_preview(db: Session, admin_id: int, token: str):
     if batch.state == "pending":
         batch.state = "cancelled"
         batch.payload = {}
+        db.execute(delete(ImportPhoto).where(ImportPhoto.batch_token == token))
         db.commit()
+
+
+def get_preview_photo(db: Session, admin_id: int, token: str, nisn: str) -> bytes:
+    batch = get_preview(db, admin_id, token)
+    photo = db.get(ImportPhoto, (token, nisn)) if batch.state == "pending" else None
+    if photo is None:
+        raise AppException("Foto pratinjau tidak ditemukan.", 404)
+    return photo.content
 
 
 def apply_preview(db: Session, admin_id: int, token: str, selected: list[int]) -> ImportBatch:
@@ -224,42 +297,60 @@ def apply_preview(db: Session, admin_id: int, token: str, selected: list[int]) -
         raise AppException("Impor ini sudah dibatalkan. Unggah file kembali.", 409)
     rows = batch.payload["rows"]
     selected_ids = set(selected)
-    if not selected_ids or not selected_ids.issubset({row["row"] for row in rows}):
+    if not selected_ids or not selected_ids.issubset({row.get("key", row["row"]) for row in rows}):
         raise AppException("Pilih setidaknya satu baris valid dari pratinjau.", 422)
-    chosen = [row for row in rows if row["row"] in selected_ids]
-    kind = batch.kind
-    id_field, model = ("id", Student) if kind == "students" else ("class_id", Class)
+    chosen = [row for row in rows if row.get("key", row["row"]) in selected_ids]
+    groups = {kind: [row for row in chosen if row.get("kind", batch.kind) == kind] for kind in ("classes", "students")}
+    new_photos, old_photos = [], []
     try:
         # Lock existing rows in a stable order and reject stale previews.
-        ids = sorted(row["values"][id_field] for row in chosen if row["before"] is not None)
-        locked = {getattr(item, id_field): item for item in db.scalars(select(model).where(getattr(model, id_field).in_(ids)).order_by(getattr(model, id_field)).with_for_update().execution_options(populate_existing=True))}
-        for row in chosen:
-            if row["before"] is not None:
-                item = locked.get(row["values"][id_field])
-                if item is None or any(getattr(item, field) != value for field, value in row["before"].items()):
-                    raise AppException("Data berubah sejak pratinjau dibuat. Batalkan lalu unggah kembali untuk meninjau perubahan terbaru.", 409)
-        _, errors = _review_rows(db, kind, chosen)
-        if errors:
-            raise AppException("Data tidak lagi valid: " + errors[0]["message"] + " Unggah file kembali.", 409)
-        for row in chosen:
-            values = dict(row["values"])
-            item_id = values.pop(id_field)
-            if kind == "students":
-                if item_id is None:
-                    student_service.post_student(db, **values, commit=False)
+        for kind, group in groups.items():
+            id_field, model = ("id", Student) if kind == "students" else ("class_id", Class)
+            ids = sorted(row["values"][id_field] for row in group if row["before"] is not None)
+            locked = {getattr(item, id_field): item for item in db.scalars(select(model).where(getattr(model, id_field).in_(ids)).order_by(getattr(model, id_field)).with_for_update().execution_options(populate_existing=True))}
+            for row in group:
+                if row["before"] is not None:
+                    item = locked.get(row["values"][id_field])
+                    if item is None or any(getattr(item, field) != value for field, value in row["before"].items()):
+                        raise AppException("Data berubah sejak pratinjau dibuat. Batalkan lalu unggah kembali untuk meninjau perubahan terbaru.", 409)
+            _, errors = _review_rows(db, kind, group)
+            if errors:
+                raise AppException("Data tidak lagi valid: " + errors[0]["message"] + " Unggah file kembali.", 409)
+        for kind, group in groups.items():
+            id_field = "id" if kind == "students" else "class_id"
+            for row in group:
+                values = dict(row["values"])
+                item_id = values.pop(id_field)
+                if kind == "students":
+                    if item_id is None:
+                        student = student_service.post_student(db, **values, commit=False)
+                    else:
+                        student = student_service.edit_student(db, item_id, **values, commit=False)
+                    if row.get("incoming_photo"):
+                        photo = db.get(ImportPhoto, (token, values["nisn"]))
+                        if photo is None:
+                            raise AppException("Foto pratinjau tidak tersedia. Unggah arsip kembali.", 409)
+                        path = student_photo_service.store_normalized_photo(photo.content)
+                        new_photos.append(path)
+                        old_photos.append(student.photo_path)
+                        student.photo_path = path
+                elif item_id is None:
+                    class_service.post_class(db, **values, commit=False)
                 else:
-                    student_service.edit_student(db, item_id, **values, commit=False)
-            elif item_id is None:
-                class_service.post_class(db, **values, commit=False)
-            else:
-                class_service.update_class(db, item_id, **values, commit=False)
+                    class_service.update_class(db, item_id, **values, commit=False)
         batch.state = "applied"
-        batch.payload = {"created": sum(row["action"] == "create" for row in chosen), "updated": sum(row["action"] == "update" for row in chosen), "skipped": batch.payload["total"] - len(chosen)}
+        batch.payload = {"created": sum(row["action"] == "create" for row in chosen), "updated": sum(row["action"] == "update" for row in chosen), "skipped": batch.payload["total"] - len(chosen), "photos_saved": len(new_photos)}
+        db.execute(delete(ImportPhoto).where(ImportPhoto.batch_token == token))
         db.commit()
-    except IntegrityError as exc:
+    except Exception as exc:
         db.rollback()
-        raise AppException("Data bertabrakan dengan perubahan lain. Tidak ada perubahan disimpan. Unggah file kembali.", 409) from exc
-    except Exception:
-        db.rollback()
+        for path in new_photos:
+            student_photo_service.remove_photo(path)
+        if isinstance(exc, IntegrityError):
+            raise AppException("Data bertabrakan dengan perubahan lain. Tidak ada perubahan disimpan. Unggah file kembali.", 409) from exc
+        if isinstance(exc, OSError):
+            raise AppException("Foto gagal disimpan. Tidak ada perubahan diterapkan. Silakan coba lagi.", 503) from exc
         raise
+    for path in old_photos:
+        student_photo_service.remove_photo(path)
     return batch
