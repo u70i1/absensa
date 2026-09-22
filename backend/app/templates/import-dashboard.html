@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block page_title %}Impor Data{% endblock %}
+{% block body_class %}import-layout{% endblock %}
 {% block styles %}
   <link rel="stylesheet" href="{{ url_for('static', path='import.css') }}">
   <script defer src="{{ url_for('static', path='import.js') }}"></script>
@@ -19,8 +20,7 @@
         <span class="import-step">1</span>
         <div>
           <h2 id="template-title">Siapkan template</h2>
-          <p>Unduh template kosong, atau ekspor file dari data yang sudah ada, lalu isi atau ubah datanya di Excel.
-          </p>
+          <p>Gunakan template berikut atau file hasil ekspor untuk mengisi dan memperbarui data.</p>
         </div>
       </div>
       <div class="template-actions">
@@ -42,10 +42,10 @@
           <p>Sistem akan mengenali data siswa, kelas, dan foto secara otomatis.</p>
         </div>
       </div>
-      <div class="import-file">
+      <div class="import-file" data-file-dropzone>
         <img src="{{ url_for('static', path='icons/import-spreadsheet.svg') }}" alt="" width="24" height="24">
         <div class="import-file-detail"><strong
-            data-file-name>{{ batch.filename if pending else 'Pilih satu file untuk diperiksa' }}</strong><span
+            data-file-name>{{ batch.filename if pending else 'Tarik file ke sini atau pilih file' }}</strong><span
             data-file-size>{{ 'File sudah diperiksa' if pending else 'Excel (.xlsx) hingga 10 MB atau arsip hingga 100 MB' }}</span>
         </div>
         <label class="button secondary import-picker">Pilih file<input type="file" name="file"

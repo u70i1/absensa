@@ -1,4 +1,4 @@
-<section id="import-review" class="import-review" aria-labelledby="review-title" tabindex="-1">
+<section id="import-review" class="import-review{% if not batch and not error %} import-review-placeholder{% endif %}" aria-labelledby="review-title" tabindex="-1">
   {% if error %}<div class="import-error" role="alert"><img src="{{ url_for('static', path='icons/import-error.svg') }}" alt="" width="32" height="32"><div><strong>File tidak dapat diproses</strong><p>{{ error }}</p></div></div>{% endif %}
   {% if batch and batch.state == 'applied' %}
     <h2 id="review-title">Impor berhasil</h2>
@@ -43,6 +43,6 @@
     </div>{% endif %}
   {% else %}
     <h2 id="review-title" class="sr-only">Pratinjau impor</h2>
-    <p>Perubahan hanya akan diterapkan setelah<br>Anda melakukan konfirmasi di sini.</p>
+    <p>Pratinjau akan muncul setelah file diperiksa. Anda dapat meninjau dan mengonfirmasi perubahan sebelum disimpan.</p>
   {% endif %}
 </section>

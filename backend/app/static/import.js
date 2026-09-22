@@ -2,6 +2,12 @@ document.querySelectorAll("[data-import-upload]").forEach((form) => {
   const input = form.querySelector('input[type="file"]');
   const error = form.querySelector("[data-file-error]");
   const submit = form.querySelector('button[type="submit"]');
+  const dropzone = form.querySelector("[data-file-dropzone]");
+  let uploading = false;
+  const showError = (message) => {
+    error.textContent = message;
+    error.hidden = !message;
+  };
   input.addEventListener("change", () => {
     const file = input.files[0];
     let message = "";
@@ -11,12 +17,42 @@ document.querySelectorAll("[data-import-upload]").forEach((form) => {
     if (file && !excel && !archive) message = "Pilih Excel, ZIP, RAR, 7z, TAR, atau TAR terkompresi.";
     if (file && file.size > (excel ? 10 : 100) * 1024 * 1024) message = "Excel maksimal 10 MB; arsip maksimal 100 MB.";
     input.setCustomValidity(message);
-    error.textContent = message;
-    error.hidden = !message;
+    showError(message);
     form.querySelector("[data-file-name]").textContent = file?.name || "Pilih file Excel atau arsip";
     form.querySelector("[data-file-size]").textContent = file ? `Siap diperiksa · ${Math.max(1, Math.ceil(file.size / 1024))} KB` : "Excel maksimal 10 MB · Arsip 100 MB";
   });
+  const isFileDrag = (event) => Array.from(event.dataTransfer?.types || []).includes("Files");
+  dropzone.addEventListener("dragover", (event) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    const available = !input.disabled && !uploading;
+    event.dataTransfer.dropEffect = available ? "copy" : "none";
+    dropzone.classList.toggle("is-dragging", available);
+  });
+  dropzone.addEventListener("dragleave", (event) => {
+    if (!dropzone.contains(event.relatedTarget)) dropzone.classList.remove("is-dragging");
+  });
+  dropzone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    dropzone.classList.remove("is-dragging");
+    if (input.disabled || uploading) return;
+    const files = event.dataTransfer?.files;
+    const items = Array.from(event.dataTransfer?.items || []);
+    if (items.some((item) => item.webkitGetAsEntry?.()?.isDirectory)) {
+      showError("Unggah folder sebagai satu file arsip terlebih dahulu.");
+      return;
+    }
+    if (!files?.length) return;
+    if (files.length !== 1) {
+      showError("Pilih satu file saja. Gabungkan beberapa file dalam satu arsip.");
+      return;
+    }
+    input.files = files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    if (input.checkValidity()) form.requestSubmit();
+  });
   form.addEventListener("submit", () => {
+    uploading = true;
     document.querySelectorAll("[data-import-upload] button[type='submit']").forEach((button) => { button.disabled = true; });
     submit.textContent = "Memeriksa file…";
   });
