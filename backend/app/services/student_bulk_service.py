@@ -157,7 +157,8 @@ def update_students_bulk(
     nisns_payload = {student.id: student.nisn for student in payload}
     after_transaction = before_transaction | nisns_payload
 
-    student_ids_db = set(db.scalars(select(Student.id)).all())
+    photo_paths = dict(db.execute(select(Student.id, Student.photo_path)).all())
+    student_ids_db = set(photo_paths)
     class_ids_db = set(db.scalars(select(Class.class_id)).all())
     nisn_batch_counts = count_nisns(payload)
     nisn_counts_after_transaction = Counter(after_transaction.values())
@@ -188,7 +189,10 @@ def update_students_bulk(
             "guardian_phone": _normalize_guardian_phone(student.guardian_phone),
         }
         updating_students.append(updating_student)
-        succeeded.append({"index": index, "item": updating_student})
+        succeeded.append({
+            "index": index,
+            "item": {**updating_student, "photo_path": photo_paths[student.id]},
+        })
 
     db.execute(text("SET CONSTRAINTS students_nisn_key DEFERRED"))
     db.execute(update(Student), updating_students)

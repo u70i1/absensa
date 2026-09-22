@@ -58,6 +58,13 @@ class StudentResponse(StudentBase, OrmResponseBase):
 
     id: int
     class_name: str | None = None
+    photo_path: str | None = None
+
+
+class StudentPhotoResponse(BaseModel):
+    student_id: int
+    photo_path: str
+    photo_url: str
 
 
 class ClassStudentListQuery(PaginationQueryBase):

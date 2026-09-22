@@ -413,6 +413,12 @@ button.htmx-request:not(:disabled),
   border: 0;
   background: transparent;
 }
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
 .student-name {
   font-weight: var(--font-weight-semibold);
 }

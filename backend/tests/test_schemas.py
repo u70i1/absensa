@@ -44,7 +44,7 @@ def test_response_bases_preserve_orm_support():
         id=2, name="Shaun", nisn="1234567890", current=True, class_id=1
     )
     assert StudentResponse.model_validate(student).model_dump() == {
-        **vars(student), "class_name": None
+        **vars(student), "class_name": None, "photo_path": None
     }
 
 
@@ -72,7 +72,7 @@ def test_bulk_response_preserves_nested_fields_and_failure_default():
             "index": 0,
             "item": {
                 "id": 1, "nisn": "1234567890", "name": "Shaun",
-                "current": True, "class_id": None, "class_name": None,
+                "current": True, "class_id": None, "class_name": None, "photo_path": None,
             },
         }],
         "failed": [{

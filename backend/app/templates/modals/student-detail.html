@@ -1,5 +1,5 @@
 <div class="modal-heading detail-identity">
-  <span class="avatar avatar-large" aria-hidden="true">{{ student.name|initials }}</span>
+  <span class="avatar avatar-large" data-student-avatar="{{ student.id }}" aria-hidden="true">{% include 'avatars/student.html' %}</span>
   <div>
     <h2 id="modal-title" tabindex="-1">{{ student.name }}</h2>
     <p class="student-nisn">NISN {{ student.nisn }}</p>

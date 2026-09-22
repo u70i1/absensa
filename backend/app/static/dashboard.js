@@ -156,18 +156,34 @@ document.addEventListener("htmx:beforeRequest", (event) => {
 });
 
 document.addEventListener("htmx:afterRequest", (event) => {
-  if (event.detail.successful) {
-    photoUploadStatus(event, "Foto berhasil diunggah.");
+  if (event.detail.successful && event.detail.elt?.closest("[data-photo-upload]")) {
+    try {
+      const result = JSON.parse(event.detail.xhr.responseText);
+      if (!result.photo_url || !Number.isInteger(result.student_id)) throw new Error("Invalid photo response");
+      document.querySelectorAll(`[data-student-avatar="${result.student_id}"]`).forEach((avatar) => {
+        const image = document.createElement("img");
+        image.src = result.photo_url;
+        image.alt = "";
+        avatar.replaceChildren(image);
+      });
+      photoUploadStatus(event, "Foto berhasil diunggah.");
+      event.detail.elt.closest("[data-photo-upload]").reset();
+    } catch {
+      photoUploadStatus(event, "Foto gagal diunggah. Silakan masuk kembali lalu coba lagi.", true);
+    }
   }
 });
 
 document.addEventListener("htmx:responseError", (event) => {
+  let photoError = "Foto gagal diunggah. Silakan coba lagi.";
+  try {
+    const detail = JSON.parse(event.detail.xhr.responseText).detail;
+    if (typeof detail === "string") photoError = detail;
+  } catch { /* Use the fallback for non-JSON errors. */ }
   if (
     photoUploadStatus(
       event,
-      event.detail.xhr.status === 404 || event.detail.xhr.status === 501
-        ? "Unggah foto belum tersedia. Perubahan data siswa tetap dapat disimpan."
-        : "Foto gagal diunggah. Silakan coba lagi.",
+      photoError,
       true,
     )
   )

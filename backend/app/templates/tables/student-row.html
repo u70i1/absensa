@@ -1,5 +1,5 @@
 <tr class="student-row" data-student-id="{{ student.id }}">
-  <td><span class="avatar" aria-hidden="true">{{ student.name|initials }}</span></td>
+  <td><span class="avatar" data-student-avatar="{{ student.id }}" aria-hidden="true">{% include 'avatars/student.html' %}</span></td>
   <td><button type="button" class="student-identity" aria-haspopup="dialog"
       hx-get="{{ url_for('admin_student_detail', student_id=student.id) }}?{{ request.url.query }}"
       hx-target="#modal-content" hx-swap="innerHTML">

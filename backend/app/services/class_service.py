@@ -107,6 +107,7 @@ def get_classes_students(db: Session, class_id: int, query: ClassStudentListQuer
             Student.nisn,
             Student.current,
             Student.guardian_phone,
+            Student.photo_path,
             Class.class_name,
             Class.class_id,
         )

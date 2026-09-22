@@ -1,0 +1,5 @@
+{% if student.photo_path %}
+  <img src="{{ url_for('admin_student_photo', student_id=student.id) }}?v={{ student.photo_path|urlencode }}" alt="">
+{% else %}
+  {{ student.name|initials }}
+{% endif %}

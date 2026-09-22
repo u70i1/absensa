@@ -59,6 +59,7 @@ def _student_list_statement(query: StudentListQuery):
             Student.nisn,
             Student.current,
             Student.guardian_phone,
+            Student.photo_path,
             Class.class_name,
             Class.class_id,
         )

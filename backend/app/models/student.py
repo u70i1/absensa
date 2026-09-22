@@ -30,6 +30,7 @@ class Student(Base):
     guardian_phone: Mapped[str | None] = mapped_column(
         String(32), nullable=True, comment="Phone number of the student's guardian."
     )
+    photo_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     scan_logs: Mapped[list["ScanLog"]] = relationship(  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
         back_populates="student", order_by="ScanLog.timestamp", passive_deletes=True
     )

@@ -4,14 +4,14 @@
   </p>
 </div>
 {% if student %}
-  <form class="photo-upload" method="post" action="/photo" enctype="multipart/form-data" hx-post="/photo"
+  <form class="photo-upload" method="post" action="/admin/students/{{ student.id }}/photo" enctype="multipart/form-data" hx-post="/admin/students/{{ student.id }}/photo"
     hx-encoding="multipart/form-data" hx-swap="none" hx-disabled-elt="find button[type='submit']" hx-sync="this:drop"
     data-photo-upload>
-    <span class="avatar avatar-large" aria-hidden="true">{{ student.name|initials }}</span>
-    <input type="hidden" name="student_id" value="{{ student.id }}">
+    <span class="avatar avatar-large" data-student-avatar="{{ student.id }}" aria-hidden="true">{% include 'avatars/student.html' %}</span>
     <div class="form-field">
       <label for="student-photo">Foto siswa</label>
-      <input id="student-photo" type="file" name="photo" accept="image/*" required aria-describedby="photo-status">
+      <input id="student-photo" type="file" name="photo" accept="image/jpeg,image/png,image/webp" required aria-describedby="photo-help photo-status">
+      <p id="photo-help" class="field-help">JPEG, PNG, atau WebP. Maksimal 5 MB dan 20 megapiksel.</p>
       <button type="submit" class="button secondary">Unggah Foto</button>
       <p id="photo-status" class="field-help" role="status" aria-live="polite"></p>
     </div>

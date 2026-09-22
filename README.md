@@ -4,6 +4,24 @@ An ongoing project.
 
 Contributions are welcomed! Please check out the to-do list below for current priorities.
 
+## Student profile photos
+
+After installing `backend/requirements.txt`, run `.venv/bin/alembic upgrade head`
+from `backend/` to add the nullable `students.photo_path` column.
+
+The student edit dialog uploads multipart field `photo` to
+`POST /admin/students/{student_id}/photo`. Both this endpoint and
+`GET /admin/students/{student_id}/photo` require an active admin session.
+The upload returns `student_id`, `photo_path`, and `photo_url`.
+
+JPEG, PNG, and WebP images are accepted up to 5 MiB and 20 megapixels. Images
+are resized to fit 1024 × 1024, stripped of metadata, and saved as JPEG with
+generated filenames under `PHOTOS_DIR` (default: `photos`, relative to the
+backend working directory). Keep this directory persistent and back it up
+alongside the database. Replacing a photo removes the previous file after
+the database update succeeds. Existing students keep their initials until
+a photo is uploaded.
+
 ## Current To-Do
 
 ### Auth & Access
@@ -74,4 +92,3 @@ createdb -h localhost -p 5433 -U attendance test_attendance
 (Again, swap `5433` for whatever port you set in `docker-compose.yml`.)
 
 This creates a `test_attendance` database, which `pytest` reads from an environment variable.
-
