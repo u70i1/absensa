@@ -52,6 +52,14 @@ document.addEventListener("click", (event) => {
   if (event.target.closest("[data-close-modal]")) closeModal();
 });
 
+// Delegate to the real link so rows replaced by HTMX remain clickable.
+document.addEventListener("click", (event) => {
+  if (event.defaultPrevented || event.target.closest("a, button, input, select, textarea")) return;
+  const row = event.target.closest(".class-row");
+  if (!row || window.getSelection()?.toString()) return;
+  row.querySelector(".class-students-link")?.click();
+});
+
 modal.addEventListener("click", (event) => {
   const bounds = modal.getBoundingClientRect();
   if (

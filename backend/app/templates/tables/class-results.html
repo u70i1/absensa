@@ -72,32 +72,7 @@
       </thead>
       <tbody>
         {% for class in classes %}
-          <tr>
-            <td>{{ class.class_id }}</td>
-            <td><span class="student-name">{{ class.class_name }}</span>
-              <p class="class-description">Kelas {{ class.grade }} · {{ class.class_name }}</p>
-            </td>
-            <td><span class="class-student-count{% if not class.student_count %} is-empty{% endif %}">
-                <img
-                  src="{{ url_for('static', path='icons/class-occupied.svg' if class.student_count else 'icons/class-empty.svg') }}"
-                  width="7" height="7" alt="">
-                {{ (class.student_count|string ~ ' siswa') if class.student_count else 'Kosong' }}
-              </span></td>
-            <td>
-              <div class="row-actions">
-                <button type="button" class="text-action edit-action" aria-label="Edit kelas {{ class.class_name }}"
-                  aria-haspopup="dialog"
-                  hx-get="{{ url_for('admin_class_edit', class_id=class.class_id) }}?{{ filter_query }}"
-                  hx-target="#modal-content" hx-swap="innerHTML"><img src="{{ url_for('static', path='icons/pen.svg') }}"
-                    width="14" height="14" alt="">Edit</button>
-                <button type="button" class="text-action delete-action" aria-label="Hapus kelas {{ class.class_name }}"
-                  aria-haspopup="dialog"
-                  hx-get="{{ url_for('admin_class_delete_confirmation', class_id=class.class_id) }}?{{ filter_query }}"
-                  hx-target="#modal-content" hx-swap="innerHTML"><img
-                    src="{{ url_for('static', path='icons/trash.svg') }}" width="14" height="14" alt="">Hapus</button>
-              </div>
-            </td>
-          </tr>
+          {% include 'tables/class-row.html' %}
         {% else %}<tr class="class-empty-row">
             <td colspan="4">Tidak ada kelas{% if query.class_name or query.grade is not none %} yang sesuai dengan
               pencarian{% endif %}.</td>

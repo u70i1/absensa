@@ -160,6 +160,10 @@
 .class-table tbody tr:hover, .class-table tbody tr:focus-within {
   background: var(--color-surface-container-low);
 }
+.class-row {
+  background: var(--color-surface-container-lowest);
+  cursor: pointer;
+}
 .class-table td:first-child {
   color: var(--color-on-surface-variant);
 }
