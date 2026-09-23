@@ -242,3 +242,6 @@ class TestDeleteClass:
     def test_delete_class_invalid_id_type_422(self, client):
         response = client.delete(f"{CLASSES_URL}/not-a-number")
         assert response.status_code == 422
+
+
+pytestmark = pytest.mark.usefixtures("authenticated_data_api")

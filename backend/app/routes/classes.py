@@ -1,5 +1,6 @@
 from typing import Annotated
 
+from app.core.admin_auth import require_admin
 from app.db.session import get_db
 from app.schemas.class_ import ClassListQuery, ClassResponse, ClassWriteRequest
 from app.schemas.student import ClassStudentListQuery, StudentResponse
@@ -7,7 +8,7 @@ from app.services import class_service
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 @router.get("/classes", response_model=list[ClassResponse])

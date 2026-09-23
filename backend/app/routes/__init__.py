@@ -25,3 +25,10 @@ api_router.include_router(admin_router)
 api_router.include_router(admin_classes_router)
 api_router.include_router(admin_photos_router)
 api_router.include_router(admin_import_router)
+
+from app.routes.access_auth import router as access_auth_router
+from app.routes.admin_access import router as admin_access_router
+from app.routes.operator import router as operator_router
+api_router.include_router(access_auth_router)
+api_router.include_router(admin_access_router)
+api_router.include_router(operator_router)

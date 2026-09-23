@@ -58,6 +58,8 @@ ASSUMPTIONS -- confirm against your actual schemas/route:
     ON DELETE SET NULL).
 """
 
+import pytest
+
 from app.models.class_ import Class
 from sqlalchemy import select
 
@@ -884,3 +886,6 @@ class TestBulkDryRun:
 
         assert response.status_code == 204
         assert response.content == b""
+
+
+pytestmark = pytest.mark.usefixtures("authenticated_data_api")

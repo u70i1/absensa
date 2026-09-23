@@ -1,0 +1,13 @@
+{% set device = kind == 'devices' %}
+<div class="modal-heading"><h2 id="modal-title" tabindex="-1">{{ 'Edit' if item else 'Tambah' }} {{ 'perangkat' if device else 'operator' }}</h2><p>{{ 'Perangkat masuk menggunakan nama pengguna dan kata sandi.' if device else 'Operator masuk menggunakan nama dan PIN 6 digit.' }}</p></div>
+{% set action = url_for('admin_access_update', kind=kind, account_id=item.id) if item else url_for('admin_access_create', kind=kind) %}
+<form class="student-form" method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="#modal-content" hx-swap="innerHTML" hx-disabled-elt="find button[type='submit']" hx-sync="this:drop">
+  {% if error %}<div class="form-errors" role="alert">{{ error }}</div>{% endif %}
+  <div class="form-field"><label for="account-name">{{ 'Nama pengguna perangkat' if device else 'Nama operator' }}</label><input id="account-name" name="name" value="{{ values.name or '' }}" required maxlength="100" autocomplete="off"></div>
+  <div class="form-field"><label for="account-secret">{{ 'Kata sandi' if device else 'PIN 6 digit' }}{{ ' baru (opsional)' if item else '' }}</label>
+    <input id="account-secret" name="secret" type="password" autocomplete="new-password" {% if device %}minlength="8" maxlength="1024"{% else %}minlength="6" maxlength="6" pattern="[0-9]{6}" inputmode="numeric"{% endif %} {% if not item %}required{% endif %} aria-describedby="account-secret-help">
+    <p id="account-secret-help" class="field-help">{% if item %}Kosongkan untuk mempertahankan {{ 'kata sandi' if device else 'PIN' }}. Menggantinya akan mengakhiri sesi aktif.{% else %}{{ 'Gunakan kata sandi minimal 8 karakter.' if device else 'Gunakan tepat 6 digit angka, termasuk nol di depan.' }}{% endif %}</p>
+  </div>
+  <div class="form-field"><label for="account-active">Status akun</label><select id="account-active" name="active"><option value="true" {% if values.active %}selected{% endif %}>Aktif</option><option value="false" {% if not values.active %}selected{% endif %}>Nonaktif</option></select><p class="field-help">Menonaktifkan akun akan mengakhiri sesi aktif.</p></div>
+  <div class="modal-actions"><button type="button" class="button secondary" data-close-modal>Batal</button><button type="submit" class="button primary">Simpan</button></div>
+</form>

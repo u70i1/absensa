@@ -92,7 +92,7 @@ def client(db_session):
 
     app.dependency_overrides[get_db] = override_get_db
 
-    yield TestClient(app)
+    yield TestClient(app, headers={"Origin": "http://testserver"})
 
     app.dependency_overrides.clear()
 
@@ -216,3 +216,20 @@ def existing_student(student_factory, existing_class):
         class_id=existing_class.class_id,
         current=True,
     )
+
+
+@pytest.fixture
+def authenticated_data_api(client, db_session):
+    """Existing data-service tests run as an authorized admin and operator.
+
+    Authentication behavior is exercised separately without these overrides.
+    """
+    from app.core.admin_auth import require_admin
+    from app.core.access_auth import require_operator
+    from app.models.admin import Admin
+    from app.models.access import Operator
+    app.dependency_overrides[require_admin] = lambda: Admin(id=1, username="test-admin", password_hash="unused")
+    app.dependency_overrides[require_operator] = lambda: Operator(id=1, display_name="test-operator", pin_hash="unused")
+    yield
+    app.dependency_overrides.pop(require_admin, None)
+    app.dependency_overrides.pop(require_operator, None)

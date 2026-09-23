@@ -70,6 +70,8 @@ Suggested schema names (adjust to match whatever you actually name them):
   - StudentBulkDeleteRequest = {"ids": list[int]}
 """
 
+import pytest
+
 from app.models.student import Student
 from sqlalchemy import select
 
@@ -1407,3 +1409,6 @@ class TestBulkDryRun:
 
         assert response.status_code == 204
         assert db_session.get(Student, target.id) is not None
+
+
+pytestmark = pytest.mark.usefixtures("authenticated_data_api")

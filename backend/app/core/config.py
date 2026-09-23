@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     photos_dir: str = "photos"
     admin_session_hours: int = Field(12, ge=1, le=720)
     admin_cookie_secure: bool = False
+    access_cookie_secure: bool = False
 
 
 settings = Settings() # pyright: ignore[reportCallIssue]

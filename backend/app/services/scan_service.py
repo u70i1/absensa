@@ -150,3 +150,24 @@ def delete_scan(db: Session, scan_id: int):
 
     db.delete(to_delete)
     db.commit()
+
+
+def get_recent_history(db: Session, before: int | None = None, limit: int = 30):
+    """Newest school-wide attendance, with a stable timestamp/ID cursor."""
+    from sqlalchemy import and_, or_
+
+    stmt = (
+        select(ScanLog.scan_id, ScanLog.name, ScanLog.class_name,
+               Student.nisn, ScanLog.timestamp)
+        .outerjoin(Student, Student.id == ScanLog.student_id)
+    )
+    if before is not None:
+        cursor = db.get(ScanLog, before)
+        if cursor is None:
+            raise ScanLogNotFound(status_code=404)
+        stmt = stmt.where(or_(
+            ScanLog.timestamp < cursor.timestamp,
+            and_(ScanLog.timestamp == cursor.timestamp, ScanLog.scan_id < cursor.scan_id),
+        ))
+    rows = list(db.execute(stmt.order_by(ScanLog.timestamp.desc(), ScanLog.scan_id.desc()).limit(limit + 1)))
+    return {"history": rows[:limit], "next_cursor": rows[limit - 1].scan_id if len(rows) > limit else None}

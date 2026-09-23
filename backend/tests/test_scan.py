@@ -1,3 +1,4 @@
+import pytest
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -701,3 +702,6 @@ class TestDeleteScan:
 
         assert first.status_code == 204
         assert second.status_code == 422
+
+
+pytestmark = pytest.mark.usefixtures("authenticated_data_api")

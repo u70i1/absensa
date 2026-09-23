@@ -1,5 +1,7 @@
 from app.core.admin_auth import AdminAuthenticationRequired
 from app.core.config import settings
+from app.core.access_auth import AccessAuthenticationRequired
+from app.core.browser_security import BrowserSecurityMiddleware, clear_access_cookies
 from app.routes import api_router
 from app.services.exceptions import AppException
 from app.templating import APP_DIR, templates
@@ -22,10 +24,13 @@ app.add_middleware(
 )
 
 
-# This should direct to login page
-@app.get("/")
-def root():
-    return "Server is running"
+app.add_middleware(BrowserSecurityMiddleware)
+
+
+# Public entry point; protected destinations handle their own login flow.
+@app.get("/", name="home")
+def root(request: Request):
+    return templates.TemplateResponse(request=request, name="index.html")
 
 
 app.include_router(api_router)
@@ -36,8 +41,8 @@ async def admin_authentication_required(
     request: Request, _exc: AdminAuthenticationRequired
 ):
     if request.headers.get("HX-Request") == "true":
-        return JSONResponse(status_code=401, content={}, headers={"HX-Redirect": "/"})
-    return RedirectResponse("/", status_code=303)
+        return JSONResponse(status_code=401, content={}, headers={"HX-Redirect": "/admin"})
+    return RedirectResponse("/admin", status_code=303)
 
 
 @app.exception_handler(StarletteHTTPException)
@@ -58,3 +63,13 @@ async def app_exception_handler(
         status_code=exc.status_code,
         content={"detail": exc.detail},
     )
+
+
+@app.exception_handler(AccessAuthenticationRequired)
+async def access_authentication_required(request: Request, exc: AccessAuthenticationRequired):
+    response = (JSONResponse(status_code=401, content={}, headers={"HX-Redirect": exc.location})
+                if request.headers.get("HX-Request") == "true" else RedirectResponse(exc.location, status_code=303))
+    clear_access_cookies(response, device=exc.layer == "device")
+    if exc.layer == "device":
+        request.state.clear_device_cookie = True
+    return response

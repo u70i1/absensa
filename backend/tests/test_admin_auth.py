@@ -24,13 +24,13 @@ def test_admin_login_page_and_protected_routes(client):
     for path in ("/admin/students", "/admin/classes"):
         response = client.get(path, follow_redirects=False)
         assert response.status_code == 303
-        assert response.headers["location"] == "/"
+        assert response.headers["location"] == "/admin"
 
     htmx_response = client.get(
         "/admin/students", headers={"HX-Request": "true"}, follow_redirects=False
     )
     assert htmx_response.status_code == 401
-    assert htmx_response.headers["HX-Redirect"] == "/"
+    assert htmx_response.headers["HX-Redirect"] == "/admin"
 
 
 def test_invalid_credentials_return_one_generic_error(client, db_session):

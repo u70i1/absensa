@@ -30,7 +30,7 @@ def photo_admin(client, db_session, photos_dir):
     db_session.add(admin)
     db_session.commit()
     token = create_admin_session(db_session, admin, 1)
-    client.cookies.set(ADMIN_SESSION_COOKIE, token, path="/admin")
+    client.cookies.set(ADMIN_SESSION_COOKIE, token, path="/")
     return client
 
 

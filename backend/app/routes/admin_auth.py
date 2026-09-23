@@ -59,11 +59,12 @@ async def admin_login(request: Request, db: Db):
         db, admin, settings.admin_session_hours
     )
     response = RedirectResponse("/admin/students", status_code=303)
+    response.delete_cookie(ADMIN_SESSION_COOKIE, path="/admin")
     response.set_cookie(
         ADMIN_SESSION_COOKIE,
         token,
         max_age=settings.admin_session_hours * 60 * 60,
-        path="/admin",
+        path="/",
         secure=settings.admin_cookie_secure,
         httponly=True,
         samesite="lax",
@@ -77,9 +78,10 @@ def admin_logout(request: Request, db: Db):
         db, request.cookies.get(ADMIN_SESSION_COOKIE)
     )
     response = RedirectResponse("/", status_code=303)
+    response.delete_cookie(ADMIN_SESSION_COOKIE, path="/admin")
     response.delete_cookie(
         ADMIN_SESSION_COOKIE,
-        path="/admin",
+        path="/",
         secure=settings.admin_cookie_secure,
         httponly=True,
         samesite="lax",

@@ -1,0 +1,10 @@
+{% for scan in history %}
+<tr data-scan-id="{{ scan.scan_id }}">
+  <td><time datetime="{{ scan.timestamp.isoformat() }}">{{ scan.timestamp.astimezone(history_timezone).strftime('%H:%M:%S') }}</time><small>{{ scan.timestamp.astimezone(history_timezone).strftime('%d/%m/%Y') }}</small></td>
+  <td><strong>{{ scan.name }}</strong><small>{{ scan.nisn or 'NISN tidak tersedia' }}</small></td>
+  <td>{{ scan.class_name or '—' }}</td>
+</tr>
+{% else %}<tr><td colspan="3" class="scan-history-empty">Belum ada riwayat presensi.</td></tr>{% endfor %}
+{% if next_cursor %}<tr class="scan-history-more"><td colspan="3">
+  <a class="button secondary" href="{{ url_for('operator_app') }}?before={{ next_cursor }}" hx-get="{{ url_for('operator_history') }}?before={{ next_cursor }}" hx-target="closest tr" hx-swap="outerHTML" hx-sync="this:drop" hx-disabled-elt="this">Muat riwayat sebelumnya</a>
+</td></tr>{% endif %}

@@ -480,3 +480,6 @@ class TestDeleteStudent:
         stmt = select(ScanLog).where(ScanLog.student_id == existing_student.nisn)
         remaining = db_session.scalars(stmt).all()
         assert remaining == []
+
+
+pytestmark = pytest.mark.usefixtures("authenticated_data_api")

@@ -1,3 +1,4 @@
+from app.core.admin_auth import require_admin
 from app.db.session import get_db
 from app.schemas.student import (
     StudentBulkCreateRequest,
@@ -11,7 +12,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 @router.post(

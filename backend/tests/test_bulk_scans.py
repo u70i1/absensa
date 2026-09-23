@@ -1,3 +1,4 @@
+import pytest
 from app.models.scan_log import ScanLog
 from sqlalchemy import func, select
 
@@ -191,3 +192,6 @@ class TestDeleteBulkDryRun:
 
         count = db_session.scalar(select(func.count()).select_from(ScanLog))
         assert count == 0
+
+
+pytestmark = pytest.mark.usefixtures("authenticated_data_api")

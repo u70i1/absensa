@@ -119,6 +119,7 @@ document.addEventListener("htmx:afterSwap", (event) => {
 document.addEventListener("studentSaved", () => {
   if (modal.open) closeModal();
 });
+document.addEventListener("accessSaved", () => { if (modal.open) closeModal(); });
 document.addEventListener("classSaved", () => {
   if (modal.open) closeModal();
 });
