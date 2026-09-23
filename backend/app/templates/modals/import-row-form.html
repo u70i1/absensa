@@ -1,0 +1,53 @@
+<div class="modal-heading">
+  <h2 id="modal-title" tabindex="-1">Edit baris {{ row.row }}</h2>
+  <p class="import-source">{{ row.file }} · {{ 'Siswa' if kind == 'students' else 'Kelas' }}</p>
+</div>
+{% set action = url_for('admin_import_row_update', token=batch.token, key=row.key|default(row.row)) %}
+<form class="student-form" method="post" action="{{ action }}"
+  hx-post="{{ action }}" hx-target="#modal-content" hx-swap="innerHTML"
+  hx-include="#import-confirm" hx-disabled-elt="find button[type='submit']" hx-sync="this:drop">
+  <input type="hidden" name="revision" value="{{ revision }}">
+  {% if error %}<div class="form-errors" role="alert">{{ error }}</div>{% endif %}
+  {% if kind == 'students' %}
+    <div class="form-field">
+      <label for="import-row-name">Nama lengkap</label>
+      <input id="import-row-name" name="name" value="{{ values.name or '' }}" required maxlength="255" autocomplete="off">
+    </div>
+    <div class="form-field">
+      <label for="import-row-nisn">NISN</label>
+      <input id="import-row-nisn" name="nisn" value="{{ values.nisn or '' }}" required pattern="[0-9]{10}" maxlength="10" inputmode="numeric" title="NISN harus berisi tepat 10 digit.">
+    </div>
+    <div class="form-field">
+      <label for="import-row-class">Kelas</label>
+      <select id="import-row-class" name="class_id">
+        <option value="">Tidak memiliki kelas</option>
+        {% for class in classes %}<option value="{{ class.class_id }}" {% if values.class_id|string == class.class_id|string %}selected{% endif %}>{{ class.class_name }} · Jenjang {{ class.grade }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="form-field">
+      <label for="import-row-current">Status siswa</label>
+      <select id="import-row-current" name="current">
+        <option value="Aktif" {% if values.current == 'Aktif' %}selected{% endif %}>Aktif</option>
+        <option value="Tidak aktif" {% if values.current == 'Tidak aktif' %}selected{% endif %}>Tidak aktif</option>
+      </select>
+    </div>
+    <div class="form-field">
+      <label for="import-row-phone">Nomor wali</label>
+      <input id="import-row-phone" name="guardian_phone" value="{{ values.guardian_phone or '' }}" maxlength="32" pattern="(?:628|08)[0-9]*" inputmode="numeric" title="Gunakan angka saja, diawali 628 atau 08.">
+    </div>
+    {% if row.incoming_photo %}<p class="field-help">Foto yang dilampirkan tetap digunakan untuk baris ini, termasuk jika NISN diedit.</p>{% endif %}
+  {% else %}
+    <div class="form-field">
+      <label for="import-row-grade">Jenjang</label>
+      <input id="import-row-grade" name="grade" type="number" min="1" max="20" required value="{{ values.grade or '' }}">
+    </div>
+    <div class="form-field">
+      <label for="import-row-class-name">Nama kelas</label>
+      <input id="import-row-class-name" name="class_name" required maxlength="20" value="{{ values.class_name or '' }}">
+    </div>
+  {% endif %}
+  <div class="modal-actions">
+    <button type="button" class="button secondary" data-close-modal>Batal</button>
+    <button type="submit" class="button primary">Simpan ke Pratinjau</button>
+  </div>
+</form>

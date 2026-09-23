@@ -35,7 +35,7 @@ def remove_photo(photo_path: str | None) -> None:
             logger.warning("Could not remove stored student photo", exc_info=True)
 
 
-def _normalized_photo(source: BinaryIO) -> bytes:
+def normalize_photo(source: BinaryIO) -> bytes:
     content = source.read(MAX_PHOTO_BYTES + 1)
     if len(content) > MAX_PHOTO_BYTES:
         raise AppException("Ukuran foto maksimal 5 MB.", 413)
@@ -63,10 +63,24 @@ def _normalized_photo(source: BinaryIO) -> bytes:
         raise AppException("File foto tidak valid atau rusak.", 415) from exc
 
 
+def store_normalized_photo(content: bytes) -> str:
+    """Write validated JPEG bytes; the caller owns database commit and cleanup."""
+    filename = f"{uuid4().hex}.jpg"
+    destination = photo_file(filename)
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with destination.open("xb") as output:
+            output.write(content)
+    except Exception:
+        remove_photo(filename)
+        raise
+    return filename
+
+
 def update_student_photo(db: Session, student_id: int, source: BinaryIO) -> str:
     if db.get(Student, student_id) is None:
         raise StudentNotFound(status_code=404)
-    content = _normalized_photo(source)
+    content = normalize_photo(source)
     # Serialize replacements so concurrent uploads clean up the correct old file.
     student = db.scalar(
         select(Student).where(Student.id == student_id).with_for_update()
@@ -75,12 +89,9 @@ def update_student_photo(db: Session, student_id: int, source: BinaryIO) -> str:
     if student is None:
         raise StudentNotFound(status_code=404)
     previous_path = student.photo_path
-    filename = f"{uuid4().hex}.jpg"
-    destination = photo_file(filename)
+    filename = None
     try:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        with destination.open("xb") as output:
-            output.write(content)
+        filename = store_normalized_photo(content)
         student.photo_path = filename
         db.commit()
     except Exception:

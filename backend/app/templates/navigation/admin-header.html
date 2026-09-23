@@ -2,7 +2,7 @@
   <nav aria-label="Navigasi admin" class="top-tabs">
     <a class="top-tab{% if active_tab == 'students' %} selected{% endif %}" href="{{ url_for('admin_students') }}" {% if active_tab == 'students' %}aria-current="page"{% endif %}>Siswa</a>
     <a class="top-tab{% if active_tab == 'classes' %} selected{% endif %}" href="{{ url_for('admin_classes') }}" {% if active_tab == 'classes' %}aria-current="page"{% endif %}>Kelas</a>
-    <span class="top-tab" aria-disabled="true">Impor</span>
+    <a class="top-tab{% if active_tab == 'import' %} selected{% endif %}" href="{{ url_for('admin_import') }}" {% if active_tab == 'import' %}aria-current="page"{% endif %}>Impor</a>
     <span class="top-tab" aria-disabled="true">WhatsApp Gateway</span>
     <span class="top-tab" aria-disabled="true">Akses &amp; Perangkat</span>
   </nav>

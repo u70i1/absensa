@@ -22,6 +22,57 @@ alongside the database. Replacing a photo removes the previous file after
 the database update succeeds. Existing students keep their initials until
 a photo is uploaded.
 
+## Spreadsheet imports
+
+Open **Impor** in the admin navigation (`/admin/import`). Download the student
+or class template, or edit an existing export from `app/spreadsheet_templates/`.
+Upload one `.xlsx` file (up to 10 MiB) or one archive (up to 100 MiB).
+ZIP, RAR, 7z, TAR, TAR.GZ/TGZ, TAR.BZ2/TBZ2, and TAR.XZ/TXZ are supported.
+Each workbook is detected automatically from its sheet name and columns.
+Archives can mix student and class workbooks, with up to 100 workbooks and
+10,000 data rows in total. The combined expanded archive and workbook contents
+are bounded to 200 MiB each. Encrypted archives and links are rejected.
+
+Archive layout (one enclosing folder is also accepted):
+
+```text
+students-2026.xlsx
+classes-2026.xlsx
+photos/                 # optional
+  0012345678.jpg
+  0012345679.png
+```
+
+Place every workbook at the root. Optional JPEG/PNG/WebP photos use a ten-digit
+NISN as the filename and match student rows in the uploaded workbooks. Missing
+photos are normal and never block importing; existing photos are retained.
+Files with invalid names, unmatched NISNs, duplicate NISNs, or invalid image
+contents produce explicit errors. Photos are validated during preview and
+only applied for selected student rows. Photo limits match the profile upload
+service (5 MiB and 20 megapixels per image; 50 MiB of normalized photos total).
+
+The `students` and `classes` sheets use the export columns unchanged. A blank
+ID creates a record; an existing ID updates that record. Empty rows and the
+“Tentang Ekspor” sheet are ignored. Formulas are rejected; NISN and guardian
+phone values should be stored as text to preserve leading zeros.
+
+Uploads produce a preview with separate create/update tables, highlighted
+changes, source filenames, staged photos, and cell-specific errors. Exclude
+individual rows before confirming. Only selected valid rows are saved in one
+transaction; failed saves remove new photo files and retain original photos.
+Canceling leaves student/class data unchanged. Previews expire after one hour,
+belong to the uploading admin, detect stale edits, and cannot be applied twice.
+Expired previews and their staged photos are cleaned up when another file is
+uploaded. Canceling or completing a preview also discards its staged photos.
+Student `ID KELAS` values must already exist. Import new classes first to obtain
+their generated IDs before assigning students to them.
+
+Install `backend/requirements.txt` and run `.venv/bin/alembic upgrade head`
+from `backend/` before using this page; the migrations add `import_batches` and
+`import_photos`. Archive support uses `libarchive-c` and requires the native
+libarchive shared library (for example, `libarchive13` on Debian/Ubuntu or
+`libarchive` on Arch; a recent build with RAR/7z support is recommended).
+
 ## Current To-Do
 
 ### Auth & Access
