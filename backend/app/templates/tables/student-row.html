@@ -1,12 +1,13 @@
 <tr class="student-row" data-student-id="{{ student.id }}">
-  <td><span class="avatar" data-student-avatar="{{ student.id }}" aria-hidden="true">{% include 'avatars/student.html' %}</span></td>
+  <td class="selection-cell" hidden><input class="row-selection" type="checkbox" name="ids" value="{{ student.id }}" form="table-selection" aria-label="Pilih {{ student.name }}, NISN {{ student.nisn }}"></td>
+  <td class="photo-cell"><span class="avatar" data-student-avatar="{{ student.id }}" aria-hidden="true">{% include 'avatars/student.html' %}</span></td>
   <td><button type="button" class="student-identity" aria-haspopup="dialog"
       hx-get="{{ url_for('admin_student_detail', student_id=student.id) }}?{{ request.url.query }}"
       hx-target="#modal-content" hx-swap="innerHTML">
       <span class="student-name">{{ student.name }}</span>
       <span class="student-nisn">NISN {{ student.nisn }}</span>
     </button></td>
-  <td>{{ student.class_name or '—' }}</td>
+  <td class="student-class">{{ student.class_name or '—' }}</td>
   <td><span aria-label="Nomor wali">{{ student.guardian_phone or '—' }}</span></td>
   <td>
     <div class="row-actions">

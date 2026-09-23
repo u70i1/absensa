@@ -340,17 +340,16 @@ button.htmx-request:not(:disabled),
 .student-table {
   width: 100%;
   border-spacing: 0;
-  table-layout: fixed;
+  table-layout: auto;
 }
-.student-table tr {
-  display: grid;
-  grid-template-columns:
-    var(--column-photo) minmax(160px, 1fr) var(--column-class)
-    var(--column-guardian) var(--column-actions);
-  column-gap: var(--space-6);
-  align-items: center;
-  padding-inline: var(--space-9);
+.student-table th,
+.student-table td {
+  padding-inline: var(--space-6);
+  vertical-align: middle;
 }
+.student-table tr > :first-child,
+.student-table tr > .selection-cell[hidden] + * { padding-left: var(--space-9); }
+.student-table tr > :last-child { padding-right: var(--space-9); }
 .student-table thead {
   position: sticky;
   top: 0;
@@ -358,7 +357,6 @@ button.htmx-request:not(:disabled),
 }
 .student-table th {
   text-align: left;
-  padding: 0;
   font-size: var(--font-size-label);
   font-weight: var(--font-weight-bold);
 }
@@ -371,7 +369,7 @@ button.htmx-request:not(:disabled),
   text-align: right;
 }
 .student-row {
-  min-height: var(--table-row-height);
+  height: var(--table-row-height);
   background: var(--color-surface-container-lowest);
   border-bottom: var(--border-subtle);
   cursor: pointer;
@@ -383,11 +381,12 @@ button.htmx-request:not(:disabled),
   background: var(--color-surface-container-low);
 }
 .student-table td {
-  padding: calc(var(--space-5) - var(--border-width) / 2) 0;
+  padding-block: calc(var(--space-5) - var(--border-width) / 2);
+  border-bottom: var(--border-subtle);
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.student-table td:nth-child(3) {
+.student-table .student-class {
   color: var(--color-on-surface-variant);
 }
 .avatar {
@@ -770,3 +769,46 @@ button.htmx-request:not(:disabled),
     transform: none;
   }
 }
+
+.selection-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  margin-block: var(--space-6);
+  border: var(--border-surface);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface-container-low);
+}
+.selection-toolbar .control-actions { margin-left: auto; }
+.selection-summary { display: flex; flex-direction: column; gap: var(--space-2); }
+.selection-summary > span { color: var(--color-on-surface-variant); font-size: var(--font-size-label); }
+.selection-cell input { width: 18px; height: 18px; accent-color: var(--color-surface-tint); cursor: pointer; vertical-align: middle; }
+.selection-cell input { margin: 0; }
+.is-selecting tr.is-selected { background: var(--color-secondary-fixed); }
+.selection-review { max-height: 240px; overflow-y: auto; padding-left: var(--space-9); margin-block: var(--space-6); }
+.selection-review li + li { margin-top: var(--space-3); }
+[data-table-selection] .control-bar,
+[data-table-selection] .control-actions { flex-wrap: wrap; }
+
+.button.warning {
+  color: var(--color-class-empty);
+  background: color-mix(in srgb, var(--color-class-empty) 12%, var(--color-surface));
+}
+.button.warning:not(:disabled):hover {
+  background: color-mix(in srgb, var(--color-class-empty) 20%, var(--color-surface));
+}
+
+/* Native table layout shares column widths between the header and every row.
+   Compact utility columns leave the remaining space to the student/class data. */
+[data-table-selection] .selection-cell,
+[data-table-selection] .actions-heading,
+[data-table-selection] .student-row > td:last-child,
+[data-table-selection] .class-row > td:last-child,
+.student-table .photo-cell {
+  width: 1%;
+  white-space: nowrap;
+}
+[data-table-selection] .row-actions { flex-wrap: nowrap; }
+[data-table-selection] .text-action { flex-shrink: 0; white-space: nowrap; }

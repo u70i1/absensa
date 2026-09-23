@@ -1,4 +1,4 @@
-<section id="class-results" aria-label="Daftar kelas" hx-target="this" hx-swap="outerHTML" hx-sync="this:replace"
+<section id="class-results" data-table-selection aria-label="Daftar kelas" hx-target="this" hx-swap="outerHTML" hx-sync="this:replace"
   hx-history-elt>
   <div class="class-summary">
     {% if summary.empty %}<a class="class-summary-card class-metric-link"
@@ -50,6 +50,7 @@
       <button type="submit" class="sr-only focus-visible-button">Cari</button>
     </form>
     <div class="control-actions">
+      <button type="button" class="button secondary" data-selection-toggle aria-pressed="false" aria-controls="table-selection">Pilih</button>
       <a class="button tertiary" href="{{ url_for('admin_classes_export') }}?{{ filter_query }}" download>&gt; Ekspor
         data</a>
       <button id="add-class" class="button class-add" type="button"
@@ -59,12 +60,15 @@
       </button>
     </div>
   </div>
+  {% set selection_kind = 'classes' %}
+  {% include 'tables/selection-toolbar.html' %}
   {% if message %}<p class="notice" role="status">{{ message }}</p>{% endif %}
   <div class="table-container class-table-container" tabindex="0" role="region" aria-label="Tabel kelas">
     <table class="class-table">
       <thead>
         <tr>
-          <th scope="col">ID</th>
+          <th scope="col" class="selection-cell" hidden><input type="checkbox" data-select-all aria-label="Pilih semua di halaman ini" title="Pilih semua di halaman ini"></th>
+          <th scope="col" class="class-id-cell">ID</th>
           <th scope="col">Kelas</th>
           <th scope="col">Siswa</th>
           <th scope="col" class="actions-heading">Tindakan</th>

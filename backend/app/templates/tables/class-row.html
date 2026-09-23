@@ -1,5 +1,6 @@
 <tr class="class-row">
-  <td>{{ class.class_id }}</td>
+  <td class="selection-cell" hidden><input class="row-selection" type="checkbox" name="ids" value="{{ class.class_id }}" form="table-selection" aria-label="Pilih kelas {{ class.class_name }}, ID {{ class.class_id }}"></td>
+  <td class="class-id-cell">{{ class.class_id }}</td>
   <td>
     <a class="student-name class-students-link"
       href="{{ url_for('admin_students') }}?class_id={{ class.class_id }}"

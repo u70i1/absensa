@@ -204,3 +204,58 @@ document.addEventListener("htmx:sendError", (event) => {
     "Tidak dapat terhubung ke server. Periksa koneksi lalu coba lagi.",
   );
 });
+
+function updateTableSelection(section) {
+  const boxes = [...section.querySelectorAll('.row-selection')];
+  const count = boxes.filter((box) => box.checked).length;
+  const all = section.querySelector('[data-select-all]');
+  all.checked = count > 0 && count === boxes.length;
+  all.indeterminate = count > 0 && count < boxes.length;
+  all.disabled = !boxes.length;
+  section.querySelector('[data-selection-count]').textContent = `${count} dipilih`;
+  section.querySelectorAll('.selection-toolbar button').forEach((button) => { button.disabled = !count; });
+  boxes.forEach((box) => box.closest('tr').classList.toggle('is-selected', box.checked));
+}
+
+document.addEventListener('click', (event) => {
+  const toggle = event.target.closest('[data-selection-toggle]');
+  if (!toggle) return;
+  const section = toggle.closest('[data-table-selection]');
+  const active = section.classList.toggle('is-selecting');
+  toggle.setAttribute('aria-pressed', String(active));
+  toggle.textContent = active ? 'Selesai' : 'Pilih';
+  section.querySelector('.selection-toolbar').hidden = !active;
+  section.querySelectorAll('.selection-cell').forEach((cell) => { cell.hidden = !active; });
+  section.querySelectorAll('tr.empty-row td, tr.class-empty-row td').forEach((cell) => {
+    cell.colSpan = (section.id === 'student-results' ? 5 : 4) + Number(active);
+  });
+  section.querySelectorAll('.row-selection').forEach((box) => {
+    box.checked = false;
+  });
+  updateTableSelection(section);
+});
+
+document.addEventListener('change', (event) => {
+  const section = event.target.closest('[data-table-selection]');
+  if (!section) return;
+  if (event.target.matches('[data-select-all]')) {
+    section.querySelectorAll('.row-selection').forEach((box) => { box.checked = event.target.checked; });
+  }
+  if (event.target.matches('[data-select-all], .row-selection')) updateTableSelection(section);
+});
+
+// Capture row clicks before HTMX detail buttons or class links navigate away.
+document.addEventListener('click', (event) => {
+  const row = event.target.closest('.is-selecting .student-row, .is-selecting .class-row');
+  if (!row || event.target.closest('.row-selection, .row-actions') || window.getSelection()?.toString()) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const box = row.querySelector('.row-selection');
+  box.checked = !box.checked;
+  updateTableSelection(row.closest('[data-table-selection]'));
+}, true);
+
+// Do not restore stale selected IDs from an HTMX history snapshot.
+document.addEventListener('htmx:beforeHistorySave', () => {
+  document.querySelectorAll('.is-selecting [data-selection-toggle]').forEach((toggle) => toggle.click());
+});

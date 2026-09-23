@@ -32,3 +32,6 @@ from app.routes.operator import router as operator_router
 api_router.include_router(access_auth_router)
 api_router.include_router(admin_access_router)
 api_router.include_router(operator_router)
+
+from app.routes.admin_selection import router as admin_selection_router
+api_router.include_router(admin_selection_router)

@@ -1,0 +1,13 @@
+<form id="table-selection" class="selection-toolbar" hidden method="post"
+  action="{{ url_for('admin_table_selection', kind=selection_kind, step='confirm') }}?{{ request.url.query }}"
+  hx-post="{{ url_for('admin_table_selection', kind=selection_kind, step='confirm') }}?{{ request.url.query }}"
+  hx-target="#modal-content" hx-swap="innerHTML" hx-sync="this:drop" hx-disabled-elt="find button">
+  <div class="selection-summary">
+    <strong data-selection-count role="status" aria-live="polite">0 dipilih</strong>
+    <span>Pilih baris atau centang semua di kepala tabel.</span>
+  </div>
+  <div class="control-actions">
+    {% if selection_kind == 'students' %}<button class="button warning" type="submit" name="action" value="deactivate" disabled>Nonaktifkan</button>{% endif %}
+    <button class="button destructive" type="submit" name="action" value="delete" disabled>Hapus</button>
+  </div>
+</form>

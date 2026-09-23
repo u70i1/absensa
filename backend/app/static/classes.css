@@ -120,14 +120,12 @@
 .class-table {
   width: 100%;
   border-spacing: 0;
-  table-layout: fixed;
+  table-layout: auto;
 }
-.class-table tr {
-  display: grid;
-  grid-template-columns: var(--class-column-id) minmax(160px, 1fr) minmax(160px, var(--class-column-count)) var(--class-column-actions);
-  align-items: center;
-  padding-inline: var(--space-8);
-}
+.class-table tr > :first-child,
+.class-table tr > .selection-cell[hidden] + * { padding-left: var(--space-8); }
+.class-table tr > :last-child { padding-right: var(--space-8); }
+.class-table .class-id-cell { width: 1%; white-space: nowrap; }
 .class-table thead {
   position: sticky;
   top: 0;
@@ -145,16 +143,27 @@
   font-weight: var(--font-weight-bold);
 }
 .class-table th, .class-table td {
-  padding: 0;
+  padding: var(--space-5) var(--space-6);
+  vertical-align: middle;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.class-table .actions-heading,
+.class-table .class-row > td:last-child {
+  min-width: var(--class-column-actions);
+  white-space: nowrap;
 }
 .class-table .actions-heading {
   text-align: right;
 }
+.class-table .row-actions {
+  flex-wrap: nowrap;
+}
+.class-table .class-student-count {
+  white-space: nowrap;
+}
 .class-table tbody tr {
-  min-height: var(--class-row-height);
-  border-bottom: var(--border-subtle);
+  height: var(--class-row-height);
   transition: background-color var(--motion-hover-duration) var(--motion-interaction-easing);
 }
 .class-table tbody tr:hover, .class-table tbody tr:focus-within {
@@ -164,7 +173,8 @@
   background: var(--color-surface-container-lowest);
   cursor: pointer;
 }
-.class-table td:first-child {
+.class-table td { border-bottom: var(--border-subtle); }
+.class-table .class-id-cell {
   color: var(--color-on-surface-variant);
 }
 .class-description {

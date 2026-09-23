@@ -1,4 +1,4 @@
-<section id="student-results" aria-label="Daftar siswa" hx-target="this" hx-swap="outerHTML" hx-sync="this:replace"
+<section id="student-results" data-table-selection aria-label="Daftar siswa" hx-target="this" hx-swap="outerHTML" hx-sync="this:replace"
   hx-history-elt>
   {% include 'filters/student-filters.html' %}
   <div class="control-bar">
@@ -17,6 +17,7 @@
       <button type="submit" class="sr-only focus-visible-button">Cari</button>
     </form>
     <div class="control-actions">
+      <button type="button" class="button secondary" data-selection-toggle aria-pressed="false" aria-controls="table-selection">Pilih</button>
       <a class="button tertiary" href="{{ url_for('admin_students_export') }}?{{ request.url.query }}"
         download>&gt; Ekspor data</a>
       <button id="add-student" class="button primary" type="button"
@@ -24,6 +25,8 @@
         hx-swap="innerHTML" aria-haspopup="dialog">+ Tambah Siswa</button>
     </div>
   </div>
+  {% set selection_kind = 'students' %}
+  {% include 'tables/selection-toolbar.html' %}
   {% if message %}<p class="notice" role="status">{{ message }}</p>{% endif %}
   {% include 'tables/student-table.html' %}
   <p class="table-summary" role="status" aria-live="polite">

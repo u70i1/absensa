@@ -66,7 +66,7 @@ def get_class_directory(
         .outerjoin(Student, Student.class_id == Class.class_id)
         .where(*_class_filters(class_name, grade, empty))
         .group_by(Class.class_id)
-        .order_by(Class.grade, Class.class_name, Class.class_id)
+        .order_by(Class.class_id)
     ).all()
 
 
