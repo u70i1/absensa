@@ -13,13 +13,6 @@
 }
 
 .account-sections { display: grid; gap: var(--space-9); min-width: 0; }
-.account-panel {
-  padding: var(--space-9);
-  border: var(--border-subtle);
-  border-radius: var(--radius-surface);
-  background: var(--color-surface);
-  min-width: 0;
-}
 .account-panel-heading {
   display: flex;
   gap: var(--space-6);

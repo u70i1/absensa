@@ -1,0 +1,71 @@
+.gateway-page {
+  max-width: var(--operator-page-max-width);
+  display: grid;
+  gap: var(--space-9);
+}
+.gateway-page h1 { margin-bottom: 0; font-size: var(--font-size-page-title); }
+.gateway-page h2 { font-size: var(--font-size-section-heading); }
+.gateway-page-heading p,
+.gateway-status-panel p { color: var(--color-on-surface-variant); line-height: 1.5; }
+.gateway-page-heading { display: grid; gap: var(--space-3); }
+.gateway-status-panel { display: grid; gap: var(--space-9); }
+.gateway-status-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+.gateway-status-header > div { display: grid; gap: var(--space-3); }
+.gateway-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-container);
+  color: var(--color-on-surface-variant);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+.gateway-status-badge::before {
+  content: "";
+  width: var(--space-3);
+  height: var(--space-3);
+  border-radius: 50%;
+  background: currentColor;
+}
+.gateway-status-connected { background: var(--color-primary-fixed); color: var(--color-on-primary-fixed); }
+.gateway-status-qr,
+.gateway-status-starting { background: var(--color-tertiary-fixed); color: var(--color-on-tertiary-fixed); }
+.gateway-status-error,
+.gateway-status-unavailable { background: var(--color-error-container); color: var(--color-on-error-container); }
+.gateway-connected-number { display: grid; gap: var(--space-2); }
+.gateway-connected-number span { color: var(--color-on-surface-variant); font-size: var(--font-size-label); }
+.gateway-connected-number strong { font-size: var(--font-size-summary); }
+.gateway-send-form {
+  display: grid;
+  gap: var(--space-6);
+  justify-items: start;
+  max-width: var(--auth-card-width);
+}
+.gateway-send-form .form-field { width: 100%; }
+.gateway-qr {
+  display: block;
+  width: min(100%, var(--gateway-qr-size));
+  height: auto;
+  padding: var(--space-5);
+  border: var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-container-lowest);
+}
+.gateway-qr-note { font-size: var(--font-size-label); }
+.gateway-status-actions { display: flex; flex-wrap: wrap; gap: var(--space-5); }
+.gateway-status-actions form { margin: 0; }
+
+/* Match the narrower admin card padding once content stacks on small screens. */
+@media (max-width: 700px) {
+  .gateway-page { padding: var(--space-9) var(--space-6) var(--space-10); }
+  .gateway-status-panel { padding: var(--space-6); }
+}

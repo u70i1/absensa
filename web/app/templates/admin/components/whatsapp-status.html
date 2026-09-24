@@ -1,0 +1,42 @@
+<section id="whatsapp-status" class="surface-card gateway-status-panel" aria-labelledby="gateway-status-title"
+  {% if status.state != 'connected' %}hx-get="{{ url_for('admin_whatsapp_status') }}" hx-trigger="every 5s" hx-swap="outerHTML"{% endif %}>
+  <div class="gateway-status-header">
+    <div>
+      <h2 id="gateway-status-title">Status koneksi</h2>
+      {% if status.state == 'connected' %}<p>Nomor WhatsApp siap digunakan.</p>
+      {% elif status.state == 'qr' %}<p>Pindai kode berikut dari menu Perangkat tertaut di WhatsApp.</p>
+      {% elif status.state == 'starting' %}<p>Menyiapkan koneksi WhatsApp. Kode QR akan muncul sebentar lagi.</p>
+      {% elif status.state == 'unavailable' %}<p>{{ status.detail or 'Layanan WhatsApp tidak dapat dihubungi.' }}</p>
+      {% elif status.state == 'error' %}<p>Koneksi gagal. Coba minta kode QR lagi.</p>
+      {% else %}<p>Belum ada nomor WhatsApp yang terhubung.</p>{% endif %}
+    </div>
+    <span class="gateway-status-badge gateway-status-{{ status.state }}">
+      {{ {'connected': 'Terhubung', 'qr': 'Menunggu pemindaian', 'starting': 'Menghubungkan', 'error': 'Gagal', 'unavailable': 'Tidak tersedia', 'disconnected': 'Belum terhubung'}[status.state] }}
+    </span>
+  </div>
+
+  {% if status.state == 'connected' %}
+    <div class="gateway-connected-number"><span>Nomor terhubung</span><strong>{{ '+' ~ status.phone if status.phone else 'Nomor tidak tersedia' }}</strong></div>
+    <form class="gateway-send-form" method="post" action="{{ url_for('admin_whatsapp_send') }}">
+      <div class="form-field">
+        <label for="gateway-phone">Kirim pesan uji ke</label>
+        <input id="gateway-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" value="{{ phone_value }}" placeholder="+6281234567890" required aria-describedby="gateway-phone-help">
+        <p id="gateway-phone-help" class="field-help">Gunakan nomor dengan kode negara. Pesan yang dikirim: “hi from absensa”.</p>
+      </div>
+      <button class="button primary" type="submit">Kirim pesan uji</button>
+    </form>
+  {% else %}
+    {% if status.qr_data_url %}
+      <img class="gateway-qr" src="{{ status.qr_data_url }}" alt="Kode QR untuk menautkan WhatsApp sekolah">
+      <p class="gateway-qr-note">Kode QR akan diperbarui otomatis jika kedaluwarsa.</p>
+    {% endif %}
+    <div class="gateway-status-actions">
+      {% if status.state in ('disconnected', 'error', 'unavailable') %}
+      <form method="post" action="{{ url_for('admin_whatsapp_connect') }}">
+        <button class="button primary" type="submit">Minta kode QR</button>
+      </form>
+      {% endif %}
+      <a class="button secondary" href="{{ url_for('admin_whatsapp') }}">Perbarui status</a>
+    </div>
+  {% endif %}
+</section>

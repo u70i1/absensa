@@ -146,6 +146,7 @@
   --import-dropzone-disabled-height: 112px;
   --import-file-button-height: 34px;
   --import-button-height: 40px;
+  --gateway-qr-size: 320px;
   --color-import-create: #e3f3ef;
   --color-import-changed: rgb(170 99 9 / 15%);
   --color-import-row-hover: rgb(0 106 104 / 5%);

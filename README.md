@@ -230,11 +230,13 @@ web/                             Live FastAPI application (admin + operator)
   alembic/                       Database migrations
   scripts/                       Admin setup and database utilities
   tests/                         Python tests
-services/                        Reserved for a future Express.js/wweb.js service
+services/whatsapp/               Express + whatsapp-web.js bridge
 archive/operator-react-prototype/  Earlier standalone scanner prototype
 ```
 
 The archived React project is not part of the running application. New operator
 interface work belongs in `web/app/templates/` and `web/app/static/` beside the
-admin interface. When the WhatsApp service is implemented, it can live in
-`services/` with its own package, dependencies, and configuration.
+admin interface. The WhatsApp bridge runs separately; see
+[`services/whatsapp/README.md`](services/whatsapp/README.md) to configure its
+shared token, install dependencies, and connect a school phone from the admin
+dashboard.
