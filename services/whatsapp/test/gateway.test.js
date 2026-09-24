@@ -3,7 +3,7 @@
 const assert = require("node:assert/strict");
 const { EventEmitter } = require("node:events");
 const { test } = require("node:test");
-const { createGateway, GatewayError, TEST_MESSAGE } = require("../src/gateway");
+const { createGateway, GatewayError } = require("../src/gateway");
 
 class FakeClient extends EventEmitter {
   constructor() {
@@ -37,15 +37,15 @@ test("connection is idempotent, exposes a QR, and reports the linked phone", asy
   assert.deepEqual(gateway.snapshot(), { state: "connected", phone: "6281234567890", qr_available: false });
 });
 
-test("test message uses the registered WhatsApp ID and fixed text", async () => {
+test("message uses the registered WhatsApp ID and final supplied text", async () => {
   const client = new FakeClient();
   const gateway = createGateway({ createClient: () => client, encodeQr: async () => "unused" });
-  await assert.rejects(gateway.sendTestMessage("628111111111"), { code: "not_connected", status: 409 });
+  await assert.rejects(gateway.sendMessage("628111111111", "Halo"), { code: "not_connected", status: 409 });
   gateway.connect();
   client.emit("ready");
-  await assert.rejects(gateway.sendTestMessage("628999999999"), { code: "number_not_registered", status: 422 });
-  assert.deepEqual(await gateway.sendTestMessage("628111111111"), { sent: true });
-  assert.deepEqual(client.sent, [{ to: "628111111111@c.us", message: TEST_MESSAGE }]);
+  await assert.rejects(gateway.sendMessage("628999999999", "Halo"), { code: "number_not_registered", status: 422 });
+  assert.deepEqual(await gateway.sendMessage("628111111111", "Halo"), { sent: true });
+  assert.deepEqual(client.sent, [{ to: "628111111111@c.us", message: "Halo" }]);
   client.emit("disconnected");
   assert.equal(gateway.snapshot().state, "disconnected");
   assert.ok(GatewayError);

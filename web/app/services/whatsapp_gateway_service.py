@@ -55,7 +55,7 @@ class WhatsAppGateway:
             with httpx.Client(
                 base_url=self.base_url,
                 headers={"Authorization": f"Bearer {self.token}"},
-                timeout=5,
+                timeout=30 if path == "api/messages" else 5,
                 follow_redirects=False,
                 trust_env=False,
                 transport=self.transport,
@@ -113,7 +113,11 @@ class WhatsAppGateway:
     def connect(self) -> None:
         self._request("POST", "api/connect")
 
-    def send_test(self, phone: str) -> None:
+    def send_message(self, phone: str, message: str) -> None:
+        if not message.strip() or len(message) > 4000:
+            raise GatewayProblem("Pesan WhatsApp tidak valid.", 422)
         self._request(
-            "POST", "api/messages/test", json={"phone": normalize_phone(phone)}
+            "POST",
+            "api/messages",
+            json={"phone": normalize_phone(phone), "message": message},
         )

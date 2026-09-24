@@ -1,0 +1,17 @@
+{% set copy = {
+  'send-now': ('Lanjutkan pengiriman?' if daily.state == 'interrupted' else 'Kirim notifikasi sekarang?', 'Siswa yang belum hadir saat ini akan menerima pesan. Waktu dan minimum kehadiran diabaikan; siswa yang sudah dicoba tidak akan dikirimi ulang.', 'Lanjutkan pengiriman' if daily.state == 'interrupted' else 'Kirim sekarang'),
+  'skip-today': ('Lewati notifikasi hari ini?', 'Pengiriman otomatis hari ini akan dilewati. Jadwal pada hari berikutnya tetap berlaku.', 'Lewati hari ini'),
+  'enable': ('Aktifkan layanan otomatis?', 'Notifikasi ketidakhadiran akan kembali dikirim sesuai jadwal dan batas kehadiran.', 'Aktifkan layanan'),
+  'disable': ('Nonaktifkan layanan otomatis?', 'Pengiriman otomatis berhenti sampai admin mengaktifkannya lagi. Test dan Kirim sekarang tetap tersedia.', 'Nonaktifkan layanan')
+}[action] %}
+<div class="modal-heading"><h2 id="modal-title" tabindex="-1">{{ copy[0] }}</h2><p>{{ copy[1] }}</p></div>
+{% if action in ('enable', 'disable') %}
+  <form method="post" action="{{ url_for('admin_whatsapp_enabled') }}">
+    <input type="hidden" name="enabled" value="{{ 'true' if action == 'enable' else 'false' }}">
+    <div class="modal-actions"><button type="button" class="button secondary" data-close-modal>Batal</button><button type="submit" class="button {{ 'warning' if action == 'disable' else 'primary' }}">{{ copy[2] }}</button></div>
+  </form>
+{% else %}
+  <form method="post" action="{{ url_for('admin_whatsapp_send_now') if action == 'send-now' else url_for('admin_whatsapp_skip_today') }}">
+    <div class="modal-actions"><button type="button" class="button secondary" data-close-modal>Batal</button><button type="submit" class="button {{ 'warning' if action == 'skip-today' else 'primary' }}">{{ copy[2] }}</button></div>
+  </form>
+{% endif %}

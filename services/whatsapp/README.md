@@ -22,11 +22,13 @@ a shared bearer token on all `/api` routes.
 
 The `LocalAuth` profile lives in `.wwebjs_auth/` by default and is ignored by
 Git. Keep that directory private and persistent across restarts. The service
-reconnects automatically on startup when a saved profile exists. The test-send
-form accepts an international number and sends only `hi from absensa`.
+reconnects automatically on startup when a saved profile exists. FastAPI owns
+notification settings, schedule, student selection, message rendering, and
+rate limiting; this bridge receives only a phone number and final message.
 
 The bridge API consists of `GET /health`, authenticated `GET /api/status`,
-`POST /api/connect`, `GET /api/qr`, and `POST /api/messages/test`. Run `npm test`
+`POST /api/connect`, `GET /api/qr`, and `POST /api/messages` with JSON
+`{"phone":"6281234567890","message":"Final text"}`. Run `npm test`
 for the bridge's mocked client and HTTP contract tests. A real QR scan and
 message delivery still require a WhatsApp account and running Chromium.
 

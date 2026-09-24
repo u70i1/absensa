@@ -8,10 +8,30 @@
   <main class="content-page gateway-page">
     <div class="gateway-page-heading">
       <h1>WhatsApp Gateway</h1>
-      <p>Hubungkan nomor WhatsApp sekolah dan kirim pesan uji.</p>
+      <p>Kelola koneksi dan notifikasi ketidakhadiran kepada wali siswa.</p>
     </div>
     {% if error %}<p class="form-errors" role="alert">{{ error }}</p>{% endif %}
-    {% if sent %}<p class="notice" role="status">Pesan uji berhasil dikirim.</p>{% endif %}
+    {% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
     {% include 'admin/components/whatsapp-status.html' %}
+    <section class="surface-card gateway-settings-panel" aria-labelledby="notification-settings-title">
+      <div class="gateway-status-header">
+        <div><h2 id="notification-settings-title">Notifikasi ketidakhadiran</h2><p>Atur pengiriman otomatis untuk wali siswa yang belum hadir.</p></div>
+        <span class="gateway-status-badge {{ 'gateway-status-connected' if config.enabled else '' }}">{{ 'Aktif' if config.enabled else 'Nonaktif' }}</span>
+      </div>
+      <div class="gateway-service-toggle">
+        <p>{{ 'Layanan otomatis aktif setiap hari sesuai jadwal.' if config.enabled else 'Layanan otomatis nonaktif hingga diaktifkan kembali.' }}</p>
+        <a class="button {{ 'warning' if config.enabled else 'secondary' }}" href="{{ url_for('admin_whatsapp_confirmation', action='disable' if config.enabled else 'enable') }}" hx-get="{{ url_for('admin_whatsapp_confirmation', action='disable' if config.enabled else 'enable') }}" hx-target="#modal-content" aria-haspopup="dialog">{{ 'Nonaktifkan layanan' if config.enabled else 'Aktifkan layanan' }}</a>
+      </div>
+      <form class="gateway-settings-form" method="post" action="{{ url_for('admin_whatsapp_settings') }}">
+        <div class="gateway-settings-row">
+          <div class="form-field"><label for="notification-send-time">Waktu pengiriman</label><input id="notification-send-time" name="send_time" type="time" value="{{ config.send_time.strftime('%H:%M') }}" required></div>
+          <div class="form-field"><label for="notification-minimum">Minimum kehadiran</label><input id="notification-minimum" name="minimum_attendance" type="number" min="0" step="1" value="{{ config.minimum_attendance }}" required><p class="field-help">Pengiriman otomatis dimulai setelah jumlah siswa hadir mencapai angka ini.</p></div>
+        </div>
+        <div class="form-field"><label for="notification-template">Templat pesan</label><textarea id="notification-template" name="message_template" rows="5" maxlength="2000" required>{{ config.message_template }}</textarea><p class="field-help">Variabel tersedia: <code>{{ '{{nama}}' }}</code> dan <code>{{ '{{kelas}}' }}</code>.</p></div>
+        <label class="gateway-safe-mode"><input type="checkbox" name="safe_mode" value="true" {% if config.safe_mode %}checked{% endif %}><span><strong>Safe Mode</strong><small>Kirim pesan secara bertahap untuk mengurangi pengiriman yang terlalu agresif.</small></span></label>
+        <button class="button primary" type="submit">Simpan pengaturan</button>
+      </form>
+    </section>
+    {% include 'admin/components/whatsapp-actions.html' %}
   </main>
 {% endblock %}

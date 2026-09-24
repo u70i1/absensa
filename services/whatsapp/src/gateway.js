@@ -1,7 +1,5 @@
 "use strict";
 
-const TEST_MESSAGE = "hi from absensa";
-
 class GatewayError extends Error {
   constructor(code, status) {
     super(code);
@@ -73,7 +71,7 @@ function createGateway({ createClient, encodeQr }) {
     return snapshot();
   }
 
-  async function sendTestMessage(recipient) {
+  async function sendMessage(recipient, message) {
     if (state !== "connected" || !client) {
       throw new GatewayError("not_connected", 409);
     }
@@ -81,7 +79,7 @@ function createGateway({ createClient, encodeQr }) {
     if (!registered?._serialized) {
       throw new GatewayError("number_not_registered", 422);
     }
-    await client.sendMessage(registered._serialized, TEST_MESSAGE);
+    await client.sendMessage(registered._serialized, message);
     return { sent: true };
   }
 
@@ -89,8 +87,8 @@ function createGateway({ createClient, encodeQr }) {
     snapshot,
     connect,
     qr: () => ({ ...snapshot(), qr_data_url: qrDataUrl }),
-    sendTestMessage,
+    sendMessage,
   };
 }
 
-module.exports = { createGateway, GatewayError, TEST_MESSAGE };
+module.exports = { createGateway, GatewayError };

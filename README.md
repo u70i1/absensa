@@ -240,3 +240,14 @@ admin interface. The WhatsApp bridge runs separately; see
 [`services/whatsapp/README.md`](services/whatsapp/README.md) to configure its
 shared token, install dependencies, and connect a school phone from the admin
 dashboard.
+
+WhatsApp absence notifications are scheduled by a **separate FastAPI job
+process**. After applying migrations and starting the bridge, run
+`cd web && .venv/bin/python -m app.jobs.whatsapp_notifications` alongside the
+web server. Keep exactly one job process running under your process manager;
+it checks the database settings every 30 seconds and uses the configured
+`TIMEZONE`. For a single check, add `--once`. The daily run and per-student
+delivery claims are persisted in `whatsapp_notification_logs`, so restarting
+the job does not repeat claimed deliveries. A claim is recorded before the
+external send: a crash in that narrow interval can leave a message unsent,
+which favors avoiding duplicate WhatsApp messages.

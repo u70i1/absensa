@@ -39,11 +39,15 @@ function createApp({ gateway, token }) {
     }
   });
   app.get("/api/qr", (_request, response) => response.json(gateway.qr()));
-  app.post("/api/messages/test", async (request, response) => {
+  app.post("/api/messages", async (request, response) => {
     const phone = normalizePhone(request.body?.phone);
     if (!phone) return response.status(422).json({ error: "invalid_phone" });
+    const message = request.body?.message;
+    if (typeof message !== "string" || !message.trim() || message.length > 4000) {
+      return response.status(422).json({ error: "invalid_message" });
+    }
     try {
-      return response.json(await gateway.sendTestMessage(phone));
+      return response.json(await gateway.sendMessage(phone, message));
     } catch (error) {
       if (error instanceof GatewayError) {
         return response.status(error.status).json({ error: error.code });

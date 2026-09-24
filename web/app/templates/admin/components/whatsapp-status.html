@@ -17,14 +17,6 @@
 
   {% if status.state == 'connected' %}
     <div class="gateway-connected-number"><span>Nomor terhubung</span><strong>{{ '+' ~ status.phone if status.phone else 'Nomor tidak tersedia' }}</strong></div>
-    <form class="gateway-send-form" method="post" action="{{ url_for('admin_whatsapp_send') }}">
-      <div class="form-field">
-        <label for="gateway-phone">Kirim pesan uji ke</label>
-        <input id="gateway-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" value="{{ phone_value }}" placeholder="+6281234567890" required aria-describedby="gateway-phone-help">
-        <p id="gateway-phone-help" class="field-help">Gunakan nomor dengan kode negara. Pesan yang dikirim: “hi from absensa”.</p>
-      </div>
-      <button class="button primary" type="submit">Kirim pesan uji</button>
-    </form>
   {% else %}
     {% if status.qr_data_url %}
       <img class="gateway-qr" src="{{ status.qr_data_url }}" alt="Kode QR untuk menautkan WhatsApp sekolah">
