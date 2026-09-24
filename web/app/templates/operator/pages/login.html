@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Absensa | {{ 'Masuk perangkat' if layer == 'device' else 'Masuk operator' }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='tokens.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='dashboard.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='login.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='access.css') }}">
+  <script defer src="{{ url_for('static', path='pin.js') }}"></script>
+</head>
+<body class="auth-login-page operator-login-page">
+<main class="login-layout"><section class="login-card" aria-labelledby="login-title">
+  <p class="login-brand">Absensa</p>
+  <div class="login-heading">
+    <h1 id="login-title">{{ 'Masuk perangkat' if layer == 'device' else 'Masuk sebagai operator' }}</h1>
+    <p>{{ 'Gunakan akun perangkat yang diberikan oleh administrator.' if layer == 'device' else 'Pilih nama Anda dan masukkan PIN 6 digit.' }}</p>
+    {% if device_name %}<p>Perangkat: <strong>{{ device_name }}</strong></p>{% endif %}
+  </div>
+  {% if error %}<p class="login-error" role="alert">{{ error }}</p>{% endif %}
+  {% if locked_until %}<p class="login-error" role="status">Perangkat dikunci sementara. Coba kembali setelah <time datetime="{{ locked_until.isoformat() }}">{{ locked_until.strftime('%H:%M:%S UTC') }}</time>. <a href="{{ url_for('operator_login') }}?next={{ destination|urlencode }}">Periksa kembali</a></p>{% endif %}
+  {% if layer == 'operator' and not operators %}<p class="login-error" role="status">Belum ada operator aktif. Hubungi administrator untuk menambahkan operator.</p>{% endif %}
+  <form class="login-form" method="post" action="{{ url_for('trusteddevice_login_submit' if layer == 'device' else 'operator_login_submit') }}" data-auth-form>
+    <input type="hidden" name="next" value="{{ destination }}">
+    {% if layer == 'device' %}
+      <div class="login-field"><label for="username">Nama pengguna perangkat</label><input id="username" name="username" value="{{ username }}" maxlength="100" autocomplete="username" required autofocus></div>
+      <div class="login-field"><label for="password">Kata sandi</label><input id="password" name="password" type="password" maxlength="1024" autocomplete="current-password" required></div>
+    {% else %}
+      <div class="login-field"><label for="operator-id">Operator</label><select id="operator-id" name="operator_id" required {% if locked_until or not operators %}disabled{% endif %}>
+        <option value="">Pilih operator</option>
+        {% for item in operators %}<option value="{{ item.id }}" {% if operator_id|string == item.id|string %}selected{% endif %}>{{ item.display_name }} · #{{ item.id }}</option>{% endfor %}
+      </select></div>
+      <div class="login-field"><label for="operator-pin">PIN 6 digit</label>
+        <div class="pin-control" data-pin-control>
+          <input id="operator-pin" name="pin" type="password" inputmode="numeric" autocomplete="off" pattern="[0-9]{6}" minlength="6" maxlength="6" required aria-describedby="pin-help" {% if locked_until or not operators %}disabled{% endif %}>
+          <div class="pin-slots" aria-hidden="true">{% for i in range(6) %}<span></span>{% endfor %}</div>
+        </div>
+        <p id="pin-help" class="field-help">Masukkan atau tempel 6 digit PIN Anda.</p>
+      </div>
+    {% endif %}
+    <button class="button login-submit" type="submit" {% if layer == 'operator' and (locked_until or not operators) %}disabled{% endif %}>Masuk</button>
+  </form>
+  {% if layer == 'operator' %}<form method="post" action="{{ url_for('trusteddevice_logout') }}" class="device-logout"><button class="button secondary" type="submit">Keluar dari perangkat</button></form>{% endif %}
+  <a class="admin-login-link" href="{{ url_for('admin_login') }}">Masuk sebagai admin</a>
+</section></main>
+</body></html>

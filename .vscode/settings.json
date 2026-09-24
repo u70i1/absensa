@@ -1,11 +1,8 @@
 {
-  "python.testing.unittestArgs": [
-    "-v",
-    "-s",
-    "./backend",
-    "-p",
-    "test_*.py"
-  ],
-  "python.testing.pytestEnabled": false,
-  "python.testing.unittestEnabled": true
+  "python.defaultInterpreterPath": "${workspaceFolder}/web/.venv/bin/python",
+  "python.analysis.extraPaths": ["${workspaceFolder}/web"],
+  "python.testing.cwd": "${workspaceFolder}/web",
+  "python.testing.pytestArgs": ["tests"],
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false
 }

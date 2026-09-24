@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block page_title %}Presensi{% endblock %}
+{% block body_class %}fluid-layout{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', path='access.css') }}"><script defer src="{{ url_for('static', path='operator.js') }}"></script>{% endblock %}
+{% block content %}
+<header class="top-header"><a href="{{ url_for('home') }}"><strong>Absensa</strong></a><form class="logout-form" method="post" action="{{ url_for('operator_logout') }}"><button class="top-tab logout-button" type="submit">Ganti operator / Keluar</button></form></header>
+<main class="content-page operator-page">
+  <div><h1>Presensi</h1><p>{{ operator_name }} · {{ device_name }}</p></div>
+  <form class="scanner-form" method="post" action="{{ url_for('operator_scan') }}" hx-post="{{ url_for('operator_scan') }}" hx-target="#operator-feed" hx-swap="outerHTML" hx-disabled-elt="find button" hx-sync="this:drop">
+    <div class="form-field"><label for="scan-nisn">Pindai atau masukkan NISN</label><input id="scan-nisn" name="nisn" value="{{ nisn or '' }}" required pattern="[0-9]{10}" maxlength="10" inputmode="numeric" autocomplete="off" placeholder="10 digit NISN" autofocus></div>
+    <button class="button primary" type="submit">Catat</button>
+  </form>
+  {% include 'operator/components/feed.html' %}
+</main>
+{% endblock %}

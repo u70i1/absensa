@@ -1,0 +1,39 @@
+"""Shortcut to all routes."""
+
+from app.routes.admin import router as admin_router
+from app.routes.admin_auth import router as admin_auth_router
+from app.routes.admin_classes import router as admin_classes_router
+from app.routes.admin_import import router as admin_import_router
+from app.routes.admin_photos import router as admin_photos_router
+from app.routes.bulk_classes import router as bulk_classes_router
+from app.routes.bulk_scans import router as bulk_scans_router
+from app.routes.bulk_students import router as bulk_students_router
+from app.routes.classes import router as class_router
+from app.routes.scan import router as scan_router
+from app.routes.students import router as student_router
+from fastapi import APIRouter
+
+api_router = APIRouter()
+api_router.include_router(bulk_classes_router)
+api_router.include_router(bulk_students_router)
+api_router.include_router(bulk_scans_router)
+api_router.include_router(class_router)
+api_router.include_router(student_router)
+api_router.include_router(scan_router)
+api_router.include_router(admin_auth_router)
+api_router.include_router(admin_router)
+api_router.include_router(admin_classes_router)
+api_router.include_router(admin_photos_router)
+api_router.include_router(admin_import_router)
+
+from app.routes.access_auth import router as access_auth_router
+from app.routes.admin_access import router as admin_access_router
+from app.routes.operator import router as operator_router
+
+api_router.include_router(access_auth_router)
+api_router.include_router(admin_access_router)
+api_router.include_router(operator_router)
+
+from app.routes.admin_selection import router as admin_selection_router
+
+api_router.include_router(admin_selection_router)

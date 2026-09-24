@@ -1,5 +1,7 @@
-backend/.venv
+/web/.venv/
 __pycache__/
 *.env
 *complexipy*
-/backend/photos/
+/web/photos/
+node_modules/
+dist/

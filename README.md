@@ -6,8 +6,8 @@ Contributions are welcomed! Please check out the to-do list below for current pr
 
 ## Student profile photos
 
-After installing `backend/requirements.txt`, run `.venv/bin/alembic upgrade head`
-from `backend/` to add the nullable `students.photo_path` column.
+After installing `web/requirements.txt`, run `.venv/bin/alembic upgrade head`
+from `web/` to add the nullable `students.photo_path` column.
 
 The student edit dialog uploads multipart field `photo` to
 `POST /admin/students/{student_id}/photo`. Both this endpoint and
@@ -17,7 +17,7 @@ The upload returns `student_id`, `photo_path`, and `photo_url`.
 JPEG, PNG, and WebP images are accepted up to 5 MiB and 20 megapixels. Images
 are resized to fit 1024 × 1024, stripped of metadata, and saved as JPEG with
 generated filenames under `PHOTOS_DIR` (default: `photos`, relative to the
-backend working directory). Keep this directory persistent and back it up
+web working directory). Keep this directory persistent and back it up
 alongside the database. Replacing a photo removes the previous file after
 the database update succeeds. Existing students keep their initials until
 a photo is uploaded.
@@ -67,15 +67,15 @@ uploaded. Canceling or completing a preview also discards its staged photos.
 Student `ID KELAS` values must already exist. Import new classes first to obtain
 their generated IDs before assigning students to them.
 
-Install `backend/requirements.txt` and run `.venv/bin/alembic upgrade head`
-from `backend/` before using this page; the migrations add `import_batches` and
+Install `web/requirements.txt` and run `.venv/bin/alembic upgrade head`
+from `web/` before using this page; the migrations add `import_batches` and
 `import_photos`. Archive support uses `libarchive-c` and requires the native
 libarchive shared library (for example, `libarchive13` on Debian/Ubuntu or
 `libarchive` on Arch; a recent build with RAR/7z support is recommended).
 
 ## Trusted devices and operators
 
-Apply the database migration from `backend/` with
+Apply the database migration from `web/` with
 `.venv/bin/alembic upgrade head`. Migration `0fbaf2d5ad9a` adds
 `trusted_devices`, `operators`, and `operator_sessions`; existing school data is
 unchanged. The existing `scripts/create_admin.py` bootstrap command still creates
@@ -165,8 +165,8 @@ through fixtures; authentication tests exercise the real dependency chain.
 
 ### Features
 
-- [ ] Bulk student and class endpoints (for spreadsheet feature) *(in progress)*
-- [ ] Make an .xlsx template for importing
+- [x] Bulk student and class endpoints (for spreadsheet feature)
+- [x] Make .xlsx templates for importing
 - [x] Admin: manage operators (create, edit, deactivate, reset PIN, delete)
 - [x] Admin: manage trusted devices (create, edit, deactivate, revoke, delete)
 
@@ -179,10 +179,6 @@ through fixtures; authentication tests exercise the real dependency chain.
 ### Testing
 
 - [x] Single data factory for each table
-
-### Frontend
-
---
 
 <details>
 
@@ -197,44 +193,48 @@ through fixtures; authentication tests exercise the real dependency chain.
   - [x] *~~Initialize Alembic for database migrations~~*
 </details>
 
-## How to Run the Backend Server
+## Run the web app
 
-This project isn't expected to run properly yet, but if you want to run it anyway (maybe you're planning to contribute, thank you!), follow these steps:
+`web/` is the single FastAPI application. It serves the admin dashboard, the
+TrustedDevice and Operator screens, the API, Jinja templates, HTMX, static assets,
+and database migrations. Run Python commands from this directory so `.env`,
+`alembic.ini`, and the default `photos/` path resolve correctly.
 
-1. Clone this repository.
-
-2. Configure `docker-compose.yml` to your liking, then spin up a PostgreSQL container with:
-
-    ```
-    docker compose up -d
-    ```
-
-    Once it's running, note the port you set under the `ports` key (5433 by default) -- you'll need it in the next step.
-
-3. In the `backend` folder, copy `.env.example` to a new file named `.env`. Update the values as needed -- most importantly `DATABASE_URL`, which should match how you configured `docker-compose.yml`:
-
-    ```
-    DATABASE_URL="postgresql+psycopg2://POSTGRES_USER:POSTGRES_PASSWORD@localhost:port/attendance"
-    ```
-
-4. Set up a Python environment and install the dependencies from `requirements.txt`.
-
-5. Run the initial Alembic migration:
-
-    ```
-    alembic upgrade head
-    ```
-
-6. That's it! The API is ready to run. Start it with `uvicorn`.
-
-### Running Tests
-
-To run the test suite with `pytest`, you'll need a local PostgreSQL install and a dedicated test database. Create it with:
-
-```
-createdb -h localhost -p 5433 -U attendance test_attendance
+```bash
+docker compose up -d
+cd web
+cp .env.example .env
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/alembic upgrade head
+.venv/bin/python -m scripts.create_admin admin
+.venv/bin/uvicorn app.main:app --reload
 ```
 
-(Again, swap `5433` for whatever port you set in `docker-compose.yml`.)
+Set `DATABASE_URL` and `TEST_DATABASE_URL` in `web/.env` to match your PostgreSQL
+ports and credentials. The default Compose host port is `5433`. Keep the test
+database separate from the application database. The saved `photos/` directory
+contains profile images and should be backed up with the database.
 
-This creates a `test_attendance` database, which `pytest` reads from an environment variable.
+Run tests from `web/` with `.venv/bin/pytest`. The suite applies Alembic migrations
+to `TEST_DATABASE_URL`; use an empty, dedicated test database.
+
+## Project layout
+
+```text
+web/                             Live FastAPI application (admin + operator)
+  app/                           Routes, services, templates, and static assets
+    templates/admin/pages/       Administrator pages
+    templates/operator/pages/    Device and operator pages
+    templates/public/            Public and error pages
+  alembic/                       Database migrations
+  scripts/                       Admin setup and database utilities
+  tests/                         Python tests
+services/                        Reserved for a future Express.js/wweb.js service
+archive/operator-react-prototype/  Earlier standalone scanner prototype
+```
+
+The archived React project is not part of the running application. New operator
+interface work belongs in `web/app/templates/` and `web/app/static/` beside the
+admin interface. When the WhatsApp service is implemented, it can live in
+`services/` with its own package, dependencies, and configuration.
