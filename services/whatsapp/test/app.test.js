@@ -10,6 +10,7 @@ const calls = [];
 const gateway = {
   snapshot: () => ({ state: "disconnected", phone: null, qr_available: false }),
   connect: () => ({ state: "starting", phone: null, qr_available: false }),
+  disconnect: async () => ({ state: "disconnected", phone: null, qr_available: false }),
   qr: () => ({ state: "qr", phone: null, qr_available: true, qr_data_url: "data:image/png;base64,Y29kZQ==" }),
   sendMessage: async (phone, message) => {
     calls.push({ phone, message });
@@ -47,6 +48,7 @@ test("status, connect, and QR routes provide the admin contract", async () => {
   assert.equal((await request("/api/connect", { method: "POST" })).status, 202);
   const qr = await (await request("/api/qr")).json();
   assert.equal(qr.qr_data_url, "data:image/png;base64,Y29kZQ==");
+  assert.equal((await request("/api/disconnect", { method: "POST" })).status, 200);
 });
 
 test("phone and message validation on the transport endpoint", async () => {

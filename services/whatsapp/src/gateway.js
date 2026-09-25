@@ -14,6 +14,7 @@ function createGateway({ createClient, encodeQr }) {
   let phone = null;
   let qrDataUrl = null;
   let qrRevision = 0;
+  let disconnecting = null;
 
   function snapshot() {
     return { state, phone, qr_available: Boolean(qrDataUrl) };
@@ -30,6 +31,7 @@ function createGateway({ createClient, encodeQr }) {
   }
 
   function connect() {
+    if (disconnecting) throw new GatewayError("disconnecting", 409);
     if (client) return snapshot();
 
     const instance = createClient();
@@ -64,11 +66,38 @@ function createGateway({ createClient, encodeQr }) {
       state = "connected";
     });
     instance.on("auth_failure", () => reset(instance, "error"));
-    instance.on("disconnected", () => reset(instance, "disconnected"));
+    instance.on("disconnected", () => {
+      if (state !== "disconnecting") reset(instance, "disconnected");
+    });
 
     // Initialization opens Chromium and can take time. HTTP requests must not wait for it.
     Promise.resolve().then(() => instance.initialize()).catch(() => reset(instance, "error"));
     return snapshot();
+  }
+
+  async function disconnect() {
+    if (disconnecting) return disconnecting;
+    if (!client || state !== "connected") {
+      throw new GatewayError("not_connected", 409);
+    }
+    const instance = client;
+    state = "disconnecting";
+    phone = null;
+    qrDataUrl = null;
+    qrRevision += 1;
+    disconnecting = (async () => {
+      try {
+        await instance.logout();
+        reset(instance, "disconnected");
+        return snapshot();
+      } catch {
+        reset(instance, "error");
+        throw new GatewayError("disconnect_failed", 502);
+      } finally {
+        disconnecting = null;
+      }
+    })();
+    return disconnecting;
   }
 
   async function sendMessage(recipient, message) {
@@ -86,6 +115,7 @@ function createGateway({ createClient, encodeQr }) {
   return {
     snapshot,
     connect,
+    disconnect,
     qr: () => ({ ...snapshot(), qr_data_url: qrDataUrl }),
     sendMessage,
   };

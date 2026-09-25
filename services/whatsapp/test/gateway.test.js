@@ -10,11 +10,13 @@ class FakeClient extends EventEmitter {
     super();
     this.info = { wid: { user: "6281234567890" } };
     this.initializations = 0;
+    this.logouts = 0;
     this.sent = [];
   }
 
   async initialize() { this.initializations += 1; }
   async destroy() {}
+  async logout() { this.logouts += 1; }
   async getNumberId(number) { return number === "628111111111" ? { _serialized: `${number}@c.us` } : null; }
   async sendMessage(to, message) { this.sent.push({ to, message }); }
 }
@@ -49,6 +51,30 @@ test("message uses the registered WhatsApp ID and final supplied text", async ()
   client.emit("disconnected");
   assert.equal(gateway.snapshot().state, "disconnected");
   assert.ok(GatewayError);
+});
+
+test("two student messages to one guardian are both sent", async () => {
+  const client = new FakeClient();
+  const gateway = createGateway({ createClient: () => client, encodeQr: async () => "unused" });
+  gateway.connect();
+  client.emit("ready");
+  await gateway.sendMessage("628111111111", "Nicholas belum hadir");
+  await gateway.sendMessage("628111111111", "Sibling belum hadir");
+  assert.deepEqual(client.sent, [
+    { to: "628111111111@c.us", message: "Nicholas belum hadir" },
+    { to: "628111111111@c.us", message: "Sibling belum hadir" },
+  ]);
+});
+
+test("disconnect logs out the linked client and clears bridge state", async () => {
+  const client = new FakeClient();
+  const gateway = createGateway({ createClient: () => client, encodeQr: async () => "unused" });
+  await assert.rejects(gateway.disconnect(), { code: "not_connected", status: 409 });
+  gateway.connect();
+  client.emit("ready");
+  assert.equal((await gateway.disconnect()).state, "disconnected");
+  assert.equal(client.logouts, 1);
+  assert.equal(gateway.snapshot().phone, null);
 });
 
 test("old QR generation cannot replace a newer QR or connected state", async () => {

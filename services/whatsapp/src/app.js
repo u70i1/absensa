@@ -39,6 +39,16 @@ function createApp({ gateway, token }) {
     }
   });
   app.get("/api/qr", (_request, response) => response.json(gateway.qr()));
+  app.post("/api/disconnect", async (_request, response) => {
+    try {
+      return response.json(await gateway.disconnect());
+    } catch (error) {
+      if (error instanceof GatewayError) {
+        return response.status(error.status).json({ error: error.code });
+      }
+      return response.status(502).json({ error: "disconnect_failed" });
+    }
+  });
   app.post("/api/messages", async (request, response) => {
     const phone = normalizePhone(request.body?.phone);
     if (!phone) return response.status(422).json({ error: "invalid_phone" });

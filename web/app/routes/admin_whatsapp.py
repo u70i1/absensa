@@ -31,6 +31,7 @@ NOTICES = {
     "skipped": "Notifikasi hari ini dilewati.",
     "restored": "Notifikasi hari ini kembali mengikuti jadwal.",
     "test": "Pesan uji berhasil dikirim.",
+    "disconnected": "Koneksi WhatsApp diputuskan.",
 }
 
 
@@ -40,6 +41,7 @@ def render_page(
     db: Session,
     *,
     error: str | None = None,
+    test_number_value: str = "",
     status_code: int = 200,
 ):
     return templates.TemplateResponse(
@@ -50,15 +52,28 @@ def render_page(
             "config": notifications.get_settings(db),
             "daily": notifications.daily_state(db),
             "error": error,
+            "test_number_value": test_number_value,
             "notice": NOTICES.get(request.query_params.get("notice")),
         },
         status_code=status_code,
     )
 
 
-def _failure(request: Request, gateway: WhatsAppGateway, db: Session, exc: Exception):
+def _failure(
+    request: Request,
+    gateway: WhatsAppGateway,
+    db: Session,
+    exc: Exception,
+    *,
+    test_number_value: str = "",
+):
     return render_page(
-        request, gateway, db, error=exc.detail, status_code=exc.status_code
+        request,
+        gateway,
+        db,
+        error=exc.detail,
+        test_number_value=test_number_value,
+        status_code=exc.status_code,
     )
 
 
@@ -94,8 +109,8 @@ def daily_fragment(request: Request, db: Database):
 
 
 @router.get("/confirm/{action}", name="admin_whatsapp_confirmation")
-def confirmation(request: Request, action: str, db: Database):
-    if action not in {"send-now", "skip-today", "enable", "disable"}:
+def confirmation(request: Request, action: str, db: Database, gateway: Gateway):
+    if action not in {"send-now", "skip-today", "enable", "disable", "disconnect"}:
         raise HTTPException(404)
     config = notifications.get_settings(db)
     daily = notifications.daily_state(db)
@@ -113,6 +128,8 @@ def confirmation(request: Request, action: str, db: Database):
         and not config.enabled
     ):
         raise HTTPException(409, "Status layanan telah berubah.")
+    if action == "disconnect" and gateway.status().state != "connected":
+        raise HTTPException(409, "WhatsApp belum terhubung.")
     return render_modal(
         request,
         "modals/whatsapp-confirm.html",
@@ -148,6 +165,15 @@ def connect(request: Request, gateway: Gateway, db: Database):
     return RedirectResponse("/admin/whatsapp", status_code=303)
 
 
+@router.post("/disconnect", name="admin_whatsapp_disconnect")
+def disconnect(request: Request, gateway: Gateway, db: Database):
+    try:
+        gateway.disconnect()
+    except GatewayProblem as exc:
+        return _failure(request, gateway, db, exc)
+    return RedirectResponse("/admin/whatsapp?notice=disconnected", status_code=303)
+
+
 @router.post("/settings", name="admin_whatsapp_settings")
 def update_settings(
     request: Request,
@@ -181,11 +207,19 @@ def set_enabled(db: Database, enabled: bool = Form(...)):
 
 
 @router.post("/test", name="admin_whatsapp_test")
-def send_test(request: Request, gateway: Gateway, db: Database):
+def send_test(
+    request: Request, gateway: Gateway, db: Database, test_number: str = Form("")
+):
     try:
-        notifications.send_test(db, gateway)
+        notifications.send_test(db, gateway, test_number)
     except (GatewayProblem, notifications.NotificationProblem) as exc:
-        return _failure(request, gateway, db, exc)
+        return _failure(
+            request,
+            gateway,
+            db,
+            exc,
+            test_number_value=test_number[:32],
+        )
     return RedirectResponse("/admin/whatsapp?notice=test", status_code=303)
 
 

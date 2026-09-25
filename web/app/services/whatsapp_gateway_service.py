@@ -7,9 +7,15 @@ from typing import Literal
 import httpx
 
 GatewayState = Literal[
-    "disconnected", "starting", "qr", "connected", "error", "unavailable"
+    "disconnected",
+    "disconnecting",
+    "starting",
+    "qr",
+    "connected",
+    "error",
+    "unavailable",
 ]
-STATES = {"disconnected", "starting", "qr", "connected", "error"}
+STATES = {"disconnected", "disconnecting", "starting", "qr", "connected", "error"}
 QR_IMAGE = re.compile(r"data:image/png;base64,[A-Za-z0-9+/=]+\Z")
 
 
@@ -78,6 +84,8 @@ class WhatsAppGateway:
             code = payload.get("error")
             if code == "not_connected":
                 raise GatewayProblem("WhatsApp belum terhubung.", 409)
+            if code == "disconnecting":
+                raise GatewayProblem("Pemutusan koneksi masih berlangsung.", 409)
             if code == "number_not_registered":
                 raise GatewayProblem("Nomor tersebut belum terdaftar di WhatsApp.", 422)
             if code == "invalid_phone":
@@ -112,6 +120,9 @@ class WhatsAppGateway:
 
     def connect(self) -> None:
         self._request("POST", "api/connect")
+
+    def disconnect(self) -> None:
+        self._request("POST", "api/disconnect")
 
     def send_message(self, phone: str, message: str) -> None:
         if not message.strip() or len(message) > 4000:

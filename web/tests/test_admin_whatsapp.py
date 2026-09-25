@@ -7,6 +7,7 @@ import pytest
 from app.core.admin_auth import ADMIN_SESSION_COOKIE
 from app.main import app
 from app.models.admin import Admin
+from app.models.whatsapp_notification import DEFAULT_MESSAGE_TEMPLATE
 from app.routes.admin_whatsapp import get_gateway
 from app.services.admin_auth_service import create_admin_session
 from app.services.whatsapp_gateway_service import WhatsAppGateway
@@ -38,6 +39,9 @@ def bridge(client):
         if request.url.path == "/api/connect":
             state.update(state="qr", qr_available=True)
             return httpx.Response(202, json=state)
+        if request.url.path == "/api/disconnect":
+            state.update(state="disconnected", phone=None, qr_available=False)
+            return httpx.Response(200, json=state)
         if request.url.path == "/api/qr":
             return httpx.Response(
                 200, json=state | {"qr_data_url": "data:image/png;base64,Y29kZQ=="}
@@ -60,6 +64,7 @@ def test_dashboard_and_mutations_require_admin(client, bridge):
         ("get", "/admin/whatsapp/status"),
         ("get", "/admin/whatsapp/daily"),
         ("post", "/admin/whatsapp/connect"),
+        ("post", "/admin/whatsapp/disconnect"),
         ("post", "/admin/whatsapp/settings"),
         ("post", "/admin/whatsapp/enabled"),
         ("post", "/admin/whatsapp/test"),
@@ -81,6 +86,18 @@ def test_connection_request_rejects_cross_origin_forms(client, admin, bridge):
     assert bridge[1] == []
 
 
+def test_connected_number_can_be_disconnected_after_confirmation(client, admin, bridge):
+    state, requests = bridge
+    state.update(state="connected", phone="6281234567890")
+    assert "Putuskan koneksi" in client.get("/admin/whatsapp").text
+    assert client.get("/admin/whatsapp/confirm/disconnect").status_code == 200
+    response = client.post("/admin/whatsapp/disconnect", follow_redirects=False)
+    assert response.status_code == 303
+    assert state["state"] == "disconnected"
+    assert any(request.url.path == "/api/disconnect" for request in requests)
+    assert "Minta kode QR" in client.get("/admin/whatsapp").text
+
+
 def test_connection_settings_and_real_test_message(
     client, admin, bridge, existing_student, db_session
 ):
@@ -89,7 +106,14 @@ def test_connection_settings_and_real_test_message(
     assert page.status_code == 200
     assert "Minta kode QR" in page.text
     assert "Safe Mode" in page.text
+    assert 'class="button gateway-service-switch"' in page.text
+    assert 'type="time"' in page.text
+    assert 'value="09:00"' in page.text
     assert client.get("/admin/whatsapp/config").json()["safe_mode"] is True
+    assert (
+        client.get("/admin/whatsapp/config").json()["message_template"]
+        == DEFAULT_MESSAGE_TEMPLATE
+    )
 
     started = client.post("/admin/whatsapp/connect", follow_redirects=False)
     assert started.status_code == 303
@@ -99,8 +123,6 @@ def test_connection_settings_and_real_test_message(
     assert "+6281234567890" in fragment.text
     assert "hx-trigger" not in fragment.text
 
-    existing_student.guardian_phone = "+62 811-1111-111"
-    db_session.commit()
     saved = client.post(
         "/admin/whatsapp/settings",
         data={
@@ -116,7 +138,11 @@ def test_connection_settings_and_real_test_message(
     assert config["send_time"] == "08:45"
     assert config["minimum_attendance"] == 12
 
-    sent = client.post("/admin/whatsapp/test", follow_redirects=False)
+    sent = client.post(
+        "/admin/whatsapp/test",
+        data={"test_number": "08111111111"},
+        follow_redirects=False,
+    )
     assert sent.status_code == 303
     message = next(
         request for request in requests if request.url.path == "/api/messages"
@@ -126,6 +152,10 @@ def test_connection_settings_and_real_test_message(
         "message": "Halo Nicholas Angle kelas 11B",
     }
     assert client.get("/admin/whatsapp/config").json()["today"]["state"] == "ready"
+
+    invalid = client.post("/admin/whatsapp/test", data={"test_number": "bad"})
+    assert invalid.status_code == 422
+    assert "kode negara" in invalid.text
 
 
 def test_settings_validation_and_toggle_are_persistent(client, admin, bridge):

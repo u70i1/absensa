@@ -20,8 +20,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 DEFAULT_MESSAGE_TEMPLATE = (
-    "Yth. orang tua/wali {{nama}}, kami belum mencatat kehadiran "
-    "{{nama}} dari kelas {{kelas}} pada hari ini. Mohon konfirmasi kepada sekolah."
+    "Selamat siang Bapak/Ibu Orang Tua/Wali {{nama_siswa}} ({{kelas}}),\n\n"
+    "Informasi presensi hari ini menunjukkan {{nama_siswa}} tidak hadir di sekolah.\n\n"
+    "_Catatan: Pesan otomatis ini dikirim sebagai konfirmasi harian. "
+    "Jika izin/keterangan sudah disampaikan kepada Wali Kelas, "
+    "silakan abaikan pesan ini. Terima kasih._"
 )
 
 

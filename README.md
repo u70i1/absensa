@@ -251,3 +251,14 @@ delivery claims are persisted in `whatsapp_notification_logs`, so restarting
 the job does not repeat claimed deliveries. A claim is recorded before the
 external send: a crash in that narrow interval can leave a message unsent,
 which favors avoiding duplicate WhatsApp messages.
+The job also resumes an interrupted manual batch after its lease expires,
+including when the automatic service is disabled; students already claimed
+for that day are skipped.
+
+For local notification tests, `web/scripts/seed_many_students.py` leaves
+guardian numbers empty unless requested. Run it from `web/` with, for example,
+`.venv/bin/python -m scripts.seed_many_students --count 500 --test-number 081234567890 --test-number-amount 5`
+to assign that one number to five new students. The dashboard's Test action
+uses an entered recipient number and real data from a randomly selected
+active student; it does not require a stored guardian number.
+Replace the example number with a number you control before sending messages.

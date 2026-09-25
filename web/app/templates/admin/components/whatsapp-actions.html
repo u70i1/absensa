@@ -14,5 +14,8 @@
     {% else %}<button class="button secondary" type="button" disabled title="{{ daily.reason }}">Lewati hari ini</button>{% endif %}
     {% if daily.can_cancel_skip %}<form method="post" action="{{ url_for('admin_whatsapp_cancel_skip') }}"><button class="button secondary" type="submit">Batalkan</button></form>{% endif %}
   </div>
-  <form class="gateway-test-form" method="post" action="{{ url_for('admin_whatsapp_test') }}"><p>Test memilih satu siswa dengan nomor wali yang valid, lalu mengirim templat saat ini. Test tidak memengaruhi pengiriman harian.</p><button class="button secondary" type="submit">Kirim pesan uji</button></form>
+  <form class="gateway-test-form" method="post" action="{{ url_for('admin_whatsapp_test') }}">
+    <div class="form-field"><label for="whatsapp-test-number">Nomor penerima test</label><input id="whatsapp-test-number" name="test_number" type="tel" inputmode="tel" autocomplete="tel" value="{{ test_number_value or '' }}" placeholder="081234567890" required><p class="field-help">Gunakan nomor 08 atau 628. Test memakai data siswa aktif secara acak, tetapi mengirim pesan hanya ke nomor ini. Pengiriman harian tidak terpengaruh.</p></div>
+    <button class="button secondary" type="submit">Kirim pesan uji</button>
+  </form>
 </section>

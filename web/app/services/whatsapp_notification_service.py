@@ -1,7 +1,6 @@
 """School-wide absence notifications; the bridge only transports final messages."""
 
 import logging
-import random
 import re
 import time as time_module
 from datetime import datetime, time, timedelta, timezone
@@ -24,7 +23,7 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 LOCAL_TZ = ZoneInfo(app_settings.timezone)
-VARIABLE = re.compile(r"{{\s*(nama|kelas)\s*}}")
+VARIABLE = re.compile(r"{{\s*(nama_siswa|nama|kelas)\s*}}")
 RUN_LEASE = timedelta(minutes=2)
 
 
@@ -45,14 +44,19 @@ def validate_template(value: str) -> str:
         raise NotificationProblem("Templat harus berisi 1–2000 karakter.", 422)
     remainder = VARIABLE.sub("", value)
     if "{{" in remainder or "}}" in remainder or "{%" in value or "{#" in value:
-        raise NotificationProblem("Gunakan hanya variabel {{nama}} dan {{kelas}}.", 422)
+        raise NotificationProblem(
+            "Gunakan hanya variabel {{nama_siswa}} dan {{kelas}} ({{nama}} masih didukung).",
+            422,
+        )
     return value
 
 
 def render_message(template: str, name: str, class_name: str | None) -> str:
     validate_template(template)
     return VARIABLE.sub(
-        lambda match: name if match.group(1) == "nama" else (class_name or "-"),
+        lambda match: (
+            name if match.group(1) in ("nama_siswa", "nama") else (class_name or "-")
+        ),
         template,
     )
 
@@ -237,7 +241,16 @@ def run_daily(
     local = at.astimezone(LOCAL_TZ)
     day = local.date()
     config = get_settings(db, lock=True)
-    if not manual:
+    run = db.scalar(
+        select(Log).where(Log.day == day, Log.kind == "run").with_for_update()
+    )
+    # A previously authorized manual run remains manual when the scheduler
+    # resumes it after a process restart, even if automatic service is off.
+    resuming_manual = (
+        run is not None and run.detail == "manual" and run.status != "completed"
+    )
+    effective_manual = manual or resuming_manual
+    if not effective_manual:
         if not config.enabled:
             db.rollback()
             return {"state": "disabled"}
@@ -250,9 +263,6 @@ def run_daily(
     if _last_skip(db, day):
         db.rollback()
         return {"state": "skipped"}
-    run = db.scalar(
-        select(Log).where(Log.day == day, Log.kind == "run").with_for_update()
-    )
     now_utc = datetime.now(timezone.utc)
     if run and (
         run.status == "completed"
@@ -264,9 +274,18 @@ def run_daily(
         db.rollback()
         raise NotificationProblem("WhatsApp belum terhubung.", 503)
     if run is None:
-        run = Log(day=day, kind="run", status="running")
+        run = Log(
+            day=day,
+            kind="run",
+            status="running",
+            detail="manual" if manual else "scheduled",
+        )
         db.add(run)
         db.flush()
+    elif manual:
+        # A manual retry also marks older in-progress rows as manual so a
+        # future scheduler tick can recover them if this process stops again.
+        run.detail = "manual"
     run.status = "queued" if prepare_only else "running"
     run.lease_until = now_utc + RUN_LEASE
     run_id = run.id
@@ -286,7 +305,7 @@ def run_daily(
         if attempted and safe_mode:
             _renew_run(db, run_id, datetime.now(timezone.utc))
             sleep(delay)
-        if not manual and not get_settings(db).enabled:
+        if not effective_manual and not get_settings(db).enabled:
             interrupted = True
             break
         # Recheck just before claiming: a scan may arrive during a safe-mode delay.
@@ -346,7 +365,7 @@ def run_daily(
     db.commit()
     logger.info(
         "WhatsApp %s run day=%s status=%s sent=%s failed=%s",
-        "manual" if manual else "scheduled",
+        "manual" if effective_manual else "scheduled",
         day,
         run.status,
         sent,
@@ -356,26 +375,24 @@ def run_daily(
 
 
 def send_test(
-    db: Session, gateway: WhatsAppGateway, *, at: datetime | None = None
+    db: Session,
+    gateway: WhatsAppGateway,
+    test_number: str,
+    *,
+    at: datetime | None = None,
 ) -> dict:
     at = at or now_local()
+    phone = guardian_recipient(test_number)
     config = get_settings(db)
-    students = db.execute(
-        select(Student.id, Student.name, Student.guardian_phone, Class.class_name)
+    student = db.execute(
+        select(Student.id, Student.name, Class.class_name)
         .outerjoin(Class, Class.class_id == Student.class_id)
-        .where(Student.guardian_phone.is_not(None), Student.guardian_phone != "")
-    ).all()
-    eligible = []
-    for student in students:
-        try:
-            eligible.append((student, guardian_recipient(student.guardian_phone)))
-        except GatewayProblem:
-            continue
-    if not eligible:
-        raise NotificationProblem(
-            "Belum ada siswa dengan nomor wali yang dapat digunakan.", 422
-        )
-    student, phone = random.choice(eligible)
+        .where(Student.current.is_(True))
+        .order_by(func.random())
+        .limit(1)
+    ).first()
+    if student is None:
+        raise NotificationProblem("Belum ada siswa aktif untuk pesan uji.", 422)
     message = render_message(config.message_template, student.name, student.class_name)
     log = Log(
         day=at.astimezone(LOCAL_TZ).date(),

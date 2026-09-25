@@ -27,7 +27,7 @@ notification settings, schedule, student selection, message rendering, and
 rate limiting; this bridge receives only a phone number and final message.
 
 The bridge API consists of `GET /health`, authenticated `GET /api/status`,
-`POST /api/connect`, `GET /api/qr`, and `POST /api/messages` with JSON
+`POST /api/connect`, `POST /api/disconnect`, `GET /api/qr`, and `POST /api/messages` with JSON
 `{"phone":"6281234567890","message":"Final text"}`. Run `npm test`
 for the bridge's mocked client and HTTP contract tests. A real QR scan and
 message delivery still require a WhatsApp account and running Chromium.

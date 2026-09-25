@@ -1,10 +1,11 @@
 """Business rules for scheduled, manual, skipped and test notifications."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
 from app.core.config import settings
+from app.models.whatsapp_notification import DEFAULT_MESSAGE_TEMPLATE
 from app.models.whatsapp_notification import WhatsAppNotificationLog as Log
 from app.services import whatsapp_notification_service as service
 from app.services.whatsapp_gateway_service import GatewayProblem, GatewayStatus
@@ -110,21 +111,31 @@ def test_manual_ignores_disabled_service_time_and_attendance_minimum(
     )
 
 
+def test_test_message_requires_a_student(db_session):
+    configure(db_session, enabled=False, minimum=100)
+    with pytest.raises(service.NotificationProblem, match="Belum ada siswa"):
+        service.send_test(db_session, FakeGateway(), "08111111111", at=AT)
+
+
 def test_test_message_uses_real_student_without_changing_daily_state(
     db_session, existing_student
 ):
     configure(db_session, enabled=False, minimum=100)
-    with pytest.raises(service.NotificationProblem, match="Belum ada siswa"):
-        service.send_test(db_session, FakeGateway(), at=AT)
-    contact(existing_student, db_session, "08111111111")
     gateway = FakeGateway()
     assert (
-        service.send_test(db_session, gateway, at=AT)["student_id"]
+        service.send_test(db_session, gateway, "08111111111", at=AT)["student_id"]
         == existing_student.id
     )
     assert gateway.messages == [("628111111111", "Halo Nicholas Angle dari 11B")]
     assert service.daily_state(db_session, AT)["state"] == "ready"
     assert db_session.scalar(select(Log).where(Log.kind == "test")).status == "sent"
+
+
+def test_test_number_is_validated_and_not_logged(db_session, existing_student):
+    configure(db_session)
+    with pytest.raises(GatewayProblem):
+        service.send_test(db_session, FakeGateway(), "not-a-number", at=AT)
+    assert db_session.scalars(select(Log).where(Log.kind == "test")).all() == []
 
 
 def test_safe_mode_delays_between_sends_only(
@@ -139,6 +150,44 @@ def test_safe_mode_delays_between_sends_only(
     gateway = FakeGateway()
     service.run_daily(db_session, gateway, manual=True, at=AT, sleep=pauses.append)
     assert pauses == [30]
+    assert len(gateway.messages) == 2
+
+
+def test_shared_guardian_receives_a_separate_message_for_each_absent_student(
+    db_session, existing_student, student_factory
+):
+    guardian = "08111111111"
+    contact(existing_student, db_session, guardian)
+    other = contact(
+        student_factory(
+            name="Sibling", nisn="1111111111", class_id=existing_student.class_id
+        ),
+        db_session,
+        guardian,
+    )
+    configure(db_session, safe_mode=True, delay=30)
+    pauses = []
+    gateway = FakeGateway()
+
+    result = service.run_daily(
+        db_session, gateway, manual=True, at=AT, sleep=pauses.append
+    )
+
+    assert result == {"state": "completed", "sent": 2, "failed": 0}
+    assert pauses == [30]
+    assert gateway.messages == [
+        ("628111111111", "Halo Nicholas Angle dari 11B"),
+        ("628111111111", "Halo Sibling dari 11B"),
+    ]
+    deliveries = db_session.scalars(select(Log).where(Log.kind == "delivery")).all()
+    assert {delivery.student_id for delivery in deliveries} == {
+        existing_student.id,
+        other.id,
+    }
+    assert (
+        service.run_daily(db_session, gateway, manual=True, at=AT)["state"]
+        == "already_run"
+    )
     assert len(gateway.messages) == 2
 
 
@@ -188,7 +237,7 @@ def test_interrupted_run_resumes_only_unclaimed_students(
         db_session,
         "+628222222222",
     )
-    configure(db_session)
+    configure(db_session, enabled=False, minimum=20)
 
     class Unavailable(FakeGateway):
         def send_message(self, phone, message):
@@ -198,9 +247,53 @@ def test_interrupted_run_resumes_only_unclaimed_students(
     assert first["state"] == "interrupted"
     assert service.daily_state(db_session, AT)["can_send_now"] is True
     gateway = FakeGateway()
-    resumed = service.run_daily(db_session, gateway, manual=True, at=AT)
+    resumed = service.run_daily(db_session, gateway, at=AT.replace(hour=7))
     assert resumed == {"state": "completed", "sent": 1, "failed": 0}
     assert gateway.messages == [("628222222222", "Halo Later dari -")]
+
+
+def test_scheduler_recovers_an_expired_manual_batch_with_shared_guardian(
+    db_session, existing_student, student_factory
+):
+    guardian = "08111111111"
+    contact(existing_student, db_session, guardian)
+    contact(student_factory(name="Sibling", nisn="1111111111"), db_session, guardian)
+    configure(db_session, enabled=False, minimum=20)
+    gateway = FakeGateway()
+    queued = service.run_daily(
+        db_session, gateway, manual=True, at=AT.replace(hour=7), prepare_only=True
+    )
+    assert queued["state"] == "queued"
+
+    # Simulate the FastAPI process stopping before its background task starts.
+    run = db_session.get(Log, queued["run_id"])
+    run.lease_until = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db_session.commit()
+
+    recovered = service.run_daily(db_session, gateway, at=AT.replace(hour=7))
+    assert recovered == {"state": "completed", "sent": 2, "failed": 0}
+    assert [phone for phone, _message in gateway.messages] == ["628111111111"] * 2
+
+
+def test_manual_retry_marks_an_older_unfinished_run_for_recovery(
+    db_session, existing_student
+):
+    contact(existing_student, db_session, "08111111111")
+    configure(db_session, enabled=False)
+    gateway = FakeGateway()
+    queued = service.run_daily(
+        db_session, gateway, manual=True, at=AT, prepare_only=True
+    )
+    run = db_session.get(Log, queued["run_id"])
+    run.detail = None  # Rows created before manual runs recorded their origin.
+    run.lease_until = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db_session.commit()
+
+    resumed = service.run_daily(
+        db_session, gateway, manual=True, at=AT, prepare_only=True
+    )
+    assert resumed["state"] == "queued"
+    assert db_session.get(Log, queued["run_id"]).detail == "manual"
 
 
 @pytest.mark.parametrize(
@@ -214,3 +307,17 @@ def test_invalid_templates_are_rejected(template):
 
 def test_template_variables_are_replaced_without_executing_code():
     assert service.render_message("{{nama}} / {{ kelas }}", "A & B", "X") == "A & B / X"
+
+
+def test_default_template_matches_school_copy_and_renders_student_name():
+    assert DEFAULT_MESSAGE_TEMPLATE == (
+        "Selamat siang Bapak/Ibu Orang Tua/Wali {{nama_siswa}} ({{kelas}}),\n\n"
+        "Informasi presensi hari ini menunjukkan {{nama_siswa}} tidak hadir di sekolah.\n\n"
+        "_Catatan: Pesan otomatis ini dikirim sebagai konfirmasi harian. "
+        "Jika izin/keterangan sudah disampaikan kepada Wali Kelas, "
+        "silakan abaikan pesan ini. Terima kasih._"
+    )
+    assert (
+        service.render_message(DEFAULT_MESSAGE_TEMPLATE, "Ayu", "VII-A").count("Ayu")
+        == 2
+    )
