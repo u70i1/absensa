@@ -121,7 +121,6 @@
 
 /* Match the narrower admin card padding once content stacks on small screens. */
 @media (max-width: 700px) {
-  .gateway-page { padding: var(--space-9) var(--space-6) var(--space-10); }
   .gateway-status-panel { padding: var(--space-6); }
   .gateway-settings-row { grid-template-columns: 1fr; }
 }

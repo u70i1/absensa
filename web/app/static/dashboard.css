@@ -32,8 +32,14 @@ body {
   max-width: calc(100vw - var(--space-6) - var(--space-6));
 }
 .content-page {
+  max-width: var(--admin-page-max-width);
   margin-inline: auto;
   padding: var(--space-10) var(--page-inline-padding) var(--page-bottom-padding);
+}
+@media (max-width: 700px) {
+  .content-page {
+    padding: var(--space-9) var(--space-6) var(--space-10);
+  }
 }
 .surface-card {
   min-width: 0;
@@ -179,9 +185,6 @@ dd {
   inset-inline: var(--space-2);
   background: var(--color-surface-tint);
   border-radius: var(--radius-pill);
-}
-.dashboard {
-  padding: var(--space-10) var(--space-dashboard-inline);
 }
 h1 {
   margin-bottom: var(--space-8);
@@ -747,7 +750,7 @@ button.htmx-request:not(:disabled),
 .request-error {
   position: fixed;
   bottom: var(--space-9);
-  left: var(--space-dashboard-inline);
+  left: var(--page-inline-padding);
   z-index: 2;
   box-shadow: var(--shadow-surface);
 }
