@@ -2,6 +2,8 @@
 
 An ongoing project.
 
+For setup and the commands to run every service, see [Run Absensa locally](RUNNING.md).
+
 Contributions are welcomed! Please check out the to-do list below for current priorities.
 
 ## Student profile photos
