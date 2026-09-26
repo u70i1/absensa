@@ -524,13 +524,10 @@ button.htmx-request:not(:disabled),
 .page-button:disabled {
   opacity: var(--opacity-disabled);
 }
-.student-table .empty-row {
-  display: block;
+.student-table .empty-row td,
+.class-table .class-empty-row td {
   text-align: center;
   padding: var(--space-11) var(--space-9);
-}
-.empty-row td {
-  display: block;
 }
 .empty-row p {
   margin-top: var(--space-3);

@@ -1,0 +1,22 @@
+<div class="table-container" tabindex="0" role="region" aria-label="Tabel log presensi, gulir untuk melihat data berikutnya">
+  <table class="student-table scan-table">
+    <caption class="sr-only">Log presensi berdasarkan ID, siswa, kelas, dan waktu</caption>
+    <thead>
+      <tr>
+        <th scope="col" class="selection-cell" hidden><input type="checkbox" data-select-all aria-label="Pilih semua di halaman ini" title="Pilih semua di halaman ini"></th>
+        <th scope="col" class="scan-id">ID</th>
+        <th scope="col">NAMA SISWA</th>
+        <th scope="col">KELAS</th>
+        <th scope="col">WAKTU PRESENSI</th>
+        <th scope="col" class="actions-heading">TINDAKAN</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for scan in scans %}{% include 'tables/scan-row.html' %}
+      {% else %}<tr class="empty-row"><td colspan="5">
+        <strong>Tidak ada log presensi yang ditampilkan</strong>
+        <p>{% if query.q %}Coba nama siswa lain atau ubah tanggal.{% else %}Pilih tanggal lain untuk melihat riwayat presensi.{% endif %}</p>
+      </td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>

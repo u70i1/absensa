@@ -1,6 +1,6 @@
 """Attendance scan request, query, and response schemas."""
 
-from datetime import datetime
+from datetime import date, datetime
 
 from app.schemas.base import BulkDeleteRequestBase, PaginationQueryBase
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -54,3 +54,10 @@ class ScanResponse(BaseModel):
 
 class ScanBulkDeleteRequest(BulkDeleteRequestBase):
     """Scan IDs for POST /scans/delete-bulk."""
+
+
+class AdminScanQuery(PaginationQueryBase):
+    """Single-day filters for the administrator's attendance log."""
+
+    day: date = Field(le=date(9999, 12, 30))
+    q: str = Field("", max_length=100)

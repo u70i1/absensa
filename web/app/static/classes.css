@@ -187,13 +187,6 @@
 .class-table .edit-action {
   color: var(--color-surface-tint);
 }
-.class-table .class-empty-row {
-  display: table-row;
-}
-.class-empty-row td {
-  text-align: center;
-  padding: var(--space-11) var(--space-9);
-}
 @media (prefers-reduced-motion: reduce) {
   .class-metric-link, .class-grade, .class-table tbody tr {
     transition: none;

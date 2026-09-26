@@ -1,15 +1,15 @@
 <div class="modal-heading">
   <h2 id="modal-title" tabindex="-1">{{ verb }} {{ records|length }} {{ noun }}?</h2>
-  <p>{% if action == 'deactivate' %}Siswa terpilih akan ditandai tidak aktif. Data siswa tetap tersimpan.{% elif kind == 'classes' %}Siswa di kelas terpilih akan menjadi tidak memiliki kelas. Data siswa tetap tersimpan.{% else %}Data siswa terpilih akan dihapus. Riwayat presensi tetap tersimpan.{% endif %}{% if action == 'delete' %} Penghapusan tidak dapat dibatalkan.{% endif %}</p>
+  <p>{% if action == 'deactivate' %}Siswa terpilih akan ditandai tidak aktif. Data siswa tetap tersimpan.{% elif kind == 'classes' %}Siswa di kelas terpilih akan menjadi tidak memiliki kelas. Data siswa tetap tersimpan.{% elif kind == 'scans' %}Catatan presensi terpilih akan dihapus. Data siswa tetap tersimpan.{% else %}Data siswa terpilih akan dihapus. Riwayat presensi tetap tersimpan.{% endif %}{% if action == 'delete' %} Penghapusan tidak dapat dibatalkan.{% endif %}</p>
 </div>
 <ul class="selection-review">
-  {% for record in records %}<li>{% if kind == 'students' %}{{ record.name }} · {{ record.nisn }}{% else %}ID {{ record.class_id }} · {{ record.class_name }} · Jenjang {{ record.grade }}{% endif %}</li>{% endfor %}
+  {% for record in records %}<li>{% if kind == 'students' %}{{ record.name }} · {{ record.nisn }}{% elif kind == 'classes' %}ID {{ record.class_id }} · {{ record.class_name }} · Jenjang {{ record.grade }}{% else %}ID {{ record.scan_id }} · {{ record.name }} · {{ record.timestamp.astimezone(scan_timezone).strftime('%d/%m/%Y %H:%M:%S') }}{% endif %}</li>{% endfor %}
 </ul>
 <form method="post" action="{{ url_for('admin_table_selection', kind=kind, step='apply') }}?{{ request.url.query }}"
   hx-post="{{ url_for('admin_table_selection', kind=kind, step='apply') }}?{{ request.url.query }}"
   hx-target="#modal-content" hx-swap="innerHTML" hx-sync="this:drop" hx-disabled-elt="find button">
   <input type="hidden" name="action" value="{{ action }}">
-  {% for record in records %}<input type="hidden" name="ids" value="{{ record.id if kind == 'students' else record.class_id }}">{% endfor %}
+  {% for record in records %}<input type="hidden" name="ids" value="{{ record.id if kind == 'students' else record.class_id if kind == 'classes' else record.scan_id }}">{% endfor %}
   <div class="modal-actions">
     <button type="button" class="button secondary" data-close-modal>Batal</button>
     <button type="submit" class="button {{ 'warning' if action == 'deactivate' else 'destructive' }}">{{ verb }} {{ records|length }} {{ noun }}</button>

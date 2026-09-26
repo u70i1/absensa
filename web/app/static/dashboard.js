@@ -96,9 +96,9 @@ document.addEventListener("htmx:beforeSwap", (event) => {
 });
 
 document.addEventListener("htmx:afterSwap", (event) => {
-  if (["student-results", "class-results"].includes(event.detail.target?.id)) {
+  if (["student-results", "class-results", "scan-results"].includes(event.detail.target?.id)) {
     document
-      .querySelector("#student-results .table-container, #class-results .table-container")
+      .querySelector("#student-results .table-container, #class-results .table-container, #scan-results .table-container")
       ?.classList.add("interaction-feedback");
     return;
   }
@@ -121,6 +121,9 @@ document.addEventListener("studentSaved", () => {
 });
 document.addEventListener("accessSaved", () => { if (modal.open) closeModal(); });
 document.addEventListener("classSaved", () => {
+  if (modal.open) closeModal();
+});
+document.addEventListener("scanSaved", () => {
   if (modal.open) closeModal();
 });
 
@@ -227,7 +230,7 @@ document.addEventListener('click', (event) => {
   section.querySelector('.selection-toolbar').hidden = !active;
   section.querySelectorAll('.selection-cell').forEach((cell) => { cell.hidden = !active; });
   section.querySelectorAll('tr.empty-row td, tr.class-empty-row td').forEach((cell) => {
-    cell.colSpan = (section.id === 'student-results' ? 5 : 4) + Number(active);
+    cell.colSpan = section.querySelectorAll('thead th:not([hidden])').length;
   });
   section.querySelectorAll('.row-selection').forEach((box) => {
     box.checked = false;

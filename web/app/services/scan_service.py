@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from app.core.config import settings
@@ -6,7 +6,7 @@ from app.models.class_ import Class
 from app.models.scan_log import ScanLog
 from app.models.student import Student
 from app.services.exceptions import DuplicateScanLog, ScanLogNotFound, StudentNotFound
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 tz_info = ZoneInfo(settings.timezone)
@@ -178,3 +178,38 @@ def get_recent_history(db: Session, before: int | None = None, limit: int = 30):
         "history": rows[:limit],
         "next_cursor": rows[limit - 1].scan_id if len(rows) > limit else None,
     }
+
+
+def _admin_scan_filters(day: date, name: str):
+    start = datetime.combine(day, time.min, tzinfo=tz_info)
+    end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=tz_info)
+    filters = [ScanLog.timestamp >= start, ScanLog.timestamp < end]
+    if name:
+        filters.append(ScanLog.name.icontains(name, autoescape=True))
+    return filters
+
+
+def count_admin_scans(db: Session, day: date, name: str) -> int:
+    return db.scalar(
+        select(func.count(ScanLog.scan_id)).where(*_admin_scan_filters(day, name))
+    ) or 0
+
+
+def get_admin_scans(
+    db: Session, day: date, name: str, *, page: int | None = None, limit: int = 50
+):
+    stmt = (
+        select(
+            ScanLog.scan_id,
+            ScanLog.name,
+            ScanLog.class_name,
+            Student.nisn,
+            ScanLog.timestamp,
+        )
+        .outerjoin(Student, Student.id == ScanLog.student_id)
+        .where(*_admin_scan_filters(day, name))
+        .order_by(ScanLog.timestamp.desc(), ScanLog.scan_id.desc())
+    )
+    if page is not None:
+        stmt = stmt.offset((page - 1) * limit).limit(limit)
+    return db.execute(stmt).all()

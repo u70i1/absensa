@@ -1,0 +1,21 @@
+<tr class="student-row scan-row">
+  <td class="selection-cell" hidden><input class="row-selection" type="checkbox" name="ids" value="{{ scan.scan_id }}"
+    form="table-selection" aria-label="Pilih log {{ scan.scan_id }} untuk {{ scan.name }}"></td>
+  <td class="scan-id">{{ scan.scan_id }}</td>
+  <td><span class="scan-identity"><strong class="student-name">{{ scan.name }}</strong>
+    {% if scan.nisn %}<small class="student-nisn">NISN {{ scan.nisn }}</small>{% endif %}</span></td>
+  <td class="student-class">{{ scan.class_name or '—' }}</td>
+  <td><time class="scan-time" datetime="{{ scan.timestamp.isoformat() }}">
+    <strong>{{ scan.timestamp.astimezone(scan_timezone).strftime('%H:%M:%S') }}</strong>
+    <small>{{ scan.timestamp.astimezone(scan_timezone).strftime('%d/%m/%Y') }}</small>
+  </time></td>
+  <td><form class="row-actions" method="post"
+    action="{{ url_for('admin_table_selection', kind='scans', step='confirm') }}?{{ request.url.query }}"
+    hx-post="{{ url_for('admin_table_selection', kind='scans', step='confirm') }}?{{ request.url.query }}"
+    hx-target="#modal-content" hx-swap="innerHTML">
+    <input type="hidden" name="action" value="delete">
+    <input type="hidden" name="ids" value="{{ scan.scan_id }}">
+    <button type="submit" class="text-action delete-action" aria-label="Hapus log {{ scan.scan_id }} untuk {{ scan.name }}"
+      aria-haspopup="dialog"><img src="{{ url_for('static', path='icons/trash.svg') }}" width="14" height="14" alt="">Hapus</button>
+  </form></td>
+</tr>

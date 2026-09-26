@@ -1,15 +1,21 @@
 """Validated, atomic mutations for dashboard selections."""
 
 from app.models.class_ import Class
+from app.models.scan_log import ScanLog
 from app.models.student import Student
 from app.services.exceptions import AppException
 from sqlalchemy import delete, select, update
 
 MAX_SELECTION_SIZE = 1000
+MODEL_KEYS = {
+    "students": (Student, Student.id),
+    "classes": (Class, Class.class_id),
+    "scans": (ScanLog, ScanLog.scan_id),
+}
 
 
 def selected_records(db, kind, action, raw_ids, *, lock=False):
-    if kind not in {"students", "classes"} or action not in (
+    if kind not in MODEL_KEYS or action not in (
         {"delete", "deactivate"} if kind == "students" else {"delete"}
     ):
         raise AppException("Tindakan tidak valid.", 422)
@@ -19,9 +25,7 @@ def selected_records(db, kind, action, raw_ids, *, lock=False):
         raise AppException("Pilihan tidak valid.", 422) from None
     if not ids or len(ids) > MAX_SELECTION_SIZE or ids[0] < 1:
         raise AppException("Pilih 1–1000 data untuk melanjutkan.", 422)
-    model, key = (
-        (Student, Student.id) if kind == "students" else (Class, Class.class_id)
-    )
+    model, key = MODEL_KEYS[kind]
     statement = select(model).where(key.in_(ids)).order_by(key)
     if lock:
         statement = statement.with_for_update()
@@ -36,15 +40,11 @@ def selected_records(db, kind, action, raw_ids, *, lock=False):
 def apply_selection(db, kind, action, raw_ids):
     try:
         records = selected_records(db, kind, action, raw_ids, lock=True)
-        ids = [
-            record.id if kind == "students" else record.class_id for record in records
-        ]
+        model, key = MODEL_KEYS[kind]
+        ids = [getattr(record, key.key) for record in records]
         if action == "deactivate":
             db.execute(update(Student).where(Student.id.in_(ids)).values(current=False))
         else:
-            model, key = (
-                (Student, Student.id) if kind == "students" else (Class, Class.class_id)
-            )
             db.execute(delete(model).where(key.in_(ids)))
         db.commit()
     except Exception:

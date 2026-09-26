@@ -3,6 +3,8 @@
 from app.core.admin_auth import require_admin
 from app.routes.admin import Db, list_query, mutation_success, render_modal
 from app.routes.admin_classes import class_query, mutation_response
+from app.routes.admin_scans import LOCAL_TZ, mutation_response as scan_mutation_response
+from app.routes.admin_scans import scan_query
 from app.services import table_selection_service as service
 from app.services.exceptions import AppException
 from fastapi import APIRouter, Depends, Request
@@ -13,21 +15,37 @@ router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
 
 @router.post("/{kind}/selection/{step}", name="admin_table_selection")
 async def selection(kind: str, step: str, request: Request, db: Db):
-    back_url = "/admin/classes" if kind == "classes" else "/admin/students"
+    back_url = (
+        f"/admin/{kind}"
+        if kind in {"students", "classes", "scans"}
+        else "/admin/students"
+    )
     context = {"back_url": back_url, "back_label": "Kembali ke daftar"}
     try:
-        if kind not in {"students", "classes"}:
+        if kind not in {"students", "classes", "scans"}:
             raise AppException("Daftar tidak ditemukan.", 404)
         if step not in {"confirm", "apply"}:
             raise AppException("Tindakan tidak valid.", 422)
-        query = class_query(request) if kind == "classes" else list_query(request)
+        query = (
+            class_query(request)
+            if kind == "classes"
+            else scan_query(request)
+            if kind == "scans"
+            else list_query(request)
+        )
         form = await request.form(max_files=0, max_fields=1001)
         action, ids = form.get("action"), form.getlist("ids")
         if step == "apply":
             count = service.apply_selection(db, kind, action, ids)
             result = "dinonaktifkan" if action == "deactivate" else "dihapus"
             message = f"{count} data berhasil {result}."
-            render = mutation_response if kind == "classes" else mutation_success
+            render = (
+                mutation_response
+                if kind == "classes"
+                else scan_mutation_response
+                if kind == "scans"
+                else mutation_success
+            )
             return render(request, db, query, message)
         records = service.selected_records(db, kind, action, ids)
         return render_modal(
@@ -39,7 +57,12 @@ async def selection(kind: str, step: str, request: Request, db: Db):
                 "action": action,
                 "records": records,
                 "verb": "Nonaktifkan" if action == "deactivate" else "Hapus",
-                "noun": "siswa" if kind == "students" else "kelas",
+                "noun": {
+                    "students": "siswa",
+                    "classes": "kelas",
+                    "scans": "log presensi",
+                }[kind],
+                "scan_timezone": LOCAL_TZ,
             },
         )
     except (AppException, ValidationError) as exc:

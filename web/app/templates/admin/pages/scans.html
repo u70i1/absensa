@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block page_title %}Log Presensi{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', path='scans.css') }}">{% endblock %}
+{% block content %}
+  {% set active_tab = 'scans' %}
+  {% include 'navigation/admin-header.html' %}
+  <main class="content-page" data-dashboard-home="{{ url_for('admin_scans') }}">
+    <h1>Log Presensi</h1>
+    {% include 'tables/scan-results.html' %}
+  </main>
+{% endblock %}

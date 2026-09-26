@@ -26,6 +26,8 @@ CLASS_COLUMNS = (
     ("JENJANG", "grade"),
     ("NAMA KELAS", "class_name"),
 )
+SCAN_TEMPLATE = TEMPLATE_DIR / "scans_export_template.xlsx"
+SCAN_HEADERS = ("ID LOG", "NAMA SISWA", "KELAS", "NISN", "TANGGAL", "WAKTU")
 NEW_ENTRY_ROWS = 100
 
 
@@ -178,6 +180,56 @@ def build_classes_workbook(classes, filter_summary: str) -> bytes:
         table.autoFilter.ref = table.ref
     _prepare_new_rows(sheet, len(CLASS_COLUMNS), last_row)
 
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
+def build_scans_workbook(scans, filter_summary: str) -> bytes:
+    """Export attendance history in the same visual style, without import rows."""
+    workbook = load_workbook(SCAN_TEMPLATE)
+    sheet = workbook["scan_logs"]
+    actual_headers = tuple(sheet.cell(1, column).value for column in range(1, 7))
+    if actual_headers != SCAN_HEADERS:
+        raise ValueError(
+            "Scan export template columns do not match the configured mapping: "
+            f"expected {SCAN_HEADERS}, found {actual_headers}."
+        )
+    scans = list(scans)
+    exported_at = datetime.now(ZoneInfo(settings.timezone))
+    _replace_metadata(
+        workbook,
+        {
+            "{{ filter_summary }}": filter_summary,
+            "{{ exported_at }}": exported_at.strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "{{ row_count }}": len(scans),
+        },
+    )
+    style_cells = tuple(sheet.cell(2, column) for column in range(1, 7))
+    local_timezone = ZoneInfo(settings.timezone)
+    for row_number, scan in enumerate(scans, start=2):
+        if row_number > 2:
+            sheet.row_dimensions[row_number].height = sheet.row_dimensions[2].height
+        local_time = scan.timestamp.astimezone(local_timezone)
+        values = (
+            scan.scan_id,
+            scan.name,
+            scan.class_name,
+            scan.nisn,
+            local_time.date(),
+            local_time.time().replace(tzinfo=None),
+        )
+        for column, value in enumerate(values, start=1):
+            cell = sheet.cell(row_number, column)
+            _copy_cell_style(style_cells[column - 1], cell)
+            cell.value = value
+            if isinstance(value, str):
+                cell.data_type = "s"
+    last_row = max(2, len(scans) + 1)
+    table = sheet.tables["ScansExportTable"]
+    table.ref = f"A1:F{last_row}"
+    if table.autoFilter is not None:
+        table.autoFilter.ref = table.ref
     output = BytesIO()
     workbook.save(output)
     return output.getvalue()

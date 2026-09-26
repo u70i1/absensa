@@ -1,0 +1,44 @@
+<section id="scan-results" data-table-selection aria-label="Daftar log presensi"
+  hx-target="this" hx-swap="outerHTML" hx-sync="this:replace" hx-history-elt>
+  <div class="control-bar">
+    <form class="scan-filters" role="search" action="{{ url_for('admin_scans') }}" method="get"
+      hx-get="{{ url_for('admin_scans') }}"
+      hx-trigger="submit, change from:input[type='date'], input changed delay:350ms from:input[type='search'], search from:input[type='search']">
+      <div class="scan-date-field">
+        <label for="scan-day">Tanggal</label>
+        <div class="scan-date-controls">
+          {% if previous_day %}<a class="page-button scan-date-step" href="{{ list_url(day=previous_day, page=1) }}"
+            hx-get="{{ list_url(day=previous_day, page=1) }}" hx-trigger="click"
+            aria-label="Tanggal sebelumnya, {{ previous_day.strftime('%d/%m/%Y') }}">&lt;</a>
+          {% else %}<button class="page-button scan-date-step" type="button" disabled aria-label="Tidak ada tanggal sebelumnya">&lt;</button>{% endif %}
+          <input id="scan-day" class="scan-date" type="date" name="day" value="{{ query.day.isoformat() }}" required>
+          {% if next_day %}<a class="page-button scan-date-step" href="{{ list_url(day=next_day, page=1) }}"
+            hx-get="{{ list_url(day=next_day, page=1) }}" hx-trigger="click"
+            aria-label="Tanggal berikutnya, {{ next_day.strftime('%d/%m/%Y') }}">&gt;</a>
+          {% else %}<button class="page-button scan-date-step" type="button" disabled aria-label="Tidak ada tanggal berikutnya">&gt;</button>{% endif %}
+        </div>
+      </div>
+      <div class="search-box">
+        <label for="scan-search" class="sr-only">Cari berdasarkan nama siswa</label>
+        <img src="{{ url_for('static', path='icons/search.png') }}" class="search-icon" alt="" width="16" height="16">
+        <input id="scan-search" type="search" name="q" value="{{ query.q }}"
+          placeholder="Cari nama siswa" autocomplete="off">
+      </div>
+      <button type="submit" class="sr-only focus-visible-button">Cari</button>
+    </form>
+    <div class="control-actions">
+      <button type="button" class="button secondary" data-selection-toggle aria-pressed="false"
+        aria-controls="table-selection">Pilih</button>
+      <a class="button tertiary" href="{{ url_for('admin_scans_export') }}?day={{ query.day.isoformat()|urlencode }}&amp;q={{ query.q|urlencode }}"
+        download>&gt; Ekspor data</a>
+    </div>
+  </div>
+  {% set selection_kind = 'scans' %}
+  {% include 'tables/selection-toolbar.html' %}
+  {% if message %}<p class="notice" role="status">{{ message }}</p>{% endif %}
+  {% include 'tables/scan-table.html' %}
+  <p class="table-summary" role="status" aria-live="polite">
+    Menampilkan {{ scans|length }} dari {{ total }} log presensi pada {{ query.day.strftime('%d/%m/%Y') }}
+  </p>
+  {% include 'pagination/scans.html' %}
+</section>
