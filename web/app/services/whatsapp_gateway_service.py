@@ -20,10 +20,13 @@ QR_IMAGE = re.compile(r"data:image/png;base64,[A-Za-z0-9+/=]+\Z")
 
 
 class GatewayProblem(Exception):
-    def __init__(self, detail: str, status_code: int = 502):
+    def __init__(
+        self, detail: str, status_code: int = 502, *, code: str | None = None
+    ):
         super().__init__(detail)
         self.detail = detail
         self.status_code = status_code
+        self.code = code
 
 
 @dataclass(frozen=True)
@@ -90,6 +93,19 @@ class WhatsAppGateway:
                 raise GatewayProblem("Nomor tersebut belum terdaftar di WhatsApp.", 422)
             if code == "invalid_phone":
                 raise GatewayProblem("Nomor telepon tidak valid.", 422)
+            if code == "recipient_lookup_failed":
+                raise GatewayProblem(
+                    "WhatsApp gagal memeriksa nomor penerima. Periksa log bridge.",
+                    502,
+                    code=code,
+                )
+            if code == "send_failed":
+                raise GatewayProblem(
+                    "WhatsApp gagal mengirim pesan; hasil pengiriman belum pasti. "
+                    "Periksa log bridge sebelum mencoba lagi.",
+                    502,
+                    code=code,
+                )
             raise GatewayProblem("Layanan WhatsApp gagal memproses permintaan.")
         return payload
 

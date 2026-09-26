@@ -1,14 +1,16 @@
 <section id="whatsapp-actions" class="surface-card gateway-actions-panel" aria-labelledby="notification-actions-title"
-  {% if daily.state != 'completed' %}hx-get="{{ url_for('admin_whatsapp_daily') }}" hx-trigger="{{ 'every 5s' if daily.state == 'running' else 'every 30s' }}" hx-swap="outerHTML"{% endif %}>
+  {% if daily.state not in ('completed', 'completed_with_failures') %}hx-get="{{ url_for('admin_whatsapp_daily') }}" hx-trigger="{{ 'every 5s' if daily.state == 'running' else 'every 30s' }}" hx-swap="outerHTML"{% endif %}>
   <div><h2 id="notification-actions-title">Tindakan hari ini</h2><p>
     {% if daily.state == 'completed' %}Notifikasi hari ini sudah dikirim.
+    {% elif daily.state == 'completed_with_failures' %}Pengiriman hari ini selesai, tetapi {{ daily.failed }} pesan gagal atau belum pasti terkirim. Periksa log pengiriman.
+    {% elif daily.state == 'needs_attention' %}Layanan WhatsApp gagal. Periksa log bridge dan hasil pengiriman sebelum melanjutkan siswa yang belum diproses.
     {% elif daily.state == 'skipped' %}Notifikasi hari ini dilewati.
     {% elif daily.state == 'interrupted' %}Pengiriman terhenti. Lanjutkan untuk mencoba siswa yang belum diproses.
     {% elif daily.state == 'running' %}Pengiriman notifikasi hari ini sedang berlangsung.
     {% else %}Belum ada pengiriman atau pengecualian hari ini.{% endif %}
   </p></div>
   <div class="gateway-action-buttons">
-    {% if daily.can_send_now %}<a class="button primary" href="{{ url_for('admin_whatsapp_confirmation', action='send-now') }}" hx-get="{{ url_for('admin_whatsapp_confirmation', action='send-now') }}" hx-target="#modal-content" aria-haspopup="dialog">{{ 'Lanjutkan pengiriman' if daily.state == 'interrupted' else 'Kirim sekarang' }}</a>
+    {% if daily.can_send_now %}<a class="button primary" href="{{ url_for('admin_whatsapp_confirmation', action='send-now') }}" hx-get="{{ url_for('admin_whatsapp_confirmation', action='send-now') }}" hx-target="#modal-content" aria-haspopup="dialog">{{ 'Lanjutkan pengiriman' if daily.state in ('interrupted', 'needs_attention') else 'Kirim sekarang' }}</a>
     {% else %}<button class="button primary" type="button" disabled title="{{ daily.reason }}">Kirim sekarang</button>{% endif %}
     {% if daily.can_skip %}<a class="button secondary" href="{{ url_for('admin_whatsapp_confirmation', action='skip-today') }}" hx-get="{{ url_for('admin_whatsapp_confirmation', action='skip-today') }}" hx-target="#modal-content" aria-haspopup="dialog">Lewati hari ini</a>
     {% else %}<button class="button secondary" type="button" disabled title="{{ daily.reason }}">Lewati hari ini</button>{% endif %}

@@ -15,6 +15,9 @@ const gateway = {
   sendMessage: async (phone, message) => {
     calls.push({ phone, message });
     if (phone === "628999999999") throw new GatewayError("number_not_registered", 422);
+    if (phone === "628888888888") {
+      throw new GatewayError("send_failed", 502, new Error(`${phone} ${message} Bearer secret-token`));
+    }
     return { sent: true };
   },
 };
@@ -64,4 +67,24 @@ test("phone and message validation on the transport endpoint", async () => {
   assert.equal((await send("628999999999", "Halo")).status, 422);
   assert.equal((await send("+62 811-1111-111", "Halo {{already rendered}}")).status, 200);
   assert.deepEqual(calls, [{ phone: "628999999999", message: "Halo" }, { phone: "628111111111", message: "Halo {{already rendered}}" }]);
+});
+
+test("send failure exposes a stable code without exposing the message", async () => {
+  const logged = [];
+  const previousLogger = console.error;
+  console.error = (...values) => logged.push(values.join(" "));
+  let response;
+  try {
+    response = await request("/api/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: "628888888888", message: "private student message" }),
+    });
+  } finally {
+    console.error = previousLogger;
+  }
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), { error: "send_failed" });
+  assert.match(logged.join(" "), /send_failed/);
+  assert.doesNotMatch(logged.join(" "), /628888888888|private student message|secret-token/);
 });

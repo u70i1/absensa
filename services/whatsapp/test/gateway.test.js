@@ -66,6 +66,26 @@ test("two student messages to one guardian are both sent", async () => {
   ]);
 });
 
+test("bridge distinguishes recipient lookup errors from uncertain sends", async () => {
+  const lookupClient = new FakeClient();
+  lookupClient.getNumberId = async () => { throw new Error("lookup unavailable"); };
+  const lookupGateway = createGateway({ createClient: () => lookupClient, encodeQr: async () => "unused" });
+  lookupGateway.connect();
+  lookupClient.emit("ready");
+  await assert.rejects(lookupGateway.sendMessage("628111111111", "Halo"), {
+    code: "recipient_lookup_failed", status: 502,
+  });
+
+  const sendClient = new FakeClient();
+  sendClient.sendMessage = async () => { throw new Error("send outcome unknown"); };
+  const sendGateway = createGateway({ createClient: () => sendClient, encodeQr: async () => "unused" });
+  sendGateway.connect();
+  sendClient.emit("ready");
+  await assert.rejects(sendGateway.sendMessage("628111111111", "Halo"), {
+    code: "send_failed", status: 502,
+  });
+});
+
 test("disconnect logs out the linked client and clears bridge state", async () => {
   const client = new FakeClient();
   const gateway = createGateway({ createClient: () => client, encodeQr: async () => "unused" });

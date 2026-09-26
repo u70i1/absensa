@@ -10,7 +10,7 @@ from app.models.admin import Admin
 from app.models.whatsapp_notification import DEFAULT_MESSAGE_TEMPLATE
 from app.routes.admin_whatsapp import get_gateway
 from app.services.admin_auth_service import create_admin_session
-from app.services.whatsapp_gateway_service import WhatsAppGateway
+from app.services.whatsapp_gateway_service import GatewayProblem, WhatsAppGateway
 
 
 @pytest.fixture
@@ -245,3 +245,20 @@ def test_unavailable_bridge_and_bad_qr_are_safe(client, admin, bridge):
         "http://bridge.test", "x" * 40, httpx.MockTransport(bad_qr)
     )
     assert "javascript:alert" not in client.get("/admin/whatsapp").text
+
+
+def test_bridge_send_failure_identifies_uncertain_delivery():
+    gateway = WhatsAppGateway(
+        "http://bridge.test",
+        "x" * 40,
+        httpx.MockTransport(
+            lambda _request: httpx.Response(502, json={"error": "send_failed"})
+        ),
+    )
+
+    with pytest.raises(GatewayProblem) as error:
+        gateway.send_message("628111111111", "Halo")
+
+    assert error.value.status_code == 502
+    assert error.value.code == "send_failed"
+    assert "belum pasti" in error.value.detail

@@ -153,6 +153,44 @@ def test_safe_mode_delays_between_sends_only(
     assert len(gateway.messages) == 2
 
 
+def test_safe_mode_skips_students_without_contacts_without_waiting(
+    db_session, existing_student, student_factory
+):
+    contact(existing_student, db_session, "+628111111111")
+    student_factory(name="No contact", nisn="1111111111")
+    configure(db_session, safe_mode=True, delay=30)
+    pauses = []
+    gateway = FakeGateway()
+
+    result = service.run_daily(db_session, gateway, manual=True, at=AT, sleep=pauses.append)
+
+    assert result == {"state": "completed", "sent": 1, "failed": 0}
+    assert pauses == []
+    assert len(gateway.messages) == 1
+
+
+def test_safe_mode_resume_does_not_wait_for_previously_claimed_students(
+    db_session, existing_student, student_factory
+):
+    contact(existing_student, db_session, "+628111111111")
+    later = contact(
+        student_factory(name="Later", nisn="1111111111"),
+        db_session,
+        "+628222222222",
+    )
+    configure(db_session, safe_mode=True, delay=30)
+    service._claim(db_session, AT.date(), existing_student.id)
+    pauses = []
+    gateway = FakeGateway()
+
+    result = service.run_daily(db_session, gateway, manual=True, at=AT, sleep=pauses.append)
+
+    assert result["state"] == "completed_with_failures"
+    assert gateway.messages == [("628222222222", "Halo Later dari -")]
+    assert pauses == []
+    assert db_session.scalar(select(Log).where(Log.student_id == later.id)).status == "sent"
+
+
 def test_shared_guardian_receives_a_separate_message_for_each_absent_student(
     db_session, existing_student, student_factory
 ):
@@ -223,12 +261,12 @@ def test_invalid_contact_or_rejected_recipient_does_not_cancel_batch(
     configure(db_session)
     gateway = FakeGateway(fail_phone="628222222222")
     result = service.run_daily(db_session, gateway, manual=True, at=AT)
-    assert result == {"state": "completed", "sent": 1, "failed": 2}
+    assert result == {"state": "completed_with_failures", "sent": 1, "failed": 2}
     assert len(gateway.messages) == 1
     assert len(db_session.scalars(select(Log).where(Log.kind == "delivery")).all()) == 3
 
 
-def test_interrupted_run_resumes_only_unclaimed_students(
+def test_gateway_failure_pauses_scheduler_until_manual_review(
     db_session, existing_student, student_factory
 ):
     contact(existing_student, db_session, "+628111111111")
@@ -244,12 +282,31 @@ def test_interrupted_run_resumes_only_unclaimed_students(
             raise GatewayProblem("Layanan WhatsApp tidak dapat dihubungi.", 502)
 
     first = service.run_daily(db_session, Unavailable(), manual=True, at=AT)
-    assert first["state"] == "interrupted"
+    assert first == {"state": "needs_attention", "sent": 0, "failed": 1}
     assert service.daily_state(db_session, AT)["can_send_now"] is True
     gateway = FakeGateway()
-    resumed = service.run_daily(db_session, gateway, at=AT.replace(hour=7))
-    assert resumed == {"state": "completed", "sent": 1, "failed": 0}
+    assert service.run_daily(db_session, gateway, at=AT)["state"] == "needs_attention"
+    assert gateway.messages == []
+    resumed = service.run_daily(db_session, gateway, manual=True, at=AT)
+    assert resumed == {"state": "completed_with_failures", "sent": 1, "failed": 0}
     assert gateway.messages == [("628222222222", "Halo Later dari -")]
+    assert service.daily_state(db_session, AT)["failed"] == 1
+
+
+def test_legacy_completed_run_with_failed_delivery_is_shown_as_partial(
+    db_session, existing_student
+):
+    contact(existing_student, db_session, "+628111111111")
+    configure(db_session)
+    gateway = FakeGateway(fail_phone="628111111111")
+    result = service.run_daily(db_session, gateway, manual=True, at=AT)
+    assert result["state"] == "completed_with_failures"
+
+    run = db_session.scalar(select(Log).where(Log.kind == "run"))
+    run.status = "completed"  # Rows written before partial completion existed.
+    db_session.commit()
+    assert service.daily_state(db_session, AT)["state"] == "completed_with_failures"
+    assert service.daily_state(db_session, AT)["can_send_now"] is False
 
 
 def test_scheduler_recovers_an_expired_manual_batch_with_shared_guardian(

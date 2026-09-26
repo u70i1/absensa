@@ -11,6 +11,19 @@ function normalizePhone(value) {
   return compact.replace(/^\+/, "");
 }
 
+function safeDeliveryError(error, phone, message) {
+  const cause = error.cause;
+  if (!cause) return error.code;
+  const reason = String(cause.message || cause.name || "unknown error")
+    .replaceAll(message, "[message]")
+    .replaceAll(phone, "[number]")
+    .replace(/\+?\d{8,}/g, "[number]")
+    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/\s+/g, " ")
+    .slice(0, 240);
+  return `${error.code}: ${reason}`;
+}
+
 function createApp({ gateway, token }) {
   if (!token || token.length < 32 || token.startsWith("replace-with-")) {
     throw new Error("BRIDGE_API_TOKEN must be a generated secret with at least 32 characters");
@@ -60,8 +73,12 @@ function createApp({ gateway, token }) {
       return response.json(await gateway.sendMessage(phone, message));
     } catch (error) {
       if (error instanceof GatewayError) {
+        if (error.status >= 500) {
+          console.error("WhatsApp bridge delivery error:", safeDeliveryError(error, phone, message));
+        }
         return response.status(error.status).json({ error: error.code });
       }
+      console.error("WhatsApp bridge unexpected delivery error:", error?.name || "Error");
       return response.status(502).json({ error: "send_failed" });
     }
   });

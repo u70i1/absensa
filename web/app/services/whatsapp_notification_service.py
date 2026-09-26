@@ -117,14 +117,25 @@ def _last_skip(db: Session, day):
     )
 
 
+def _unresolved_delivery_count(db: Session, day) -> int:
+    return db.scalar(
+        select(func.count(Log.id)).where(
+            Log.day == day, Log.kind == "delivery", Log.status != "sent"
+        )
+    ) or 0
+
+
 def daily_state(db: Session, at: datetime | None = None) -> dict:
     at = at or now_local()
     day = at.astimezone(LOCAL_TZ).date()
     run = db.scalar(select(Log).where(Log.day == day, Log.kind == "run"))
+    failed = _unresolved_delivery_count(db, day) if run else 0
     skipped = _last_skip(db, day)
     expired = run and run.lease_until and run.lease_until <= datetime.now(timezone.utc)
-    if run and run.status == "completed":
-        state = "completed"
+    if run and run.status in ("completed", "completed_with_failures"):
+        state = "completed_with_failures" if failed else "completed"
+    elif run and run.status == "needs_attention":
+        state = "needs_attention"
     elif run and (run.status == "interrupted" or expired):
         state = "interrupted"
     elif run:
@@ -135,6 +146,13 @@ def daily_state(db: Session, at: datetime | None = None) -> dict:
         state = "ready"
     reasons = {
         "completed": "Layanan sudah berjalan hari ini.",
+        "completed_with_failures": (
+            f"Pengiriman selesai, tetapi {failed} pesan gagal atau belum pasti terkirim."
+        ),
+        "needs_attention": (
+            "Layanan WhatsApp gagal. Periksa log bridge dan hasil pengiriman "
+            "sebelum melanjutkan siswa yang belum diproses."
+        ),
         "running": "Pengiriman sedang berlangsung.",
         "skipped": "Hari ini telah dilewati.",
         "interrupted": "Pengiriman terhenti; lanjutkan untuk mengirim hanya kepada siswa yang belum dicoba.",
@@ -142,9 +160,10 @@ def daily_state(db: Session, at: datetime | None = None) -> dict:
     return {
         "date": day.isoformat(),
         "state": state,
-        "can_send_now": state in ("ready", "interrupted"),
+        "can_send_now": state in ("ready", "interrupted", "needs_attention"),
         "can_skip": state == "ready",
         "can_cancel_skip": state == "skipped",
+        "failed": failed,
         "reason": reasons.get(state),
     }
 
@@ -205,7 +224,12 @@ def _absent_students(db: Session, at: datetime):
     return db.execute(
         select(Student.id, Student.name, Student.guardian_phone, Class.class_name)
         .outerjoin(Class, Class.class_id == Student.class_id)
-        .where(Student.current.is_(True), ~present)
+        .where(
+            Student.current.is_(True),
+            Student.guardian_phone.is_not(None),
+            Student.guardian_phone != "",
+            ~present,
+        )
         .order_by(Student.id)
     ).all()
 
@@ -244,10 +268,15 @@ def run_daily(
     run = db.scalar(
         select(Log).where(Log.day == day, Log.kind == "run").with_for_update()
     )
+    if run and run.status == "needs_attention" and not manual:
+        db.rollback()
+        return {"state": "needs_attention"}
     # A previously authorized manual run remains manual when the scheduler
     # resumes it after a process restart, even if automatic service is off.
     resuming_manual = (
-        run is not None and run.detail == "manual" and run.status != "completed"
+        run is not None
+        and run.detail == "manual"
+        and run.status not in ("completed", "completed_with_failures")
     )
     effective_manual = manual or resuming_manual
     if not effective_manual:
@@ -265,11 +294,15 @@ def run_daily(
         return {"state": "skipped"}
     now_utc = datetime.now(timezone.utc)
     if run and (
-        run.status == "completed"
+        run.status in ("completed", "completed_with_failures")
         or (run.lease_until and run.lease_until > now_utc and run.id != reserved_run_id)
     ):
         db.rollback()
-        return {"state": "already_run" if run.status == "completed" else "running"}
+        return {
+            "state": "already_run"
+            if run.status in ("completed", "completed_with_failures")
+            else "running"
+        }
     if gateway.status().state != "connected":
         db.rollback()
         raise NotificationProblem("WhatsApp belum terhubung.", 503)
@@ -301,7 +334,32 @@ def run_daily(
     sent = failed = 0
     attempted = False
     interrupted = False
+    needs_attention = False
     for student in _absent_students(db, at):
+        # Existing claims include successes and uncertain sends. Never retry them
+        # automatically, and do not delay for rows that cannot be sent.
+        if db.scalar(
+            select(Log.id).where(
+                Log.day == day, Log.kind == "delivery", Log.student_id == student.id
+            )
+        ):
+            continue
+        try:
+            phone = guardian_recipient(student.guardian_phone)
+            message = render_message(template, student.name, student.class_name)
+        except (GatewayProblem, NotificationProblem) as exc:
+            log = _claim(db, day, student.id)
+            if log:
+                log.status = "failed"
+                log.detail = "invalid_contact_or_template"
+                db.commit()
+                failed += 1
+            logger.warning(
+                "WhatsApp delivery validation failed for student_id=%s: %s",
+                student.id,
+                exc.detail,
+            )
+            continue
         if attempted and safe_mode:
             _renew_run(db, run_id, datetime.now(timezone.utc))
             sleep(delay)
@@ -320,25 +378,7 @@ def run_daily(
             .limit(1)
         ):
             continue
-        if not student.guardian_phone:
-            continue
         _renew_run(db, run_id, datetime.now(timezone.utc))
-        try:
-            phone = guardian_recipient(student.guardian_phone)
-            message = render_message(template, student.name, student.class_name)
-        except (GatewayProblem, NotificationProblem) as exc:
-            log = _claim(db, day, student.id)
-            if log:
-                log.status = "failed"
-                log.detail = "invalid_contact_or_template"
-                db.commit()
-                failed += 1
-            logger.warning(
-                "WhatsApp delivery validation failed for student_id=%s: %s",
-                student.id,
-                exc.detail,
-            )
-            continue
         log = _claim(db, day, student.id)
         if log is None:
             continue
@@ -347,8 +387,15 @@ def run_daily(
             gateway.send_message(phone, message)
         except GatewayProblem as exc:
             interrupted = exc.status_code == 409 or exc.status_code >= 500
+            needs_attention = interrupted
             log.status = "failed"
-            log.detail = "gateway_unavailable" if interrupted else "delivery_rejected"
+            log.detail = (
+                "recipient_lookup_failed"
+                if exc.code == "recipient_lookup_failed"
+                else "delivery_uncertain"
+                if interrupted
+                else "delivery_rejected"
+            )
             failed += 1
             logger.warning(
                 "WhatsApp delivery failed for student_id=%s: %s", student.id, exc.detail
@@ -360,7 +407,14 @@ def run_daily(
         if interrupted:
             break
     run = db.get(Log, run_id)
-    run.status = "interrupted" if interrupted else "completed"
+    if needs_attention:
+        run.status = "needs_attention"
+    elif interrupted:
+        run.status = "interrupted"
+    elif _unresolved_delivery_count(db, day):
+        run.status = "completed_with_failures"
+    else:
+        run.status = "completed"
     run.lease_until = None
     db.commit()
     logger.info(

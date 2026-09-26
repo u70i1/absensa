@@ -1,8 +1,8 @@
 "use strict";
 
 class GatewayError extends Error {
-  constructor(code, status) {
-    super(code);
+  constructor(code, status, cause) {
+    super(code, cause ? { cause } : undefined);
     this.code = code;
     this.status = status;
   }
@@ -104,11 +104,21 @@ function createGateway({ createClient, encodeQr }) {
     if (state !== "connected" || !client) {
       throw new GatewayError("not_connected", 409);
     }
-    const registered = await client.getNumberId(recipient);
+    let registered;
+    try {
+      registered = await client.getNumberId(recipient);
+    } catch (error) {
+      throw new GatewayError("recipient_lookup_failed", 502, error);
+    }
     if (!registered?._serialized) {
       throw new GatewayError("number_not_registered", 422);
     }
-    await client.sendMessage(registered._serialized, message);
+    try {
+      await client.sendMessage(registered._serialized, message);
+    } catch (error) {
+      // A failed response cannot establish whether WhatsApp accepted the send.
+      throw new GatewayError("send_failed", 502, error);
+    }
     return { sent: true };
   }
 
