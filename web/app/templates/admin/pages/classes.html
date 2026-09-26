@@ -5,7 +5,7 @@
 {% block content %}
   {% set active_tab = 'classes' %}
   {% include 'navigation/admin-header.html' %}
-  <main class="dashboard class-dashboard" data-dashboard-home="{{ url_for('admin_classes') }}">
+  <main class="content-page class-dashboard" data-dashboard-home="{{ url_for('admin_classes') }}">
     <h1>Dashboard Kelas</h1>
     {% include 'tables/class-results.html' %}
   </main>

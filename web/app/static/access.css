@@ -1,5 +1,4 @@
 .content-page {
-  max-width: var(--account-page-max-width);
   display: grid;
   gap: var(--space-9);
 }
@@ -13,13 +12,6 @@
 }
 
 .account-sections { display: grid; gap: var(--space-9); min-width: 0; }
-.account-panel {
-  padding: var(--space-9);
-  border: var(--border-subtle);
-  border-radius: var(--radius-surface);
-  background: var(--color-surface);
-  min-width: 0;
-}
 .account-panel-heading {
   display: flex;
   gap: var(--space-6);
@@ -157,7 +149,6 @@
 
 /* Breakpoints describe layout changes; custom properties cannot be used in media queries. */
 @media (max-width: 700px) {
-  .content-page { padding: var(--space-9) var(--space-6) var(--space-10); }
   .account-panel { padding: var(--space-6); }
   .account-panel-heading { align-items: flex-start; flex-direction: column; }
   .data-table { min-width: var(--account-table-min-width); }

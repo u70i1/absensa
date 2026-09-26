@@ -2,6 +2,8 @@
 
 An ongoing project.
 
+For setup and the commands to run every service, see [Run Absensa locally](RUNNING.md).
+
 Contributions are welcomed! Please check out the to-do list below for current priorities.
 
 ## Student profile photos
@@ -230,11 +232,35 @@ web/                             Live FastAPI application (admin + operator)
   alembic/                       Database migrations
   scripts/                       Admin setup and database utilities
   tests/                         Python tests
-services/                        Reserved for a future Express.js/wweb.js service
+services/whatsapp/               Express + whatsapp-web.js bridge
 archive/operator-react-prototype/  Earlier standalone scanner prototype
 ```
 
 The archived React project is not part of the running application. New operator
 interface work belongs in `web/app/templates/` and `web/app/static/` beside the
-admin interface. When the WhatsApp service is implemented, it can live in
-`services/` with its own package, dependencies, and configuration.
+admin interface. The WhatsApp bridge runs separately; see
+[`services/whatsapp/README.md`](services/whatsapp/README.md) to configure its
+shared token, install dependencies, and connect a school phone from the admin
+dashboard.
+
+WhatsApp absence notifications are scheduled by a **separate FastAPI job
+process**. After applying migrations and starting the bridge, run
+`cd web && .venv/bin/python -m app.jobs.whatsapp_notifications` alongside the
+web server. Keep exactly one job process running under your process manager;
+it checks the database settings every 30 seconds and uses the configured
+`TIMEZONE`. For a single check, add `--once`. The daily run and per-student
+delivery claims are persisted in `whatsapp_notification_logs`, so restarting
+the job does not repeat claimed deliveries. A claim is recorded before the
+external send: a crash in that narrow interval can leave a message unsent,
+which favors avoiding duplicate WhatsApp messages.
+The job also resumes an interrupted manual batch after its lease expires,
+including when the automatic service is disabled; students already claimed
+for that day are skipped.
+
+For local notification tests, `web/scripts/seed_many_students.py` leaves
+guardian numbers empty unless requested. Run it from `web/` with, for example,
+`.venv/bin/python -m scripts.seed_many_students --count 500 --test-number 081234567890 --test-number-amount 5`
+to assign that one number to five new students. The dashboard's Test action
+uses an entered recipient number and real data from a randomly selected
+active student; it does not require a stored guardian number.
+Replace the example number with a number you control before sending messages.

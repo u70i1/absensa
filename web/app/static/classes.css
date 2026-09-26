@@ -1,9 +1,6 @@
 .class-dashboard-page {
   background: var(--color-background);
 }
-.class-dashboard {
-  padding-top: var(--class-page-top-padding);
-}
 .class-dashboard h1 {
   margin-bottom: var(--space-9);
 }

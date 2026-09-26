@@ -427,16 +427,12 @@
     flex-direction: column;
     gap: var(--space-6);
   }
-  .import-page {
-    padding: var(--page-inline-padding) var(--space-9) var(--space-11);
-  }
   .fluid-layout .top-header {
     padding-inline: var(--space-6);
   }
 }
 @media (max-width: 600px) {
   .import-page {
-    padding: var(--space-9) var(--space-6) var(--space-10);
     gap: var(--space-8);
   }
   .import-page h1 {

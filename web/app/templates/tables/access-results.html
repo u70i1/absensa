@@ -1,7 +1,7 @@
 <div id="access-results" class="account-sections">
 {% if message %}<p class="notice" role="status">{{ message }}</p>{% endif %}
 {% for kind, title, items in [('devices', 'Perangkat tepercaya', devices), ('operators', 'Operator', operators)] %}
-<section class="account-panel" aria-labelledby="{{ kind }}-title">
+<section class="surface-card account-panel" aria-labelledby="{{ kind }}-title">
   <div class="account-panel-heading"><div><h2 id="{{ kind }}-title">{{ title }}</h2><p>{{ 'Satu akun hanya dapat terhubung ke satu perangkat.' if kind == 'devices' else 'Setiap operator dapat menggunakan semua perangkat tepercaya.' }}</p></div>
     <a class="button primary" href="{{ url_for('admin_access_new', kind=kind) }}" hx-get="{{ url_for('admin_access_new', kind=kind) }}" hx-target="#modal-content" hx-swap="innerHTML" aria-haspopup="dialog">{{ 'Tambah perangkat' if kind == 'devices' else 'Tambah operator' }}</a>
   </div>

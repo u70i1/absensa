@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     admin_session_hours: int = Field(12, ge=1, le=720)
     admin_cookie_secure: bool = False
     access_cookie_secure: bool = False
+    whatsapp_bridge_url: str = "http://127.0.0.1:3001"
+    whatsapp_bridge_token: str = ""
 
 
 settings = Settings()  # pyright: ignore[reportCallIssue]

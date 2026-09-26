@@ -1,0 +1,134 @@
+"use strict";
+
+class GatewayError extends Error {
+  constructor(code, status, cause) {
+    super(code, cause ? { cause } : undefined);
+    this.code = code;
+    this.status = status;
+  }
+}
+
+function createGateway({ createClient, encodeQr }) {
+  let client = null;
+  let state = "disconnected";
+  let phone = null;
+  let qrDataUrl = null;
+  let qrRevision = 0;
+  let disconnecting = null;
+
+  function snapshot() {
+    return { state, phone, qr_available: Boolean(qrDataUrl) };
+  }
+
+  function reset(instance, nextState) {
+    if (client !== instance) return;
+    client = null;
+    state = nextState;
+    phone = null;
+    qrDataUrl = null;
+    qrRevision += 1;
+    Promise.resolve().then(() => instance.destroy()).catch(() => {});
+  }
+
+  function connect() {
+    if (disconnecting) throw new GatewayError("disconnecting", 409);
+    if (client) return snapshot();
+
+    const instance = createClient();
+    client = instance;
+    state = "starting";
+    phone = null;
+    qrDataUrl = null;
+    qrRevision += 1;
+
+    instance.on("qr", async (rawQr) => {
+      const revision = ++qrRevision;
+      try {
+        const image = await encodeQr(rawQr);
+        if (client !== instance || revision !== qrRevision || state === "connected") return;
+        qrDataUrl = image;
+        state = "qr";
+      } catch {
+        reset(instance, "error");
+      }
+    });
+    instance.on("authenticated", () => {
+      if (client !== instance) return;
+      state = "starting";
+      qrDataUrl = null;
+      qrRevision += 1;
+    });
+    instance.on("ready", () => {
+      if (client !== instance) return;
+      phone = instance.info?.wid?.user || null;
+      qrDataUrl = null;
+      qrRevision += 1;
+      state = "connected";
+    });
+    instance.on("auth_failure", () => reset(instance, "error"));
+    instance.on("disconnected", () => {
+      if (state !== "disconnecting") reset(instance, "disconnected");
+    });
+
+    // Initialization opens Chromium and can take time. HTTP requests must not wait for it.
+    Promise.resolve().then(() => instance.initialize()).catch(() => reset(instance, "error"));
+    return snapshot();
+  }
+
+  async function disconnect() {
+    if (disconnecting) return disconnecting;
+    if (!client || state !== "connected") {
+      throw new GatewayError("not_connected", 409);
+    }
+    const instance = client;
+    state = "disconnecting";
+    phone = null;
+    qrDataUrl = null;
+    qrRevision += 1;
+    disconnecting = (async () => {
+      try {
+        await instance.logout();
+        reset(instance, "disconnected");
+        return snapshot();
+      } catch {
+        reset(instance, "error");
+        throw new GatewayError("disconnect_failed", 502);
+      } finally {
+        disconnecting = null;
+      }
+    })();
+    return disconnecting;
+  }
+
+  async function sendMessage(recipient, message) {
+    if (state !== "connected" || !client) {
+      throw new GatewayError("not_connected", 409);
+    }
+    let registered;
+    try {
+      registered = await client.getNumberId(recipient);
+    } catch (error) {
+      throw new GatewayError("recipient_lookup_failed", 502, error);
+    }
+    if (!registered?._serialized) {
+      throw new GatewayError("number_not_registered", 422);
+    }
+    try {
+      await client.sendMessage(registered._serialized, message);
+    } catch (error) {
+      // A failed response cannot establish whether WhatsApp accepted the send.
+      throw new GatewayError("send_failed", 502, error);
+    }
+    return { sent: true };
+  }
+
+  return {
+    snapshot,
+    connect,
+    disconnect,
+    qr: () => ({ ...snapshot(), qr_data_url: qrDataUrl }),
+    sendMessage,
+  };
+}
+
+module.exports = { createGateway, GatewayError };
