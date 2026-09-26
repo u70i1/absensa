@@ -1,0 +1,14 @@
+<article class="scanned-student-card" data-result-scan-id="{{ result.scan_id }}">
+  {% set avatar_name = result.name %}
+  {% set avatar_id = result.student_id %}
+  {% set avatar_photo = result.photo_path %}
+  <div class="scanned-student-photo">{% include 'operator/components/avatar.html' %}</div>
+  <div class="scanned-student-details">
+    <h2>{{ result.name }}</h2>
+    <p>{{ result.student_nisn }} <span aria-hidden="true">·</span> {{ result.class_name or 'Tanpa kelas' }}</p>
+    <div class="scanned-student-meta">
+      <span>Operator: {{ operator_name }}</span>
+      <time datetime="{{ result.timestamp.isoformat() }}">{{ result.timestamp.astimezone(history_timezone).strftime('%H:%M:%S') }}</time>
+    </div>
+  </div>
+</article>

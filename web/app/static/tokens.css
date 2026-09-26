@@ -90,6 +90,23 @@
   --dashboard-min-width: 1100px;
   --admin-page-max-width: 1280px;
   --operator-page-max-width: 1120px;
+  /* Operator scanning station: generous width and card proportions from the supplied reference. */
+  --scanner-page-max-width: 1728px;
+  /* NISN field dimensions and inset shadow from the supplied prototype. */
+  --scanner-digit-width: 49px;
+  --scanner-digit-height: 72px;
+  --scanner-digit-radius: 16px;
+  --scanner-digit-shadow: inset 0 3px 4px rgb(0 0 0 / 15%);
+  --scanner-action-height: 72px;
+  --scanner-card-width: 400px;
+  --scanner-identity-min-width: 300px;
+  --scanner-history-row-height: 72px;
+  --scanner-workspace-min-height: 640px;
+  --scanner-card-motion-duration: 800ms;
+  --scanner-card-entry-bezier: cubic-bezier(0, 1.03, 0.56, 0.99);
+  --scanner-card-exit-bezier: cubic-bezier(0, 1.03, 0.56, 0.99);
+  --scanner-error-shake-duration: 420ms;
+  --scanner-history-motion-duration: 600ms;
   --public-page-max-width: 720px;
   --import-page-max-width: 1184px;
   --auth-card-width: 420px;
@@ -105,7 +122,6 @@
   --history-time-mobile-width: 96px;
   --history-last-column-mobile-width: 62px;
   --history-scroll-max-height: 65vh;
-  --pin-slot-height: 52px;
   --opacity-disabled: 0.2;
   --modal-width: 560px;
   --modal-label-width: 140px;

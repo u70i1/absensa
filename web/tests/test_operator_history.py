@@ -2,6 +2,7 @@
 
 import re
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from app.core.config import settings
 from app.models.scan_log import ScanLog
@@ -17,7 +18,7 @@ def test_root_is_public_without_redirect(client):
     assert "Buka presensi" in response.text and "Dashboard admin" in response.text
 
 
-def test_history_is_newest_first_and_paginates_stably(
+def test_older_history_endpoint_remains_stable(
     client, accounts, db_session, existing_student, monkeypatch
 ):
     monkeypatch.setattr(settings, "timezone", "Asia/Jakarta")
@@ -36,10 +37,13 @@ def test_history_is_newest_first_and_paginates_stably(
     device_login(client)
     operator_login(client, accounts[1][0])
     page = client.get("/operator")
-    ids = [int(value) for value in re.findall(r'data-scan-id="(\d+)"', page.text)]
+    assert "Riwayat Scan Hari Ini" in page.text
+    assert "Belum ada presensi hari ini" in page.text
+    first_page = client.get("/operator/history", headers={"HX-Request": "true"})
+    ids = [int(value) for value in re.findall(r'data-scan-id="(\d+)"', first_page.text)]
     assert ids == [scan.scan_id for scan in scans[:30]]
-    assert "13:00:00" in page.text  # Asia/Jakarta, UTC+7.
-    assert "Muat riwayat sebelumnya" in page.text
+    assert "13:00:00" in first_page.text  # Asia/Jakarta, UTC+7.
+    assert "Muat riwayat sebelumnya" in first_page.text
     cursor = scans[29].scan_id
     # A newly inserted scan must not shift the second page or repeat old rows.
     db_session.add(
@@ -58,7 +62,7 @@ def test_history_is_newest_first_and_paginates_stably(
     ] == [scan.scan_id for scan in scans[30:]]
     assert "Muat riwayat sebelumnya" not in fragment.text
     fallback = client.get(f"/operator?before={cursor}")
-    assert fallback.status_code == 200 and "Kembali ke terbaru" in fallback.text
+    assert fallback.status_code == 200 and "Riwayat Scan Hari Ini" in fallback.text
     assert (
         client.get(
             f"/operator/history?before={cursor}", follow_redirects=False
@@ -90,19 +94,56 @@ def test_scan_refreshes_history_and_errors_keep_input(
 ):
     device_login(client)
     operator_login(client, accounts[1][0])
-    assert "Belum ada riwayat presensi" in client.get("/operator").text
+    assert "Belum ada presensi hari ini" in client.get("/operator").text
     response = client.post(
         "/operator/scans",
         data={"nisn": existing_student.nisn},
         headers={"HX-Request": "true"},
     )
-    assert response.status_code == 200 and 'id="operator-feed"' in response.text
+    assert response.status_code == 200 and 'id="scan-feedback"' in response.text
     assert 'data-scan-succeeded="true"' in response.text
-    assert len(re.findall(r'data-scan-id="', response.text)) == 1
+    assert 'data-scan-card' in response.text
+    recent = client.get("/operator/recent", headers={"HX-Request": "true"})
+    assert len(re.findall(r'data-scan-id="', recent.text)) == 1
     duplicate = client.post("/operator/scans", data={"nisn": existing_student.nisn})
     assert duplicate.status_code == 409
     assert f'value="{existing_student.nisn}"' in duplicate.text
     assert len(re.findall(r'data-scan-id="', duplicate.text)) == 1
+
+
+def test_recent_history_is_today_only_global_and_capped_at_25(
+    client, accounts, db_session, existing_student
+):
+    local_tz = ZoneInfo(settings.timezone)
+    today = datetime.now(local_tz).replace(hour=8, minute=0, second=0, microsecond=0)
+    scans = [
+        ScanLog(
+            student_id=existing_student.id,
+            name=f"Siswa {index}",
+            timestamp=today + timedelta(seconds=index),
+        )
+        for index in range(27)
+    ]
+    scans.append(ScanLog(name="Kemarin", timestamp=today - timedelta(days=1)))
+    db_session.add_all(scans)
+    db_session.commit()
+    device_login(client)
+    operator_login(client, accounts[1][0])
+    page = client.get("/operator")
+    ids = [int(value) for value in re.findall(r'data-scan-id="(\d+)"', page.text)]
+    assert ids == [scan.scan_id for scan in reversed(scans[:27])][:25]
+    assert "27 siswa tercatat hari ini" in page.text
+    assert "Kemarin" not in page.text
+
+    db_session.add(
+        ScanLog(name="Dari perangkat lain", timestamp=today + timedelta(minutes=1))
+    )
+    db_session.commit()
+    refreshed = client.get("/operator/recent", headers={"HX-Request": "true"})
+    assert refreshed.status_code == 200
+    assert "Dari perangkat lain" in refreshed.text
+    assert "28 siswa tercatat hari ini" in refreshed.text
+    assert len(re.findall(r'data-scan-id="', refreshed.text)) == 25
 
 
 def test_history_requires_both_authentication_layers(client, accounts):
@@ -125,3 +166,26 @@ def test_history_requires_both_authentication_layers(client, accounts):
         ).status_code
         == 404
     )
+
+
+def test_operator_photo_route_requires_both_layers(
+    client, accounts, db_session, existing_student, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(settings, "photos_dir", str(tmp_path))
+    (tmp_path / "portrait.jpg").write_bytes(b"portrait")
+    existing_student.photo_path = "portrait.jpg"
+    db_session.commit()
+    path = f"/operator/students/{existing_student.id}/photo"
+    assert client.get(path, follow_redirects=False).headers["location"].startswith(
+        "/trusteddevice/login"
+    )
+    device_login(client)
+    assert client.get(path, follow_redirects=False).headers["location"].startswith(
+        "/operator/login"
+    )
+    operator_login(client, accounts[1][0])
+    response = client.get(path)
+    assert response.status_code == 200
+    assert response.content == b"portrait"
+    scanned = client.post("/operator/scans", data={"nisn": existing_student.nisn})
+    assert path in scanned.text

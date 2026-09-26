@@ -1,0 +1,5 @@
+<div id="scan-feedback" data-scan-succeeded="{{ 'true' if result else 'false' }}" aria-live="polite">
+  {% if error %}<p class="form-errors" role="alert">{{ error }}</p>
+  {% elif result %}<p class="sr-only" role="status">Kehadiran {{ result.name }} berhasil dicatat.</p>{% endif %}
+  {% if result and is_fragment %}<template data-scan-card>{% include 'operator/components/scan-card.html' %}</template>{% endif %}
+</div>

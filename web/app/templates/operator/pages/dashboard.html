@@ -1,15 +1,48 @@
 {% extends 'base.html' %}
 {% block page_title %}Presensi{% endblock %}
-{% block body_class %}fluid-layout{% endblock %}
-{% block styles %}<link rel="stylesheet" href="{{ url_for('static', path='access.css') }}"><script defer src="{{ url_for('static', path='operator.js') }}"></script>{% endblock %}
+{% block body_class %}fluid-layout operator-dashboard{% endblock %}
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', path='otp.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='operator.css') }}">
+  <script defer src="{{ url_for('static', path='otp.js') }}"></script>
+  <script defer src="{{ url_for('static', path='operator.js') }}"></script>
+{% endblock %}
 {% block content %}
-<header class="top-header"><a href="{{ url_for('home') }}"><strong>Absensa</strong></a><form class="logout-form" method="post" action="{{ url_for('operator_logout') }}"><button class="top-tab logout-button" type="submit">Ganti operator / Keluar</button></form></header>
-<main class="content-page operator-page">
-  <div><h1>Presensi</h1><p>{{ operator_name }} · {{ device_name }}</p></div>
-  <form class="scanner-form" method="post" action="{{ url_for('operator_scan') }}" hx-post="{{ url_for('operator_scan') }}" hx-target="#operator-feed" hx-swap="outerHTML" hx-disabled-elt="find button" hx-sync="this:drop">
-    <div class="form-field"><label for="scan-nisn">Pindai atau masukkan NISN</label><input id="scan-nisn" name="nisn" value="{{ nisn or '' }}" required pattern="[0-9]{10}" maxlength="10" inputmode="numeric" autocomplete="off" placeholder="10 digit NISN" autofocus></div>
-    <button class="button primary" type="submit">Catat</button>
-  </form>
-  {% include 'operator/components/feed.html' %}
+<header class="operator-header">
+  <a class="operator-brand" href="{{ url_for('home') }}">Absensa</a>
+  <div class="operator-session">
+    <div class="operator-identity"><strong>{{ operator_name }}</strong><span>{{ device_name }}</span></div>
+    <form method="post" action="{{ url_for('operator_logout') }}"><button class="button secondary" type="submit">Keluar</button></form>
+  </div>
+</header>
+<main class="operator-layout">
+  <div class="operator-scan-area">
+    <form class="scanner-form" method="post" action="{{ url_for('operator_scan') }}"
+      hx-post="{{ url_for('operator_scan') }}" hx-target="#scan-feedback" hx-swap="outerHTML"
+      hx-sync="this:drop" hx-disabled-elt="find button">
+      <div class="nisn-control otp-control otp-control--scan">
+        <label for="scan-nisn" class="sr-only">NISN siswa, 10 digit</label>
+        <input class="otp-code" id="scan-nisn" name="nisn" type="text" value="{{ nisn or '' }}"
+          inputmode="numeric" autocomplete="off" pattern="[0-9]{10}" maxlength="10"
+          aria-describedby="scan-input-help" required autofocus>
+        <div class="otp-slots" aria-hidden="true">{% for index in range(10) %}<span></span>{% endfor %}</div>
+        <span id="scan-input-help" class="sr-only">Ketik atau pindai NISN. Sepuluh digit akan dikirim otomatis.</span>
+      </div>
+      <button class="button primary scanner-submit" type="submit">Scan NISN</button>
+    </form>
+    <section class="scan-output-panel" aria-label="Hasil pemindaian">
+      <div id="scan-card-stage">
+        {% if result %}{% include 'operator/components/scan-card.html' %}
+        {% else %}<p class="scan-stage-empty">Hasil presensi akan muncul di sini.</p>{% endif %}
+      </div>
+      {% include 'operator/components/scan-feedback.html' %}
+    </section>
+  </div>
+  <section class="recent-panel" aria-labelledby="recent-title">
+    <h2 id="recent-title">Riwayat Scan Hari Ini</h2>
+    {% include 'operator/components/recent-scans.html' %}
+  </section>
 </main>
+<audio data-scan-success-audio data-source="{{ url_for('static', path='sounds/card.wav') }}" preload="auto"></audio>
+<audio data-scan-error-audio preload="auto" src="{{ url_for('static', path='sounds/printer_error.wav') }}"></audio>
 {% endblock %}

@@ -1,0 +1,41 @@
+/* The PIN uses the native input's digit guides from the linked OTP example. */
+.otp-control {
+  min-width: 0;
+  container-type: inline-size;
+}
+.otp-control .otp-code {
+  --otp-line-color: var(--color-outline);
+  display: block;
+  box-sizing: content-box;
+  width: calc(var(--otp-length) * 2em + 1px);
+  max-width: none;
+  height: 1.5em;
+  padding: 0.2em 0 0.35em 0.45em;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--otp-line-color) 0 1.5em,
+    transparent 1.5em 2em
+  ) left bottom / calc(var(--otp-length) * 2em) 0.06em no-repeat;
+  color: var(--color-on-surface);
+  caret-color: var(--color-surface-tint);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: min(var(--font-size-pin-slot), var(--otp-fit));
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  letter-spacing: 1.4em;
+  clip-path: inset(0 calc(0.5em + 1px) 0 0);
+}
+.otp-control:focus-within .otp-code {
+  --otp-line-color: var(--color-surface-tint);
+  background-size: calc(var(--otp-length) * 2em) 0.1em;
+}
+.otp-control:has(.otp-code:disabled) { opacity: 0.55; }
+
+.otp-control--pin {
+  --otp-length: 6;
+  --otp-fit: 7.8cqi;
+}
