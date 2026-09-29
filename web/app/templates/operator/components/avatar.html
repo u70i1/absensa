@@ -1,0 +1,4 @@
+<span class="avatar operator-avatar" data-avatar-fallback="{{ avatar_name|initials }}" aria-hidden="true">
+  {% if avatar_id and avatar_photo %}<img data-avatar-photo src="{{ url_for('operator_student_photo', student_id=avatar_id) }}" alt="">
+  {% else %}{{ avatar_name|initials }}{% endif %}
+</span>

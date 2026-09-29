@@ -1,0 +1,15 @@
+<div id="recent-scans" hx-get="{{ url_for('operator_recent') }}" hx-trigger="every 5s, scanRecorded"
+  hx-target="this" hx-swap="outerHTML" hx-sync="this:drop">
+  <ol class="recent-list" aria-label="25 presensi terbaru hari ini">
+    {% for scan in recent_scans %}<li class="recent-item" data-scan-id="{{ scan.scan_id }}">
+      {% set avatar_name = scan.name %}
+      {% set avatar_id = scan.student_id %}
+      {% set avatar_photo = scan.photo_path %}
+      {% include 'operator/components/avatar.html' %}
+      <div class="recent-student"><strong>{{ scan.name }}</strong>
+        <span>{{ scan.nisn or 'NISN tidak tersedia' }} · {{ scan.class_name or 'Tanpa kelas' }}</span></div>
+      <time datetime="{{ scan.timestamp.isoformat() }}">{{ scan.timestamp.astimezone(history_timezone).strftime('%H:%M') }}</time>
+    </li>{% else %}<li class="recent-empty">Belum ada presensi hari ini.</li>{% endfor %}
+  </ol>
+  <p class="recent-count">{{ today_count }} siswa tercatat hari ini</p>
+</div>

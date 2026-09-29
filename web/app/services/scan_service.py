@@ -19,7 +19,12 @@ def post_scan(db: Session, nisn: str):
     start_tomorrow = start_today + timedelta(days=1)
     scanned_student = db.execute(
         select(
-            Student.id, Student.name, Student.class_id, Student.nisn, Class.class_name
+            Student.id,
+            Student.name,
+            Student.class_id,
+            Student.nisn,
+            Student.photo_path,
+            Class.class_name,
         )
         .outerjoin(Class, Class.class_id == Student.class_id)
         .where(Student.current.is_(True), Student.nisn == nisn)
@@ -56,6 +61,7 @@ def post_scan(db: Session, nisn: str):
         "class_id": scanned_student.class_id,
         "student_nisn": scanned_student.nisn,
         "student_id": scanned_student.id,
+        "photo_path": scanned_student.photo_path,
         "timestamp": timestamp,
     }
 
@@ -178,6 +184,33 @@ def get_recent_history(db: Session, before: int | None = None, limit: int = 30):
         "history": rows[:limit],
         "next_cursor": rows[limit - 1].scan_id if len(rows) > limit else None,
     }
+
+
+def get_today_history(db: Session, at: datetime | None = None, limit: int = 25):
+    """Latest school-wide scans from the current local calendar day."""
+    local_tz = ZoneInfo(settings.timezone)
+    at = at or datetime.now(tz=local_tz)
+    day = at.astimezone(local_tz).date()
+    start = datetime.combine(day, time.min, tzinfo=local_tz)
+    end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=local_tz)
+    filters = (ScanLog.timestamp >= start, ScanLog.timestamp < end)
+    history = db.execute(
+        select(
+            ScanLog.scan_id,
+            ScanLog.name,
+            ScanLog.class_name,
+            ScanLog.timestamp,
+            Student.id.label("student_id"),
+            Student.nisn,
+            Student.photo_path,
+        )
+        .outerjoin(Student, Student.id == ScanLog.student_id)
+        .where(*filters)
+        .order_by(ScanLog.timestamp.desc(), ScanLog.scan_id.desc())
+        .limit(limit)
+    ).all()
+    total = db.scalar(select(func.count(ScanLog.scan_id)).where(*filters)) or 0
+    return {"recent_scans": history, "today_count": total, "history_day": day}
 
 
 def _admin_scan_filters(day: date, name: str):
