@@ -1,5 +1,8 @@
 # Run Absensa locally
 
+These are developer instructions. For Windows deployments with all runtimes
+inside containers, use the [deployment guide](deploy/README.md).
+
 Absensa has four running parts: PostgreSQL, FastAPI, the WhatsApp bridge, and
 the notification scheduler. You need Python, Node.js 18+, Docker, and Chromium.
 Run commands from the directories shown so each service reads its own `.env`

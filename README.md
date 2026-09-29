@@ -4,6 +4,14 @@ An ongoing project.
 
 For setup and the commands to run every service, see [Run Absensa locally](RUNNING.md).
 
+For a Windows school PC or Windows Server, see the
+[container deployment guide](deploy/README.md). It packages the whole application
+and keeps the existing development workflow separate. This is a deployment
+foundation for the app while features are still being developed, not a finished installer.
+On a Linux server or a Windows Server Linux VM with Docker already installed,
+run `python3 deploy/install.py` for guided first-time setup. Manual steps remain
+in the guide.
+
 Contributions are welcomed! Please check out the to-do list below for current priorities.
 
 ## Student profile photos
