@@ -57,9 +57,9 @@
   width: 100%;
   height: var(--scanner-digit-height);
   padding-inline: var(--space-3);
-  border: var(--border-surface);
+  border: var(--border-width) solid var(--scanner-control-border);
   border-radius: var(--scanner-digit-radius);
-  background: var(--color-background);
+  background: var(--scanner-inset-face);
   box-shadow: var(--scanner-digit-shadow);
   font-size: clamp(var(--font-size-body), 4cqi, var(--font-size-pin-slot));
   font-weight: var(--font-weight-semibold);
@@ -86,19 +86,20 @@
   width: 100%;
   min-height: var(--scanner-action-height);
   padding-inline: var(--space-9);
-  border: var(--border-surface);
+  border: var(--border-width) solid var(--scanner-control-border);
   border-radius: var(--scanner-digit-radius);
-  background: var(--color-background);
+  background: var(--scanner-button-face);
   box-shadow: var(--scanner-button-shadow);
 }
 .button.scanner-submit:not(:disabled):hover:not(:active) {
-  /* transform: translateY(calc(-1 * var(--motion-lift-distance))) rotate(calc(-1 * var(--scanner-button-hover-tilt))); */
+  transform: translateY(0);
   background: var(--color-primary-fixed);
 }
 .button.scanner-submit:not(:disabled):active {
   transform: translateY(var(--motion-lift-distance)) scale(0.985);
   opacity: 1;
-  box-shadow: var(--scanner-digit-shadow);
+  background: var(--scanner-button-face);
+  box-shadow: var(--scanner-button-pressed-shadow);
 }
 .button.scanner-submit:focus-visible {
   outline: var(--focus-outline-width) solid var(--color-surface-tint);
