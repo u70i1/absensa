@@ -9,3 +9,5 @@ dist/
 # Local deployment brief; never include it in the distribution.
 /deploy/backups/
 /backup-*/
+/deploy/install.log
+/deploy/initialized.json

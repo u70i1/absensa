@@ -6,10 +6,10 @@ WhatsApp bridge in Linux containers. Python, Node.js, libarchive and Chromium
 are included in the images. Existing e-Rapor/Dapodik installations are independent;
 Absensa does not use their databases, folders, runtimes or ports.
 
-A graphical installer, published release images, automated backups/restores,
-and unattended upgrades are future work. For now, a technical helper prepares
-Docker once and runs the commands below from an extracted copy of the project.
-Keep the same project folder/configuration for subsequent starts.
+An optional terminal setup wizard handles first-time configuration and startup.
+Manual commands remain available below. Published release images, automated
+backups/restores, and unattended upgrades are future work. Keep the same project
+folder/configuration for subsequent starts.
 
 Validation here uses Linux Docker. The Windows Desktop/WSL2 and Hyper-V paths
 still need a trial on the school's actual hardware, including LAN access and
@@ -22,6 +22,41 @@ recovery after restart. No Windows installer executable is included yet.
 | Windows 10/11, 64-bit | WSL2 + Docker Desktop using Linux containers |
 | Windows Server | Linux VM under Hyper-V or another supported hypervisor, then Docker Engine + Compose |
 | Windows 8 | Not supported |
+
+## Guided setup on Linux servers and Windows Server Linux VMs
+
+Install Docker Engine, the Docker Compose plugin, and Python 3.10+ on the Linux
+system first. The wizard checks that Docker is running and uses Linux containers.
+It does not install Docker or configure the hypervisor/Windows host. Run it as the
+same Linux account that will manage Absensa, with Docker access; Docker access
+is highly privileged. No host `pip`, `npm`, `psql`, Chromium setup, or manual
+database commands are needed. From the extracted project directory, run:
+
+```bash
+python3 deploy/install.py
+```
+
+The wizard asks for a free web port (default 8088), Indonesian time zone, and
+administrator username/password. It generates random PostgreSQL and WhatsApp
+bridge passwords privately, builds the two application images, starts the four
+services, applies migrations, checks web/database readiness, and creates the
+admin account. No extra containers are added. It does not ask for a school name
+because the application does not have a school-name setting yet.
+
+If setup stops after creating data, correct the reported problem and run
+`python3 deploy/install.py --resume`. This reuses the saved secrets and volumes.
+If setup has completed, the normal command leaves it alone; use the update steps
+below for later versions. A resume against an existing admin username resets its
+password, so use it only to finish an interrupted setup. Technical errors go to
+`deploy/install.log`; it is private and ignored by Git. Check service logs if a
+startup or admin step fails. The administrator password is entered without echo
+and is passed to the web container through standard input.
+
+After setup, open the displayed LAN URL from another school PC. Allow only the
+selected web port from the school LAN in the relevant firewall. The wizard
+cannot configure a Windows Server host firewall or virtual switch from inside
+its Linux VM. A Windows 10/11 host can use the manual PowerShell path below;
+the Linux wizard also works from a WSL distribution with Docker integration.
 
 Use a Windows release still supported by Microsoft and your Docker version;
 Windows 10 compatibility is conditional on that servicing status. Docker Desktop
@@ -47,7 +82,7 @@ Allow several GB for images/build caches in addition to school data and backups.
    Ubuntu VM is needed. Check Docker's licensing terms for your organization.
 3. Extract the project into a local folder such as `C:\Absensa`. Open PowerShell
    there. Avoid a shared/network/synchronized folder for deployment secrets.
-4. Check Docker, generate private settings, then build and start:
+4. For manual installation, check Docker, generate private settings, then build and start:
 
 ```powershell
 docker info --format '{{.OSType}}'
@@ -118,7 +153,8 @@ Use an external virtual switch connected to the school LAN and reserve a stable
 IP **for the VM**. Configure automatic VM startup and graceful shutdown. Install
 [Docker Engine and the Compose plugin](https://docs.docker.com/engine/install/ubuntu/)
 inside the VM, and enable the Docker service at boot. Grant Docker access only to
-the deployment administrator. Copy the project there, then in its root run:
+the deployment administrator. Copy the project there and run the guided setup
+above, or use these manual commands from its root:
 
 ```bash
 python3 deploy/configure.py
@@ -242,4 +278,4 @@ service. For a disconnected site, a technical helper can build matching images
 on another Linux-container machine and transfer them with `docker save/load`,
 including `postgres:18.4-alpine`; generate unique site secrets separately and
 start with `up -d --no-build --pull never`. Published, versioned image bundles
-and a friendly installer can be added when the app's features settle.
+can be added when the app's features settle.

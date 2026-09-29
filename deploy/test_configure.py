@@ -31,3 +31,11 @@ class ConfigureTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     write_config(path, port)
                 self.assertFalse(path.exists())
+
+    def test_selected_timezone_is_saved_without_reducing_secret_strength(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "production.env"
+            write_config(path, 8090, "Asia/Makassar")
+            self.assertIn("TIMEZONE=Asia/Makassar\n", path.read_text())
+            with self.assertRaises(ValueError):
+                write_config(Path(directory) / "invalid.env", 8090, "Etc/Unknown")

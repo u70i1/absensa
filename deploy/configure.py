@@ -5,19 +5,23 @@ Uses only Python's standard library; also runnable inside a Python container.
 
 import argparse
 import os
-from pathlib import Path
 import secrets
+from pathlib import Path
+
+TIMEZONES = ("Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura")
 
 
-def write_config(destination: Path, port: int) -> None:
+def write_config(destination: Path, port: int, timezone: str = "Asia/Jakarta") -> None:
     if not 1024 <= port <= 65535:
         raise ValueError("Choose a web port between 1024 and 65535.")
+    if timezone not in TIMEZONES:
+        raise ValueError("Choose an Indonesian time zone.")
     content = (
         "# Private deployment configuration. Keep with your protected backups.\n"
         f"ABSENSA_PORT={port}\n"
         "ABSENSA_BIND=0.0.0.0\n"
         "ABSENSA_VERSION=local\n"
-        "TIMEZONE=Asia/Jakarta\n"
+        f"TIMEZONE={timezone}\n"
         "COOKIE_SECURE=false\n"
         f"POSTGRES_PASSWORD={secrets.token_hex(32)}\n"
         f"WHATSAPP_BRIDGE_TOKEN={secrets.token_hex(32)}\n"
@@ -31,12 +35,13 @@ def write_config(destination: Path, port: int) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8088)
+    parser.add_argument("--timezone", choices=TIMEZONES, default="Asia/Jakarta")
     parser.add_argument(
         "--output", type=Path, default=Path(__file__).with_name("production.env")
     )
     args = parser.parse_args()
     try:
-        write_config(args.output, args.port)
+        write_config(args.output, args.port, args.timezone)
     except (FileExistsError, ValueError) as exc:
         raise SystemExit(
             "Configuration already exists; it was not changed."
