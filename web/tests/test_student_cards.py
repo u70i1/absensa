@@ -152,8 +152,9 @@ def test_white_card_and_barcode_width(sample):
     bars = root.find("s:g[@data-barcode]", ns).findall("s:rect", ns)
     left = float(bars[0].attrib["x"])
     right = float(bars[-1].attrib["x"]) + float(bars[-1].attrib["width"])
-    assert right - left == pytest.approx(648)
-    assert left == pytest.approx(76)
+    photo = root.find("s:defs/s:clipPath/s:rect", ns)
+    assert left == float(photo.attrib["x"])
+    assert right - left == pytest.approx(float(photo.attrib["width"]))
     with Image.open(
         BytesIO(cards.render_student_card_png(sample, CardSettings()))
     ) as image:

@@ -139,11 +139,11 @@ def render_student_card(student, config: CardSettings) -> str:
     """Render one self-contained, vector card, without any route/auth dependency."""
     try:
         barcode = Code128(student.nisn).build()[0]
-        # Use the whole white card width, leaving only the required ten-module
-        # quiet zone on each side and 4 units clear of the card outline.
-        module = 792 / (len(barcode) + 20)
+        # Align the bars with the photo and text; whitespace stays in the card's
+        # outer margins instead of adding padding inside the content container.
+        module = 720 / len(barcode)
         bars = "".join(
-            f'<rect x="{4 + (run.start() + 10) * module:.4f}" y="1050" width="{len(run[0]) * module:.4f}" height="70"/>'
+            f'<rect x="{40 + run.start() * module:.4f}" y="1050" width="{len(run[0]) * module:.4f}" height="70"/>'
             for run in re.finditer("1+", barcode)
         )
         name = "".join(
