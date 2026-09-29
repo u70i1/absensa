@@ -1,0 +1,33 @@
+<div class="modal-heading"><h2 id="modal-title" tabindex="-1">Pengaturan cetak</h2><p>Berlaku untuk semua kartu siswa di server ini.</p></div>
+{% if message %}<p class="notice" role="status">{{ message }}</p>{% endif %}
+<form class="student-form" method="post" action="{{ url_for('admin_card_settings_save') }}" enctype="multipart/form-data"
+  hx-post="{{ url_for('admin_card_settings_save') }}" hx-encoding="multipart/form-data" hx-target="#modal-content" hx-swap="innerHTML"
+  hx-disabled-elt="find button[type='submit']" hx-sync="this:drop" data-card-settings>
+  {% if error %}<p class="form-errors" role="alert">{{ error }}</p>{% endif %}
+  <input type="hidden" name="dimension_source" value="{{ values.dimension_source or 'width' }}">
+  <fieldset class="card-settings-section">
+    <legend>Ukuran kartu</legend>
+    <div class="form-field"><label for="card-width">Lebar kartu (mm)</label><input id="card-width" name="width_mm" type="number" min="40" max="150" step="0.005" value="{{ values.width_mm }}" required></div>
+    <div class="form-field"><label for="card-height">Tinggi kartu (mm)</label><input id="card-height" name="height_mm" type="number" min="64" max="240" step="0.008" value="{{ values.height_mm }}" required><p class="field-help">Rasio tetap 5:8. Ukuran awal 70 × 112 mm.</p></div>
+    <div class="form-field"><label for="card-gap">Jarak antarkartu (mm)</label><input id="card-gap" name="gap_mm" type="number" min="0" max="20" step="0.1" value="{{ values.gap_mm }}" required></div>
+  </fieldset>
+  <fieldset class="card-settings-section">
+    <legend>Watermark kartu</legend>
+    <p class="field-help" id="watermark-help">Isi nama sekolah dan logo bersama-sama untuk menampilkan watermark. Kosongkan keduanya untuk menonaktifkannya.</p>
+    <div class="form-field"><label for="school-name">Nama sekolah</label><input id="school-name" name="school_name" maxlength="160" value="{{ values.school_name or '' }}" aria-describedby="watermark-help"></div>
+    {% set has_logo = values.logo_path and values.remove_logo != 'true' %}
+    <div class="card-logo-editor" data-saved-logo="{{ 'true' if values.logo_path else 'false' }}">
+      <span class="card-logo-label">Logo sekolah</span>
+      <img class="card-logo-preview" data-logo-preview {% if has_logo %}src="{{ url_for('admin_card_logo') }}?v={{ values.logo_path }}"{% else %}hidden{% endif %} alt="Logo sekolah" width="112" height="112">
+      <p class="field-help" data-logo-empty {% if has_logo %}hidden{% endif %}>Belum ada logo.</p>
+      <input type="hidden" name="remove_logo" value="{{ values.remove_logo or 'false' }}">
+      <input id="school-logo" class="sr-only" name="logo" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Unggah logo sekolah" aria-describedby="logo-help">
+      <div class="card-logo-actions">
+        <button class="button secondary" type="button" data-logo-upload>Unggah logo baru</button>
+        <button class="button destructive" type="button" data-logo-delete {% if not has_logo %}hidden{% endif %}>Hapus logo</button>
+      </div>
+      <p class="field-help" id="logo-help">JPEG, PNG, atau WebP. Maksimal 5 MB dan 20 megapiksel. Perubahan logo diterapkan saat pengaturan disimpan.</p>
+    </div>
+  </fieldset>
+  <div class="modal-actions"><button class="button secondary" type="button" data-close-modal>Tutup</button><button class="button primary" type="submit">Simpan pengaturan</button></div>
+</form>

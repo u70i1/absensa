@@ -1,9 +1,7 @@
 """Server-rendered student management; JSON and HTML share student services."""
 
 from datetime import datetime
-from math import ceil
 from typing import Annotated
-from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from app.core.admin_auth import require_admin
@@ -12,6 +10,12 @@ from app.db.session import get_db
 from app.schemas.student import StudentListQuery, StudentWriteRequest
 from app.services import class_service, export_service, student_service
 from app.services.exceptions import AppException, StudentNotFound
+from app.services.student_dashboard_service import (
+    PAGE_SIZE,
+    dashboard_context,
+    list_url,
+    normalize_filters,
+)
 from app.templating import templates
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -24,7 +28,6 @@ router = APIRouter(
     dependencies=[Depends(require_admin)],
 )
 Db = Annotated[Session, Depends(get_db)]
-PAGE_SIZE = 50
 STUDENTS_URL = "/admin/students"
 ERROR_MESSAGES = {
     "duplicate_nisn": "NISN sudah digunakan oleh siswa lain.",
@@ -36,61 +39,6 @@ ERROR_MESSAGES = {
 def list_query(request: Request) -> StudentListQuery:
     # The dashboard page size is product behavior, never a client preference.
     return StudentListQuery.model_validate({**request.query_params, "limit": PAGE_SIZE})
-
-
-def list_url(query: StudentListQuery, **changes) -> str:
-    values = query.model_dump(by_alias=True, exclude={"limit"}) | changes
-    values = {
-        key: value
-        for key, value in values.items()
-        if value is not None and value != "" and value is not False
-    }
-    return f"{STUDENTS_URL}?{urlencode(values)}"
-
-
-def normalize_filters(db: Session, query: StudentListQuery):
-    classes = class_service.get_class_options(db, query.grade)
-    if query.unassigned:
-        query = query.model_copy(
-            update={"grade": None, "class_id": None, "class_name": None}
-        )
-        classes = []
-    elif query.class_id is not None and not any(
-        c.class_id == query.class_id for c in classes
-    ):
-        query = query.model_copy(update={"class_id": None, "page": 1})
-    return query, classes
-
-
-def dashboard_context(db: Session, query: StudentListQuery) -> dict:
-    query, classes = normalize_filters(db, query)
-    total = student_service.count_students(db, query)
-    pages = max(1, ceil(total / PAGE_SIZE))
-    if query.page > pages:
-        query = query.model_copy(update={"page": 1})
-    students = student_service.get_student(db, query)
-    page_numbers = sorted(
-        {
-            1,
-            pages,
-            *range(max(1, query.page - 2), min(pages, query.page + 2) + 1),
-        }
-    )
-    return {
-        "query": query,
-        "students": students,
-        "total": total,
-        "pages": pages,
-        "page_numbers": page_numbers,
-        "start": (query.page - 1) * PAGE_SIZE + 1 if total else 0,
-        "end": min(query.page * PAGE_SIZE, total),
-        "grades": class_service.get_student_grades(db),
-        "classes": classes,
-        "selected_class": next(
-            (c for c in classes if c.class_id == query.class_id), None
-        ),
-        "list_url": lambda **changes: list_url(query, **changes),
-    }
 
 
 def render_dashboard(

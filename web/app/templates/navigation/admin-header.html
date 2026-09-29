@@ -1,5 +1,6 @@
 <header class="top-header">
   <nav aria-label="Navigasi admin" class="top-tabs">
+    <a class="top-tab{% if active_tab == 'cards' %} selected{% endif %}" href="{{ url_for('admin_cards') }}" {% if active_tab == 'cards' %}aria-current="page"{% endif %}>Kartu Siswa</a>
     <a class="top-tab{% if active_tab == 'students' %} selected{% endif %}" href="{{ url_for('admin_students') }}" {% if active_tab == 'students' %}aria-current="page"{% endif %}>Siswa</a>
     <a class="top-tab{% if active_tab == 'classes' %} selected{% endif %}" href="{{ url_for('admin_classes') }}" {% if active_tab == 'classes' %}aria-current="page"{% endif %}>Kelas</a>
     <a class="top-tab{% if active_tab == 'scans' %} selected{% endif %}" href="{{ url_for('admin_scans') }}" {% if active_tab == 'scans' %}aria-current="page"{% endif %}>Log Presensi</a>

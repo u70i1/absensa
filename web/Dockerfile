@@ -10,7 +10,7 @@ FROM python:3.14-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     PHOTOS_DIR=/app/photos
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 libarchive13 ca-certificates tzdata \
+    libpq5 libarchive13 libcairo2 ca-certificates tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 10001 absensa
 WORKDIR /app

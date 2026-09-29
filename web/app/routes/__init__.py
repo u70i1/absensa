@@ -41,3 +41,7 @@ from app.routes.admin_whatsapp import router as admin_whatsapp_router
 
 api_router.include_router(admin_selection_router)
 api_router.include_router(admin_whatsapp_router)
+
+from app.routes.admin_cards import router as admin_cards_router
+
+api_router.include_router(admin_cards_router)

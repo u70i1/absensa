@@ -1,0 +1,14 @@
+<form id="card-operation" class="card-operations" method="post" action="{{ url_for('admin_card_operation') }}?{{ request.url.query }}" target="_blank" data-card-operation>
+  <div class="form-field"><label for="card-scope">Cakupan</label>
+    <select id="card-scope" name="scope">
+      <option value="all">Semua siswa</option>
+      <option value="page" selected>Halaman saat ini</option>
+      <option value="selected">Siswa terpilih</option>
+    </select>
+  </div>
+  <input type="hidden" name="confirmed" value="false">
+  {% for student in students %}<input type="hidden" name="page_ids" value="{{ student.id }}">{% endfor %}
+  <button class="button primary" type="submit" name="action" value="print" {% if not students %}disabled{% endif %}>Cetak</button>
+  <button class="button secondary" type="submit" name="action" value="download" {% if not students %}disabled{% endif %}>Unduh PNG</button>
+  <p class="field-help" data-card-status role="status" aria-live="polite">Hasil dibuka di tab baru. Beberapa kartu diunduh sebagai ZIP.</p>
+</form>

@@ -1,9 +1,10 @@
 <section id="student-results" data-table-selection aria-label="Daftar siswa" hx-target="this" hx-swap="outerHTML" hx-sync="this:replace"
   hx-history-elt>
+  {% if card_mode %}{% include 'cards/operations.html' %}{% endif %}
   {% include 'filters/student-filters.html' %}
   <div class="control-bar">
-    <form class="search-box" role="search" action="{{ url_for('admin_students') }}" method="get"
-      hx-get="{{ url_for('admin_students') }}"
+    <form class="search-box" role="search" action="{{ url_for(list_route|default('admin_students')) }}" method="get"
+      hx-get="{{ url_for(list_route|default('admin_students')) }}"
       hx-trigger="submit, input changed delay:350ms from:input[type='search'], search from:input[type='search']">
       <label for="student-search" class="sr-only">Cari berdasarkan nama atau NISN</label>
       <img src="{{ url_for('static', path='icons/search.png') }}" class="search-icon" alt="" width="16" height="16">
@@ -18,15 +19,16 @@
     </form>
     <div class="control-actions">
       <button type="button" class="button secondary" data-selection-toggle aria-pressed="false" aria-controls="table-selection">Pilih</button>
-      <a class="button tertiary" href="{{ url_for('admin_students_export') }}?{{ request.url.query }}"
+      {% if not card_mode %}<a class="button tertiary" href="{{ url_for('admin_students_export') }}?{{ request.url.query }}"
         download>&gt; Ekspor data</a>
       <button id="add-student" class="button primary" type="button"
         hx-get="{{ url_for('admin_student_new') }}?{{ request.url.query }}" hx-target="#modal-content"
-        hx-swap="innerHTML" aria-haspopup="dialog">+ Tambah Siswa</button>
+        hx-swap="innerHTML" aria-haspopup="dialog">+ Tambah Siswa</button>{% endif %}
     </div>
   </div>
   {% set selection_kind = 'students' %}
-  {% include 'tables/selection-toolbar.html' %}
+  {% if card_mode %}<form id="table-selection" class="selection-toolbar" hidden><div class="selection-summary"><strong data-selection-count role="status" aria-live="polite">0 dipilih</strong><span>Pilih baris atau centang semua di kepala tabel.</span></div></form>
+  {% else %}{% include 'tables/selection-toolbar.html' %}{% endif %}
   {% if message %}<p class="notice" role="status">{{ message }}</p>{% endif %}
   {% include 'tables/student-table.html' %}
   <p class="table-summary" role="status" aria-live="polite">

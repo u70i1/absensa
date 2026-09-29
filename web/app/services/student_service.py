@@ -65,7 +65,7 @@ def _student_list_statement(query: StudentListQuery):
         )
         .outerjoin(Class, Class.class_id == Student.class_id)
         .where(*_student_filters(query))
-        .order_by(Class.grade, Class.class_name, Student.name)
+        .order_by(Class.grade, Class.class_name, Student.name, Student.id)
     )
 
 
