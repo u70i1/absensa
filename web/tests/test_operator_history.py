@@ -89,7 +89,7 @@ def test_history_ties_use_id_and_preserve_deleted_student_snapshots(db_session):
     assert second["history"][0].nisn is None
 
 
-def test_scan_refreshes_history_and_errors_keep_input(
+def test_scan_refreshes_history_and_clears_input_on_error(
     client, accounts, existing_student
 ):
     device_login(client)
@@ -107,7 +107,8 @@ def test_scan_refreshes_history_and_errors_keep_input(
     assert len(re.findall(r'data-scan-id="', recent.text)) == 1
     duplicate = client.post("/operator/scans", data={"nisn": existing_student.nisn})
     assert duplicate.status_code == 409
-    assert f'value="{existing_student.nisn}"' in duplicate.text
+    assert f'value="{existing_student.nisn}"' not in duplicate.text
+    assert 'id="scan-nisn"' in duplicate.text
     assert len(re.findall(r'data-scan-id="', duplicate.text)) == 1
 
 

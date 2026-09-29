@@ -119,7 +119,6 @@ if (scanForm) {
       submitting = false;
       input.readOnly = false;
       if (succeeded) {
-        input.value = '';
         playPrintSoundLater();
         const template = feedback.querySelector('[data-scan-card]');
         if (template) showCard(template);
@@ -128,9 +127,9 @@ if (scanForm) {
       } else if (feedback.querySelector('[role="alert"]')) {
         play(errorAudio);
       }
+      input.value = '';
       input.focus();
-      if (!succeeded && input.value) input.select();
-      input.dispatchEvent(new Event('select'));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
     }
     if (event.detail.target?.id !== 'recent-scans') return;
     const current = document.getElementById('recent-scans');
@@ -169,8 +168,9 @@ if (scanForm) {
   document.addEventListener('htmx:responseError', (event) => {
     if (event.detail.elt !== scanForm || event.detail.xhr.getResponseHeader('X-Operator-Fragment') === 'scan') return;
     play(errorAudio);
+    input.value = '';
     input.focus();
-    input.select();
+    input.dispatchEvent(new Event('input', { bubbles: true }));
   });
 
   document.addEventListener('error', (event) => {

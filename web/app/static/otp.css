@@ -5,7 +5,7 @@
 }
 .otp-control .otp-code {
   --otp-line-color: var(--color-outline);
-  display: block;
+  display: flex;
   box-sizing: content-box;
   width: calc(var(--otp-length) * 2em + 1px);
   max-width: none;

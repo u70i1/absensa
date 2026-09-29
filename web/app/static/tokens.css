@@ -94,17 +94,22 @@
   --scanner-page-max-width: 1728px;
   /* NISN field dimensions and inset shadow from the supplied prototype. */
   --scanner-digit-width: 49px;
-  --scanner-digit-height: 72px;
+  --scanner-digit-height: 96px;
   --scanner-digit-radius: 16px;
   --scanner-digit-shadow: inset 0 3px 4px rgb(0 0 0 / 15%);
-  --scanner-action-height: 72px;
+  --scanner-action-height: var(--scanner-digit-height);
+  /* Wider scan action with a raised surface; pressing it uses the digit inset shadow. */
+  --scanner-action-width: 180px;
+  --scanner-button-shadow: 3px 3px 6px rgb(0 0 0 / 15%), -3px -3px 6px rgb(255 255 255 / 85%);
+  /* A slight hover tilt gives the scan button tactile feedback without a looping animation. */
+  --scanner-button-hover-tilt: 0.4deg;
   --scanner-card-width: 400px;
   --scanner-identity-min-width: 300px;
   --scanner-history-row-height: 72px;
   --scanner-workspace-min-height: 640px;
   --scanner-card-motion-duration: 800ms;
-  --scanner-card-entry-bezier: cubic-bezier(0, 1.03, 0.56, 0.99);
-  --scanner-card-exit-bezier: cubic-bezier(0, 1.03, 0.56, 0.99);
+  --scanner-card-entry-bezier: cubic-bezier(0, 1, 0.74, 1);
+  --scanner-card-exit-bezier: cubic-bezier(0, 1, 0.74, 1);
   --scanner-error-shake-duration: 420ms;
   --scanner-history-motion-duration: 600ms;
   --public-page-max-width: 720px;

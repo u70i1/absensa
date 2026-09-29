@@ -32,12 +32,11 @@
 }
 .operator-scan-area { display: flex; flex-direction: column; gap: var(--space-6); min-height: 0; }
 .scanner-form {
-  --scanner-code-width: calc(10 * var(--scanner-digit-width) + 9 * var(--space-3));
   display: grid;
-  grid-template-columns: minmax(0, var(--scanner-code-width)) minmax(max-content, 1fr);
+  grid-template-columns: minmax(0, 1fr) var(--scanner-action-width);
   align-items: center;
   gap: var(--space-5);
-  padding: var(--space-6);
+  padding: var(--space-8) var(--space-6);
   border: var(--border-surface);
   border-radius: var(--radius-panel);
   background: var(--color-background);
@@ -48,15 +47,15 @@
   display: grid;
   grid-template-columns: repeat(10, minmax(0, 1fr));
   gap: var(--space-3);
-  width: min(100%, var(--scanner-code-width));
+  width: 100%;
   pointer-events: none;
 }
 .otp-control--scan .otp-slots span {
   display: grid;
   place-items: center;
   min-width: 0;
-  /* Preserve the prototype's 49:72 proportions on narrower screens. */
-  aspect-ratio: 49 / 72;
+  width: 100%;
+  height: var(--scanner-digit-height);
   padding-inline: var(--space-3);
   border: var(--border-surface);
   border-radius: var(--scanner-digit-radius);
@@ -69,7 +68,7 @@
   position: absolute;
   inset: 0 auto auto 0;
   box-sizing: border-box;
-  width: min(100%, var(--scanner-code-width));
+  width: 100%;
   height: 100%;
   padding: 0;
   border: 0;
@@ -83,10 +82,27 @@
   outline: var(--focus-outline-width) solid var(--color-surface-tint);
   outline-offset: var(--focus-outline-offset);
 }
-.scanner-submit {
-  justify-self: start;
+.button.scanner-submit {
+  width: 100%;
   min-height: var(--scanner-action-height);
   padding-inline: var(--space-9);
+  border: var(--border-surface);
+  border-radius: var(--scanner-digit-radius);
+  background: var(--color-background);
+  box-shadow: var(--scanner-button-shadow);
+}
+.button.scanner-submit:not(:disabled):hover:not(:active) {
+  /* transform: translateY(calc(-1 * var(--motion-lift-distance))) rotate(calc(-1 * var(--scanner-button-hover-tilt))); */
+  background: var(--color-primary-fixed);
+}
+.button.scanner-submit:not(:disabled):active {
+  transform: translateY(var(--motion-lift-distance)) scale(0.985);
+  opacity: 1;
+  box-shadow: var(--scanner-digit-shadow);
+}
+.button.scanner-submit:focus-visible {
+  outline: var(--focus-outline-width) solid var(--color-surface-tint);
+  outline-offset: var(--focus-outline-offset);
 }
 .scan-output-panel {
   position: relative;
@@ -231,13 +247,15 @@
   .operator-identity { min-width: 0; }
   .operator-brand { display: none; }
   .operator-header { justify-content: flex-end; }
-  .scanner-form { grid-template-columns: minmax(0, 1fr); padding: var(--space-6); }
-  .otp-control--scan .otp-slots span { padding-inline: 0; border-radius: var(--radius-control); }
-  .scanner-submit { min-height: var(--control-height); }
+  .scanner-form { grid-template-columns: minmax(0, 1fr); }
+  .otp-control--scan .otp-slots span { height: calc(var(--space-11) + var(--space-3)); padding-inline: 0; border-radius: var(--radius-control); }
+  .button.scanner-submit { min-height: calc(var(--space-11) + var(--space-3)); }
   .scanned-student-card { padding: var(--space-6); }
   .recent-panel { padding: var(--space-6); }
 }
 @media (prefers-reduced-motion: reduce) {
+  .button.scanner-submit { transition: none !important; }
+  .button.scanner-submit:not(:disabled):is(:hover, :active) { transform: none; }
   .scanned-student-card,
   .recent-item { animation: none !important; transition: none !important; }
 }

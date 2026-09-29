@@ -38,7 +38,6 @@ def result_response(
         "device_name": device.username,
         "result": result,
         "error": error,
-        "nisn": "" if result else getattr(request.state, "scan_nisn", ""),
         "is_fragment": fragment,
         "history_timezone": ZoneInfo(settings.timezone),
     }
@@ -118,7 +117,6 @@ def scan(
     device: CurrentDevice,
     nisn: Annotated[str, Form()] = "",
 ):
-    request.state.scan_nisn = nisn[:10]
     try:
         if len(nisn) != 10 or not nisn.isascii() or not nisn.isdecimal():
             raise AppException("NISN harus berisi tepat 10 digit.", 422)

@@ -22,7 +22,7 @@
       hx-sync="this:drop" hx-disabled-elt="find button">
       <div class="nisn-control otp-control otp-control--scan">
         <label for="scan-nisn" class="sr-only">NISN siswa, 10 digit</label>
-        <input class="otp-code" id="scan-nisn" name="nisn" type="text" value="{{ nisn or '' }}"
+        <input class="otp-code" id="scan-nisn" name="nisn" type="text"
           inputmode="numeric" autocomplete="off" pattern="[0-9]{10}" maxlength="10"
           aria-describedby="scan-input-help" required autofocus>
         <div class="otp-slots" aria-hidden="true">{% for index in range(10) %}<span></span>{% endfor %}</div>
