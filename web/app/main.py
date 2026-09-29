@@ -2,14 +2,18 @@ from app.core.access_auth import AccessAuthenticationRequired
 from app.core.admin_auth import AdminAuthenticationRequired
 from app.core.browser_security import BrowserSecurityMiddleware, clear_access_cookies
 from app.core.config import settings
+from app.db.session import get_db
 from app.routes import api_router
 from app.services.exceptions import AppException
 from app.templating import APP_DIR, templates
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 app = FastAPI(title="absensa")
@@ -25,6 +29,16 @@ app.add_middleware(
 
 
 app.add_middleware(BrowserSecurityMiddleware)
+
+
+@app.get("/health", include_in_schema=False)
+def health(db: Session = Depends(get_db)):
+    """LAN readiness: attendance needs PostgreSQL, but not WhatsApp/internet."""
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        return JSONResponse(status_code=503, content={"ok": False})
+    return {"ok": True}
 
 
 # Public entry point; protected destinations handle their own login flow.

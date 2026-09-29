@@ -1,0 +1,114 @@
+# Always use this file alone; merging the development file would publish PostgreSQL.
+name: absensa
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-python: &python
+  image: absensa-web:${ABSENSA_VERSION:-local}
+  build: ./web
+  init: true
+  logging: *logging
+  environment: &python-env
+    DATABASE_URL: postgresql+psycopg2://absensa:${POSTGRES_PASSWORD:?Run deploy/configure.py first}@db:5432/absensa?connect_timeout=5
+    TIMEZONE: ${TIMEZONE:-Asia/Jakarta}
+    PHOTOS_DIR: /app/photos
+    ADMIN_COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    ACCESS_COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    WHATSAPP_BRIDGE_URL: http://whatsapp:3001
+    WHATSAPP_BRIDGE_TOKEN: ${WHATSAPP_BRIDGE_TOKEN:?Run deploy/configure.py first}
+  networks: [database, messaging]
+
+services:
+  db:
+    image: postgres:18.4-alpine
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_USER: absensa
+      POSTGRES_DB: absensa
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run deploy/configure.py first}
+    volumes:
+      # PostgreSQL 18 uses a versioned data directory beneath this mount.
+      - pgdata:/var/lib/postgresql
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U absensa -d absensa']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  migrate:
+    <<: *python
+    restart: "no"
+    command: [alembic, upgrade, head]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    <<: *python
+    restart: unless-stopped
+    ports:
+      - "${ABSENSA_BIND:-0.0.0.0}:${ABSENSA_PORT:-8088}:8000"
+    volumes:
+      - photos:/app/photos
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  scheduler:
+    <<: *python
+    restart: unless-stopped
+    # Keep one instance; existing database delivery claims remain authoritative.
+    deploy:
+      replicas: 1
+    command: [python, -m, app.jobs.whatsapp_notifications]
+    stop_grace_period: 60s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  whatsapp:
+    image: absensa-whatsapp:${ABSENSA_VERSION:-local}
+    build: ./services/whatsapp
+    init: true
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      BRIDGE_API_TOKEN: ${WHATSAPP_BRIDGE_TOKEN:?Run deploy/configure.py first}
+      CHROME_NO_SANDBOX: "false"
+    # Chromium's sandbox needs namespace operations denied by ordinary Docker.
+    # This capability is limited to the bridge; never use privileged: true.
+    cap_add: [SYS_ADMIN]
+    shm_size: 256mb
+    volumes:
+      - whatsapp_auth:/app/.wwebjs_auth
+    networks: [messaging]
+    healthcheck:
+      # Liveness only: an unlinked account or internet outage is not a crash.
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  pgdata:
+  photos:
+  whatsapp_auth:
+
+networks:
+  database:
+    internal: true
+  messaging:

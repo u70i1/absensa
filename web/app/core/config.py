@@ -13,7 +13,8 @@ class Settings(BaseSettings):
     # Postgres connection, e.g.
     # postgresql+psycopg2://attendance:attendance@localhost:5432/attendance
     database_url: str
-    test_database_url: str
+    # Production does not need a test database. Tests must set their own URL.
+    test_database_url: str = ""
     timezone: str
     cors_origin: str = "http://localhost:8000"
     photos_dir: str = "photos"
