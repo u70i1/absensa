@@ -63,26 +63,16 @@ function bindImportConfirmation() {
   if (!confirmation || confirmation.dataset.bound) return;
   confirmation.dataset.bound = "true";
   const submit = document.querySelector("[data-confirm-import]");
-  confirmation.addEventListener("change", () => {
-    const counts = { create: 0, update: 0 };
-    confirmation.querySelectorAll("[data-import-row]").forEach((row) => {
-      const checked = row.querySelector("input").checked;
-      if (checked) counts[row.dataset.action]++;
-      row.querySelector("[data-row-toggle]").textContent = checked ? "Batalkan" : "Dibatalkan";
-    });
-    Object.entries(counts).forEach(([action, count]) => { document.querySelector(`[data-count="${action}"]`).textContent = count; });
-    submit.disabled = counts.create + counts.update === 0;
-  });
   confirmation.addEventListener("submit", () => {
-    submit.disabled = true;
-    submit.textContent = "Menyimpan…";
+    if (submit) { submit.disabled = true; submit.textContent = "Menyimpan…"; }
   });
-  confirmation.dispatchEvent(new Event("change"));
 }
 
 bindImportConfirmation();
 // Delegate so refreshed preview rows behave the same after saving an edit.
 document.addEventListener("click", (event) => {
+  const edit = event.target.closest("[data-import-edit]");
+  if (edit) { htmx.trigger(edit.closest("[data-import-row]"), "editImportRow"); return; }
   if (event.defaultPrevented || event.target.closest("[data-import-actions], a, button, input, label, select, textarea")) return;
   const row = event.target.closest("[data-import-row]");
   if (!row || window.getSelection()?.toString()) return;

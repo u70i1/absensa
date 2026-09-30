@@ -1,18 +1,15 @@
 """Class dashboard HTML routes using the existing class services."""
 
-from datetime import datetime
 from urllib.parse import urlencode
-from zoneinfo import ZoneInfo
 
 from app.core.admin_auth import require_admin
-from app.core.config import settings
 from app.routes.admin import Db, form_data, render_modal
 from app.schemas.class_ import ClassListQuery, ClassWriteRequest
-from app.services import class_service, export_service
+from app.services import class_service
 from app.services.exceptions import AppException
 from app.templating import templates
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 
 router = APIRouter(
@@ -119,35 +116,6 @@ def classes(request: Request, db: Db):
     except ValidationError:
         return invalid_filters(request)
     return render_directory(request, db, query)
-
-
-@router.get("/export", name="admin_classes_export")
-def export_classes(request: Request, db: Db):
-    try:
-        query = class_query(request)
-    except ValidationError:
-        return invalid_filters(request)
-    filters = []
-    if query.class_name:
-        filters.append(f'Pencarian "{query.class_name}"')
-    if query.grade is not None:
-        filters.append(f"Jenjang {query.grade}")
-    if query.empty:
-        filters.append("Kelas kosong")
-    content = export_service.build_classes_workbook(
-        class_service.get_class_directory(
-            db, query.class_name, query.grade, query.empty
-        ),
-        ", ".join(filters) or "Semua kelas",
-    )
-    filename = datetime.now(ZoneInfo(settings.timezone)).strftime(
-        "ekspor-kelas-%Y-%m-%d.xlsx"
-    )
-    return Response(
-        content=content,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
 
 
 def form_response(request, class_=None, values=None, errors=None, status_code=200):

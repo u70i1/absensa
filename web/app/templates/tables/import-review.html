@@ -15,11 +15,11 @@
       </div>
       <div class="review-actions">
         <form method="post" action="{{ url_for('admin_import_cancel', token=batch.token) }}"><button class="button secondary" type="submit">Batal</button></form>
-        {% if rows %}<button class="button primary" type="submit" form="import-confirm" data-confirm-import>Simpan Perubahan</button>{% endif %}
+        {% if rows and not errors %}<button class="button primary" type="submit" form="import-confirm" data-confirm-import>Simpan Perubahan</button>{% endif %}
       </div>
     </div>
-    {% if batch.payload.files %}<ul class="detected-files" aria-label="File yang terdeteksi">{% for file in batch.payload.files %}<li><strong>{{ file.name }}</strong> · {{ 'Siswa' if file.kind == 'students' else 'Kelas' }} · {{ file.rows }} baris</li>{% endfor %}</ul>{% endif %}
-    {% if batch.payload.photo_count %}<p>{{ batch.payload.photo_count }} foto cocok dengan NISN siswa. Foto hanya disimpan untuk baris yang dipilih.</p>{% endif %}
+    {% if batch.payload.files %}<ul class="detected-files" aria-label="File yang terdeteksi">{% for file in batch.payload.files %}<li><strong>{{ file.name }}</strong> · Siswa & Kelas · {{ file.rows }} baris</li>{% endfor %}</ul>{% endif %}
+    {% if batch.payload.photo_count %}<p>{{ batch.payload.photo_count }} foto cocok dengan NISN siswa. Foto disimpan bersama seluruh workbook yang valid.</p>{% endif %}
     {% if rows %}
       <div class="import-summary">
         <div class="import-summary-create"><span>Tambah</span><strong><span data-count="create">{{ rows|selectattr('action', 'equalto', 'create')|list|length }}</span> data</strong></div>
@@ -36,10 +36,10 @@
           </div></div>
         {% endfor %}
       </form>
-      <p class="review-note">Sel berwarna menunjukkan nilai yang akan diubah. Hanya baris yang dipilih akan disimpan{% if errors %}; baris bermasalah dilewati{% endif %}.</p>
+      <p class="review-note">Sel berwarna menunjukkan nilai yang akan diubah. Impor bersifat semua-atau-tidak-sama-sekali. Jika ada kesalahan, tidak ada siswa atau kelas yang disimpan. Perbaiki file lalu unggah kembali.</p>
     {% endif %}
     {% if errors %}<h3>Kesalahan yang terdeteksi:</h3><div class="import-errors" role="region" aria-label="Kesalahan dalam file" tabindex="0">
-      {% for item in errors %}<div class="import-error"><img src="{{ url_for('static', path='icons/import-error.svg') }}" alt="" width="32" height="32"><div>{% if item.file %}<strong class="import-source">{{ item.file }}</strong><br>{% endif %}{% if item.cell %}<strong>Sel {{ item.cell }}; Sheet {{ item.sheet }}</strong>{% endif %}<p>{{ item.message }}</p></div></div>{% endfor %}
+      {% for item in errors %}<div class="import-error"><img src="{{ url_for('static', path='icons/import-error.svg') }}" alt="" width="32" height="32"><div>{% if item.file %}<strong class="import-source">{{ item.file }}</strong><br>{% endif %}{% if item.cell %}<strong>{{ item.sheet }} &gt; {{ item.cell }} &gt;</strong>{% endif %} {{ item.message }}</div></div>{% endfor %}
     </div>{% endif %}
   {% else %}
     <h2 id="review-title" class="sr-only">Pratinjau impor</h2>

@@ -11,6 +11,9 @@ class StudentImportRow(StudentWriteRequest):
     nisn: str = Field(pattern=r"^[0-9]{10}$")
     class_id: int | None = Field(None, ge=1, le=2147483647)
 
+    grade: int | None = Field(None, ge=1, le=20)
+    class_name: str | None = Field(None, min_length=1, max_length=20)
+
 
 class ClassImportRow(ClassWriteRequest):
     class_id: int | None = Field(None, ge=1, le=2147483647)
