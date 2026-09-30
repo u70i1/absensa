@@ -179,3 +179,128 @@ def test_stored_path_cannot_escape_photo_directory(
         photo_admin.get(f"/admin/students/{existing_student.id}/photo").status_code
         == 404
     )
+
+
+NEW_STUDENT = {
+    "name": "New Student",
+    "nisn": "0081234567",
+    "class_id": "",
+    "current": "true",
+}
+
+
+def test_create_student_with_photo_from_modal(photo_admin, db_session, photos_dir):
+    from app.models.student import Student
+    from sqlalchemy import select
+
+    modal = photo_admin.get("/admin/students/new", headers={"HX-Request": "true"})
+    assert 'name="photo"' in modal.text
+    assert 'hx-encoding="multipart/form-data"' in modal.text
+    response = photo_admin.post(
+        "/admin/students",
+        data=NEW_STUDENT,
+        files={"photo": ("portrait.png", image_bytes(), "image/png")},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 200
+    assert response.headers["HX-Trigger-After-Swap"] == "studentSaved"
+    student = db_session.scalar(
+        select(Student).where(Student.nisn == NEW_STUDENT["nisn"])
+    )
+    assert student.photo_path in response.text
+    with Image.open(photos_dir / student.photo_path) as stored:
+        assert stored.format == "JPEG"
+    assert photo_admin.get(f"/admin/students/{student.id}/photo").status_code == 200
+
+
+@pytest.mark.parametrize(
+    "content, status",
+    [
+        (b"invalid image", 415),
+        (b"x" * (student_photo_service.MAX_PHOTO_BYTES + 1), 413),
+    ],
+)
+def test_create_invalid_photo_does_not_create_student(
+    photo_admin, db_session, photos_dir, content, status
+):
+    from app.models.student import Student
+    from sqlalchemy import select
+
+    response = photo_admin.post(
+        "/admin/students",
+        data=NEW_STUDENT,
+        files={"photo": ("portrait.png", content, "image/png")},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == status
+    assert response.headers["HX-Retarget"] == "#modal-content"
+    assert "New Student" in response.text
+    assert "Pilih ulang foto" in response.text
+    assert (
+        db_session.scalar(select(Student).where(Student.nisn == NEW_STUDENT["nisn"]))
+        is None
+    )
+    assert not photos_dir.exists()
+
+
+def test_create_duplicate_student_with_photo_leaves_no_file(
+    photo_admin, student_factory, photos_dir
+):
+    student_factory(nisn=NEW_STUDENT["nisn"])
+    response = photo_admin.post(
+        "/admin/students",
+        data=NEW_STUDENT,
+        files={"photo": ("portrait.png", image_bytes(), "image/png")},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 409
+    assert not photos_dir.exists()
+
+
+def test_create_photo_commit_failure_cleans_up(db_session, photos_dir, monkeypatch):
+    from app.models.student import Student
+    from sqlalchemy import select
+
+    def fail_commit():
+        raise RuntimeError("simulated failure")
+
+    monkeypatch.setattr(db_session, "commit", fail_commit)
+    with pytest.raises(RuntimeError, match="simulated failure"):
+        student_photo_service.create_student_with_photo(
+            db_session,
+            BytesIO(image_bytes()),
+            name="New Student",
+            nisn=NEW_STUDENT["nisn"],
+            class_id=None,
+            current=True,
+        )
+    assert (
+        db_session.scalar(select(Student).where(Student.nisn == NEW_STUDENT["nisn"]))
+        is None
+    )
+    assert not list(photos_dir.iterdir())
+
+
+def test_create_without_photo_still_works(photo_admin, db_session):
+    from app.models.student import Student
+    from sqlalchemy import select
+
+    response = photo_admin.post(
+        "/admin/students", data=NEW_STUDENT, follow_redirects=False
+    )
+    assert response.status_code == 303
+    student = db_session.scalar(
+        select(Student).where(Student.nisn == NEW_STUDENT["nisn"])
+    )
+    assert student is not None and student.photo_path is None
+
+
+def test_create_with_photo_requires_admin(client, photos_dir):
+    response = client.post(
+        "/admin/students",
+        data=NEW_STUDENT,
+        files={"photo": ("portrait.png", image_bytes(), "image/png")},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 401
+    assert not photos_dir.exists()

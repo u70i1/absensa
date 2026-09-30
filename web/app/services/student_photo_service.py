@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from app.core.config import settings
 from app.models.student import Student
+from app.services import student_service
 from app.services.exceptions import AppException, StudentNotFound
 from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import select
@@ -75,6 +76,27 @@ def store_normalized_photo(content: bytes) -> str:
         remove_photo(filename)
         raise
     return filename
+
+
+def create_student_with_photo(db: Session, source: BinaryIO, **values) -> Student:
+    """Create the student and photo together, removing files if saving fails."""
+    filename = None
+    try:
+        content = normalize_photo(source)
+        student = student_service.post_student(db, **values, commit=False)
+        filename = store_normalized_photo(content)
+        student.photo_path = filename
+        db.commit()
+        return student
+    except Exception as exc:
+        db.rollback()
+        remove_photo(filename)
+        if isinstance(exc, OSError):
+            logger.exception("Could not store new student photo")
+            raise AppException(
+                "Foto gagal disimpan. Silakan pilih ulang foto dan coba lagi.", 500
+            ) from exc
+        raise
 
 
 def update_student_photo(db: Session, student_id: int, source: BinaryIO) -> str:

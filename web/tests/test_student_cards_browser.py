@@ -161,7 +161,9 @@ def test_school_logo_editor(card_browser, tmp_path):
     page.goto("http://testserver/admin/cards")
     page.get_by_role("button", name="Pengaturan cetak").click()
     playwright.expect(page.get_by_role("group", name="Ukuran kartu")).to_have_count(1)
-    playwright.expect(page.get_by_role("group", name="Watermark kartu")).to_have_count(1)
+    playwright.expect(page.get_by_role("group", name="Watermark kartu")).to_have_count(
+        1
+    )
     assert page.locator('[name="watermark_enabled"]').count() == 0
     page.locator("#school-name").fill("Sekolah Nusantara")
     assert not page.locator("[data-card-settings]").evaluate(
@@ -327,3 +329,23 @@ def test_successful_bulk_delete_removes_hidden_selections(
     page.locator('#modal-content button[type="submit"]').click()
     expect(page.locator("[data-selection-count]")).to_have_text("0 dipilih")
     expect(page.locator("[data-selection-toggle]")).to_have_text("Selesai")
+
+
+def test_add_student_modal_uploads_photo(card_browser):
+    page, _ = card_browser
+    expect = playwright.expect
+    page.goto("http://testserver/admin/students")
+    page.locator("#add-student").click()
+    page.locator("#student-name").fill("Siswa Dengan Foto")
+    page.locator("#student-nisn").fill("0081234567")
+    image = BytesIO()
+    Image.new("RGB", (60, 60), "blue").save(image, format="PNG")
+    page.locator("#student-photo").set_input_files(
+        {"name": "portrait.png", "mimeType": "image/png", "buffer": image.getvalue()}
+    )
+    page.locator('#modal-content button[type="submit"]').click()
+    expect(page.locator("#student-modal")).not_to_be_visible()
+    expect(page.locator(".student-name")).to_have_text("Siswa Dengan Foto")
+    page.wait_for_function(
+        "document.querySelector('.student-row .avatar img')?.naturalWidth > 0"
+    )

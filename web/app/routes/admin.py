@@ -1,5 +1,6 @@
 """Server-rendered student management; JSON and HTML share student services."""
 
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Annotated
 from zoneinfo import ZoneInfo
@@ -8,7 +9,12 @@ from app.core.admin_auth import require_admin
 from app.core.config import settings
 from app.db.session import get_db
 from app.schemas.student import StudentListQuery, StudentWriteRequest
-from app.services import class_service, export_service, student_service
+from app.services import (
+    class_service,
+    export_service,
+    student_photo_service,
+    student_service,
+)
 from app.services.exceptions import AppException, StudentNotFound
 from app.services.student_dashboard_service import (
     PAGE_SIZE,
@@ -21,6 +27,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
+from starlette.datastructures import UploadFile
 
 router = APIRouter(
     prefix="/admin",
@@ -184,8 +191,9 @@ def edit_student(student_id: int, request: Request, db: Db):
     return render_modal(request, "modals/student-form.html", form_context(db, student))
 
 
-async def form_data(request: Request) -> dict:
-    return dict(await request.form())
+async def form_data(request: Request) -> AsyncIterator[dict]:
+    async with request.form() as form:
+        yield dict(form)
 
 
 def mutation_success(
@@ -239,7 +247,13 @@ def save_student(
         )
     try:
         if student_id is None:
-            student_service.post_student(db, **payload.model_dump())
+            photo = data.get("photo")
+            if isinstance(photo, UploadFile) and photo.filename:
+                student_photo_service.create_student_with_photo(
+                    db, photo.file, **payload.model_dump()
+                )
+            else:
+                student_service.post_student(db, **payload.model_dump())
         else:
             student_service.edit_student(db, student_id, **payload.model_dump())
     except AppException as exc:

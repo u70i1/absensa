@@ -19,10 +19,18 @@
 {% endif %}
 {% set action = url_for('admin_student_update', student_id=student.id) if student else url_for('admin_student_create') %}
 <form class="student-form" method="post" action="{{ action }}?{{ request.url.query }}"
+  {% if not student %}enctype="multipart/form-data" hx-encoding="multipart/form-data"{% endif %}
   hx-post="{{ action }}?{{ request.url.query }}" hx-target="#modal-content" hx-swap="innerHTML"
   hx-disabled-elt="find button[type='submit']" hx-sync="this:drop">
   {% if errors %}<div class="form-errors" role="alert">
     {{ errors.get('form', 'Periksa kembali data yang ditandai di bawah.') }}</div>{% endif %}
+  {% if not student %}
+    <div class="form-field">
+      <label for="student-photo">Foto siswa (opsional)</label>
+      <input id="student-photo" type="file" name="photo" accept="image/jpeg,image/png,image/webp" aria-describedby="photo-help">
+      <p id="photo-help" class="field-help">JPEG, PNG, atau WebP. Maksimal 5 MB dan 20 megapiksel. Foto disimpan bersama data siswa.{% if errors %} Pilih ulang foto sebelum menyimpan kembali.{% endif %}</p>
+    </div>
+  {% endif %}
   <div class="form-field">
     <label for="student-name">Nama lengkap</label>
     <input id="student-name" name="name" value="{{ values.name or '' }}" required minlength="1" autocomplete="off"
