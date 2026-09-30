@@ -20,6 +20,19 @@ document.addEventListener('click', (event) => {
   const form = event.target.closest('[data-card-settings]');
   if (!form) return;
   if (event.target.closest('[data-logo-upload]')) form.elements.logo.click();
+  if (event.target.closest('[data-watermark-clear]')) {
+    form.elements.school_name.value = '';
+    clearLogoPreviewUrl();
+    form.elements.logo.value = '';
+    form.elements.remove_logo.value = 'true';
+    form.querySelector('[data-logo-preview]').hidden = true;
+    form.querySelector('[data-logo-preview]').removeAttribute('src');
+    form.querySelector('[data-logo-empty]').hidden = false;
+    form.querySelector('[data-logo-delete]').hidden = true;
+    form.querySelector('[data-watermark-clear]').hidden = true;
+    validateWatermark(form);
+    return;
+  }
   if (event.target.closest('[data-logo-delete]')) {
     clearLogoPreviewUrl();
     form.elements.logo.value = '';
@@ -28,6 +41,7 @@ document.addEventListener('click', (event) => {
     form.querySelector('[data-logo-preview]').removeAttribute('src');
     form.querySelector('[data-logo-empty]').hidden = false;
     form.querySelector('[data-logo-delete]').hidden = true;
+    form.querySelector('[data-watermark-clear]').hidden = !form.elements.school_name.value.trim();
     validateWatermark(form);
   }
 });
@@ -43,6 +57,7 @@ document.addEventListener('change', (event) => {
     form.querySelector('[data-logo-preview]').hidden = false;
     form.querySelector('[data-logo-empty]').hidden = true;
     form.querySelector('[data-logo-delete]').hidden = false;
+    form.querySelector('[data-watermark-clear]').hidden = false;
     form.elements.remove_logo.value = 'false';
   }
   validateWatermark(form);

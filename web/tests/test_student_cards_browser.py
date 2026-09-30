@@ -184,13 +184,12 @@ def test_school_logo_editor(card_browser, tmp_path):
     upload = page.get_by_role("button", name="Unggah logo baru").bounding_box()
     assert upload["y"] > preview["y"] + preview["height"]
     page.locator("#student-modal").screenshot(path=str(tmp_path / "card-settings.png"))
-    page.get_by_role("button", name="Hapus logo").click()
+    page.get_by_role("button", name="Kosongkan watermark").click()
     assert page.locator("[data-logo-preview]").is_hidden()
-    assert not page.locator("[data-card-settings]").evaluate(
+    assert page.locator("#school-name").input_value() == ""
+    assert page.locator("[data-card-settings]").evaluate(
         "form => form.checkValidity()"
     )
-    page.locator("#school-name").fill("")
-    assert page.locator("[data-card-settings]").evaluate("form => form.checkValidity()")
     page.get_by_role("button", name="Simpan pengaturan").click()
     page.get_by_text("Pengaturan cetak berhasil disimpan untuk semua kartu.").wait_for()
     assert page.locator("[data-logo-preview]").is_hidden()

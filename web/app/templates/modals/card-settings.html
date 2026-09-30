@@ -25,6 +25,7 @@
       <div class="card-logo-actions">
         <button class="button secondary" type="button" data-logo-upload>Unggah logo baru</button>
         <button class="button destructive" type="button" data-logo-delete {% if not has_logo %}hidden{% endif %}>Hapus logo</button>
+        <button class="button secondary" type="button" data-watermark-clear {% if not values.school_name and not values.logo_path %}hidden{% endif %}>Kosongkan watermark</button>
       </div>
       <p class="field-help" id="logo-help">JPEG, PNG, atau WebP. Maksimal 5 MB dan 20 megapiksel. Perubahan logo diterapkan saat pengaturan disimpan.</p>
     </div>
