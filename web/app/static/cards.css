@@ -1,0 +1,14 @@
+.card-page-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+.card-page-heading h1 { margin-bottom: 8px; }
+.card-page-heading p { color: var(--color-on-surface-variant); margin: 0; }
+.card-operations { display: flex; align-items: end; flex-wrap: wrap; gap: var(--space-5); padding: var(--space-8); margin: var(--space-8) 0; border: var(--border-subtle); border-radius: var(--radius-surface); background: var(--color-surface-container-lowest); }
+.card-operations .form-field { min-width: 200px; }
+.card-operations .field-help { flex-basis: 100%; margin-bottom: 0; }
+.card-settings-section { display: grid; gap: var(--space-6); min-width: 0; margin: 0; padding: var(--space-6) 0 0; border: 0; border-top: var(--border-subtle); }
+.card-settings-section legend { padding: 0 var(--space-3) 0 0; font-weight: var(--font-weight-semibold); font-size: var(--font-size-subheading); }
+.card-settings-section .field-help { margin: 0; }
+.card-logo-editor { display: grid; justify-items: start; gap: var(--space-5); }
+.card-logo-label { font-weight: var(--font-weight-medium); }
+.card-logo-preview { object-fit: contain; padding: var(--space-3); background: white; border: var(--border-subtle); border-radius: var(--radius-control); }
+.card-logo-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+@media (max-width: 650px) { .card-page-heading { align-items: start; flex-direction: column; } }

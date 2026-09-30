@@ -2,7 +2,7 @@
   <td class="selection-cell" hidden><input class="row-selection" type="checkbox" name="ids" value="{{ student.id }}" form="table-selection" aria-label="Pilih {{ student.name }}, NISN {{ student.nisn }}"></td>
   <td class="photo-cell"><span class="avatar" data-student-avatar="{{ student.id }}" aria-hidden="true">{% include 'avatars/student.html' %}</span></td>
   <td><button type="button" class="student-identity" aria-haspopup="dialog"
-      hx-get="{{ url_for('admin_student_detail', student_id=student.id) }}?{{ request.url.query }}"
+      hx-get="{{ url_for('admin_card_preview' if card_mode else 'admin_student_detail', student_id=student.id) }}?{{ request.url.query }}"
       hx-target="#modal-content" hx-swap="innerHTML">
       <span class="student-name">{{ student.name }}</span>
       <span class="student-nisn">NISN {{ student.nisn }}</span>
@@ -11,6 +11,8 @@
   <td><span aria-label="Nomor wali">{{ student.guardian_phone or '—' }}</span></td>
   <td>
     <div class="row-actions">
+      {% if card_mode %}<button type="button" class="text-action" hx-get="{{ url_for('admin_card_preview', student_id=student.id) }}" hx-target="#modal-content" hx-swap="innerHTML" aria-haspopup="dialog">Pratinjau kartu</button>
+      {% else %}
       <button type="button" class="text-action edit-action" aria-label="Edit {{ student.name }}" aria-haspopup="dialog"
         hx-get="{{ url_for('admin_student_edit', student_id=student.id) }}?{{ request.url.query }}"
         hx-target="#modal-content" hx-swap="innerHTML">
@@ -22,6 +24,7 @@
         hx-target="#modal-content" hx-swap="innerHTML">
         <img src="{{ url_for('static', path='icons/trash.svg') }}" alt="" width="14" height="14">Hapus
       </button>
+      {% endif %}
     </div>
   </td>
 </tr>

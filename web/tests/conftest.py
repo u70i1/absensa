@@ -238,3 +238,10 @@ def authenticated_data_api(client, db_session):
     yield
     app.dependency_overrides.pop(require_admin, None)
     app.dependency_overrides.pop(require_operator, None)
+
+
+@pytest.fixture
+def card_admin(client, authenticated_data_api, tmp_path, monkeypatch):
+    """Admin card tests keep uploaded logos outside the real photo store."""
+    monkeypatch.setattr(settings, "photos_dir", str(tmp_path / "photos"))
+    return client

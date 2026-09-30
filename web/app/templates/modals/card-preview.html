@@ -1,0 +1,6 @@
+<div class="modal-heading"><h2 id="modal-title" tabindex="-1">Pratinjau kartu</h2><p>{{ student.name }} · {{ config.width_mm|float }} × {{ config.height_mm|float }} mm</p></div>
+<img src="{{ card.uri }}" alt="Kartu {{ student.name }}, NISN {{ student.nisn }}" width="300" height="480" style="display:block;max-width:100%;height:auto;margin:auto">
+<form method="post" action="{{ url_for('admin_card_operation') }}" target="_blank">
+  <input type="hidden" name="scope" value="selected"><input type="hidden" name="ids" value="{{ student.id }}">
+  <div class="modal-actions"><button class="button secondary" name="action" value="print">Cetak</button><button class="button primary" name="action" value="download">Unduh PNG</button></div>
+</form>

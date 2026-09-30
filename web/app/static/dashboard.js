@@ -218,6 +218,7 @@ function updateTableSelection(section) {
   section.querySelector('[data-selection-count]').textContent = `${count} dipilih`;
   section.querySelectorAll('.selection-toolbar button').forEach((button) => { button.disabled = !count; });
   boxes.forEach((box) => box.closest('tr').classList.toggle('is-selected', box.checked));
+  section.dispatchEvent(new CustomEvent('tableSelectionChanged', { bubbles: true }));
 }
 
 document.addEventListener('click', (event) => {

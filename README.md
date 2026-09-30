@@ -32,6 +32,40 @@ alongside the database. Replacing a photo removes the previous file after
 the database update succeeds. Existing students keep their initials until
 a photo is uploaded.
 
+## Student cards
+
+Open **Kartu Siswa** (`/admin/cards`) to preview, print, or download cards. The page
+shares the student dashboard's search, class filters, pagination, and selection.
+Choose the current page, selected rows, or every student (including inactive
+students). Processing every student ignores filters and requires confirmation.
+One card downloads as PNG; multiple cards download as a ZIP with NISN/name filenames.
+
+**Pengaturan cetak** saves server-wide dimensions, cutting gap, school name,
+and uploaded logo. Watermarks appear automatically when both the school name and
+logo are set; saving only one is rejected. Leave both empty to disable them. Cards default to **70 × 112 mm**, with a
+**3 mm** gap. Changing either dimension calculates the other at **5:8**. The optional
+logo and school name are centered at the top, above the photo, with regular-weight text. Logos use the same validated
+photo storage and upload limits as student photos. Back up `PHOTOS_DIR` with the DB.
+
+Install the updated `web/requirements.txt` and run `.venv/bin/alembic upgrade head`
+from `web/`. PNG export requires the native Cairo library (`libcairo2` on
+Debian/Ubuntu, `cairo` on Arch); the Docker image includes it. The migration adds
+the singleton `student_card_settings` table and its ratio constraint.
+
+The shared renderer in `app/services/student_card_service.py` produces a
+self-contained SVG with bundled Inter outlines and local Code 128 barcodes.
+Preview, browser printing, and PNG exports use this same design. PNGs have at least
+300 DPI and an exact 5:8 pixel ratio. Missing photos use `static/images/no-photo.png`.
+Single-card services do not require admin context; future student routes must
+authorize ownership before calling them. Existing card routes are admin-only.
+
+Printing opens the browser's native dialog after images load. Use actual size / 100%
+scale and paper large enough for the configured card dimensions plus 10 mm page
+margins. The document flows whole cards across pages and contains only cards.
+Exports render one PNG at a time into an anonymous temporary ZIP; response completion,
+disconnects, and generation failures close temporary files. Each application worker
+allows two simultaneous bulk generations and asks further callers to retry.
+
 ## Spreadsheet imports
 
 Open **Impor** in the admin navigation (`/admin/import`). Download the student
