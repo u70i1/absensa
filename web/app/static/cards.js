@@ -84,7 +84,7 @@ function updateCardActions() {
   const form = document.querySelector('[data-card-operation]');
   if (!form) return;
   const scope = form.elements.scope.value;
-  const selected = document.querySelectorAll('#student-results .row-selection:checked').length;
+  const selected = selectedTableIds(document.querySelector('#student-results')).length;
   const empty = scope === 'selected' ? !selected : scope === 'page' && !form.querySelector('[name="page_ids"]');
   form.querySelectorAll('button[type="submit"]').forEach(button => { button.disabled = empty; });
   form.querySelector('[data-card-status]').textContent = scope === 'selected'
@@ -100,7 +100,7 @@ document.addEventListener('submit', (event) => {
   const form = event.target.closest('[data-card-operation]');
   if (!form) return;
   form.querySelectorAll('[data-card-selected]').forEach(input => input.remove());
-  const selected = [...document.querySelectorAll('#student-results .row-selection:checked')];
+  const selected = selectedTableIds(document.querySelector('#student-results'));
   if (form.elements.scope.value === 'selected' && !selected.length) {
     event.preventDefault();
     updateCardActions();
@@ -114,9 +114,9 @@ document.addEventListener('submit', (event) => {
     }
     form.elements.confirmed.value = 'true';
   }
-  selected.forEach(box => {
+  selected.forEach(id => {
     const input = document.createElement('input');
-    input.type = 'hidden'; input.name = 'ids'; input.value = box.value;
+    input.type = 'hidden'; input.name = 'ids'; input.value = id;
     input.dataset.cardSelected = '';
     form.append(input);
   });

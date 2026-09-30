@@ -1,8 +1,8 @@
-<section id="class-results" data-table-selection aria-label="Daftar kelas" hx-target="this" hx-swap="outerHTML" hx-sync="this:replace"
+<section id="class-results" data-table-selection="classes" aria-label="Daftar kelas" hx-target="this" hx-swap="outerHTML" hx-sync="this:replace"
   hx-history-elt>
   <div class="class-summary">
     {% if summary.empty %}<a class="class-summary-card class-metric-link"
-      href="{{ url_for('admin_classes') }}?empty=true" aria-label="Lihat {{ summary.empty }} kelas kosong">{% else %}
+      href="{{ url_for('admin_classes') }}?empty=true" hx-get="{{ url_for('admin_classes') }}?empty=true" aria-label="Lihat {{ summary.empty }} kelas kosong">{% else %}
       <div class="class-summary-card">{% endif %}
         <span class="class-metric-icon"><img src="{{ url_for('static', path='icons/class-metric.svg') }}" width="20"
             height="20" alt=""></span>

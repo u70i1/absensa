@@ -208,58 +208,136 @@ document.addEventListener("htmx:sendError", (event) => {
   );
 });
 
+// Keep selection outside swapped HTML so filters, pages, and history retain it.
+// Each dashboard has its own state, including separate student and card selections.
+const tableSelections = new Map();
+
+function tableSelectionState(section) {
+  const key = section.dataset.tableSelection || section.id;
+  if (!tableSelections.has(key)) {
+    tableSelections.set(key, { active: false, ids: new Set(), cardScope: 'page' });
+  }
+  return tableSelections.get(key);
+}
+
+function selectedTableIds(section) {
+  return section ? [...tableSelectionState(section).ids] : [];
+}
+
 function updateTableSelection(section) {
+  const state = tableSelectionState(section);
   const boxes = [...section.querySelectorAll('.row-selection')];
-  const count = boxes.filter((box) => box.checked).length;
+  const visibleIds = new Set(boxes.map(box => box.value));
+  const toggle = section.querySelector('[data-selection-toggle]');
+  section.classList.toggle('is-selecting', state.active);
+  toggle.setAttribute('aria-pressed', String(state.active));
+  toggle.textContent = state.active ? 'Selesai' : 'Pilih';
+  const form = section.querySelector('.selection-toolbar');
+  form.hidden = !state.active;
+  section.querySelectorAll('.selection-cell').forEach(cell => { cell.hidden = !state.active; });
+  section.querySelectorAll('tr.empty-row td, tr.class-empty-row td').forEach(cell => {
+    cell.colSpan = section.querySelectorAll('thead th:not([hidden])').length;
+  });
+  boxes.forEach(box => {
+    box.checked = state.ids.has(box.value);
+    box.closest('tr').classList.toggle('is-selected', box.checked);
+  });
+  const visibleCount = boxes.filter(box => box.checked).length;
   const all = section.querySelector('[data-select-all]');
-  all.checked = count > 0 && count === boxes.length;
-  all.indeterminate = count > 0 && count < boxes.length;
+  all.checked = visibleCount > 0 && visibleCount === boxes.length;
+  all.indeterminate = visibleCount > 0 && visibleCount < boxes.length;
   all.disabled = !boxes.length;
-  section.querySelector('[data-selection-count]').textContent = `${count} dipilih`;
-  section.querySelectorAll('.selection-toolbar button').forEach((button) => { button.disabled = !count; });
-  boxes.forEach((box) => box.closest('tr').classList.toggle('is-selected', box.checked));
+  const hiddenCount = state.ids.size - visibleCount;
+  section.querySelector('[data-selection-count]').textContent =
+    `${state.ids.size} dipilih${hiddenCount ? ` · ${hiddenCount} di luar tampilan ini` : ''}`;
+  form.querySelectorAll('button').forEach(button => { button.disabled = !state.ids.size; });
+
+  // Visible checkboxes belong to this form already. Add hidden selected rows
+  // explicitly, so confirmation and bulk mutations receive the whole selection.
+  form.querySelectorAll('[data-selection-hidden]').forEach(input => input.remove());
+  state.ids.forEach(id => {
+    if (visibleIds.has(id)) return;
+    const input = document.createElement('input');
+    input.type = 'hidden'; input.name = 'ids'; input.value = id;
+    input.dataset.selectionHidden = '';
+    form.append(input);
+  });
+  const scope = section.querySelector('[data-card-operation] [name="scope"]');
+  if (scope) scope.value = state.cardScope;
   section.dispatchEvent(new CustomEvent('tableSelectionChanged', { bubbles: true }));
 }
 
-document.addEventListener('click', (event) => {
+function restoreTableSelections() {
+  document.querySelectorAll('[data-table-selection]').forEach(updateTableSelection);
+}
+
+document.addEventListener('DOMContentLoaded', restoreTableSelections);
+document.addEventListener('htmx:afterSwap', restoreTableSelections);
+document.addEventListener('htmx:historyRestore', restoreTableSelections);
+window.addEventListener('pageshow', restoreTableSelections);
+
+document.addEventListener('click', event => {
   const toggle = event.target.closest('[data-selection-toggle]');
   if (!toggle) return;
   const section = toggle.closest('[data-table-selection]');
-  const active = section.classList.toggle('is-selecting');
-  toggle.setAttribute('aria-pressed', String(active));
-  toggle.textContent = active ? 'Selesai' : 'Pilih';
-  section.querySelector('.selection-toolbar').hidden = !active;
-  section.querySelectorAll('.selection-cell').forEach((cell) => { cell.hidden = !active; });
-  section.querySelectorAll('tr.empty-row td, tr.class-empty-row td').forEach((cell) => {
-    cell.colSpan = section.querySelectorAll('thead th:not([hidden])').length;
-  });
-  section.querySelectorAll('.row-selection').forEach((box) => {
-    box.checked = false;
-  });
+  const state = tableSelectionState(section);
+  state.active = !state.active;
+  if (!state.active) state.ids.clear();
   updateTableSelection(section);
 });
 
-document.addEventListener('change', (event) => {
+document.addEventListener('change', event => {
   const section = event.target.closest('[data-table-selection]');
   if (!section) return;
-  if (event.target.matches('[data-select-all]')) {
-    section.querySelectorAll('.row-selection').forEach((box) => { box.checked = event.target.checked; });
+  const state = tableSelectionState(section);
+  if (event.target.matches('[data-card-operation] [name="scope"]')) {
+    state.cardScope = event.target.value;
   }
-  if (event.target.matches('[data-select-all], .row-selection')) updateTableSelection(section);
+  if (!state.active) return;
+  const boxes = event.target.matches('[data-select-all]')
+    ? [...section.querySelectorAll('.row-selection')]
+    : event.target.matches('.row-selection') ? [event.target] : [];
+  boxes.forEach(box => {
+    if (event.target.checked) state.ids.add(box.value);
+    else state.ids.delete(box.value);
+  });
+  if (boxes.length || event.target.matches('[data-select-all]')) updateTableSelection(section);
 });
 
 // Capture row clicks before HTMX detail buttons or class links navigate away.
-document.addEventListener('click', (event) => {
+document.addEventListener('click', event => {
   const row = event.target.closest('.is-selecting .student-row, .is-selecting .class-row');
   if (!row || event.target.closest('.row-selection, .row-actions') || window.getSelection()?.toString()) return;
   event.preventDefault();
   event.stopPropagation();
   const box = row.querySelector('.row-selection');
-  box.checked = !box.checked;
-  updateTableSelection(row.closest('[data-table-selection]'));
+  const section = row.closest('[data-table-selection]');
+  const state = tableSelectionState(section);
+  if (state.ids.has(box.value)) state.ids.delete(box.value);
+  else state.ids.add(box.value);
+  updateTableSelection(section);
 }, true);
 
-// Do not restore stale selected IDs from an HTMX history snapshot.
-document.addEventListener('htmx:beforeHistorySave', () => {
-  document.querySelectorAll('.is-selecting [data-selection-toggle]').forEach((toggle) => toggle.click());
+// Completed deletions cannot remain selectable. Failed or canceled operations
+// retain the selection, and successful edits/deactivations keep it as well.
+document.addEventListener('htmx:afterRequest', event => {
+  if (!event.detail.successful || event.detail.xhr.status < 200 || event.detail.xhr.status >= 300) return;
+  const config = event.detail.requestConfig;
+  if (!config || config.verb !== 'post') return;
+  const path = new URL(config.path, location.href).pathname;
+  const single = path.match(/^\/admin\/(students|classes|scans)\/(\d+)\/delete$/);
+  const bulk = path.match(/^\/admin\/(students|classes|scans)\/selection\/apply$/);
+  let ids, kind;
+  if (single) {
+    kind = single[1]; ids = [single[2]];
+  } else if (bulk && config.parameters.action === 'delete') {
+    kind = bulk[1];
+    ids = [].concat(config.parameters.ids || []).map(String);
+  } else return;
+  const keys = kind === 'students' ? ['students', 'cards'] : [kind];
+  keys.forEach(key => {
+    const state = tableSelections.get(key);
+    ids.forEach(id => state?.ids.delete(id));
+  });
+  restoreTableSelections();
 });
