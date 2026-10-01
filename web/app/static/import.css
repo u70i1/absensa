@@ -371,9 +371,6 @@
   outline-offset: var(--focus-outline-offset);
   border-radius: var(--radius-small);
 }
-.import-table tr:has(input:not(:checked)) td:not(:last-child) {
-  opacity: .45;
-}
 .import-empty {
   text-align: center;
   color: var(--color-on-surface-variant);
