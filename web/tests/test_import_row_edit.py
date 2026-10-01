@@ -27,7 +27,7 @@ def student_values():
     return {
         "name": "Edited draft",
         "nisn": "0012345678",
-        "class_id": "",
+        "class_id": "N1",
         "current": "Tidak aktif",
         "guardian_phone": "081234567890",
         "grade": "10",
@@ -102,7 +102,7 @@ def test_edit_student_draft_then_confirm(
         {"name": " "},
         {"guardian_phone": "bad"},
         {"current": "true"},
-        {"class_name": "Undeclared"},
+        {"class_id": "N999"},
         {"nisn": "0012345679"},
     ],
 )

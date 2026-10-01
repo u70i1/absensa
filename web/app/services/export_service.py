@@ -93,14 +93,8 @@ def _populate_sheet(sheet, columns, items):
     _prepare_new_rows(sheet, len(columns), last)
 
 
-def _dropdown(sheet, cells, formula, *, strict=True):
-    validation = DataValidation(type="list", formula1=formula, allow_blank=True)
-    validation.showErrorMessage = strict
-    validation.errorTitle = "Pilihan tidak valid"
-    validation.error = "Pilih nilai yang tersedia pada sheet classes."
-    validation.showDropDown = False
-    sheet.add_data_validation(validation)
-    validation.add(cells)
+def class_lookup_formula(row: int, result_column: int) -> str:
+    return f'=IF(H{row}="","",IFERROR(VLOOKUP(H{row},class_data,{result_column},FALSE),""))'
 
 
 def _protect_data_sheet(sheet, editable_columns):
@@ -143,62 +137,63 @@ def build_students_workbook(students, filter_summary: str, classes) -> bytes:
     sheet, class_sheet = workbook["students"], workbook["classes"]
     _populate_sheet(sheet, STUDENT_COLUMNS, students)
     _populate_sheet(class_sheet, CLASS_COLUMNS, classes)
-    # Visible values always come from the actual FK, never denormalized row text.
-    by_id = {item.class_id: item for item in classes}
-    for number, student in enumerate(students, 2):
-        assigned = by_id.get(student.class_id)
-        sheet.cell(number, 6).value = assigned.grade if assigned else None
-        cell = sheet.cell(number, 7)
-        cell.value = assigned.class_name if assigned else None
-        if isinstance(cell.value, str):
-            cell.data_type = "s"
-    # Retain existing validation for non-class student fields.
+    # IDs are literal constants allocated at generation, never row-based formulas.
+    # Unused reserved rows are ignored by import until a class field is filled.
+    for number in range(1, NEW_ENTRY_ROWS + 1):
+        class_sheet.cell(len(classes) + 1 + number, 1, f"N{number}")
+    workbook.defined_names.add(
+        DefinedName("class_ids", attr_text="'classes'!$A$2:$A$1048576")
+    )
+    workbook.defined_names.add(DefinedName("class_data", attr_text="'classes'!$A:$C"))
     sheet.data_validations.dataValidation = [
-        dv for dv in sheet.data_validations.dataValidation if "H2" not in dv.sqref
+        dv
+        for dv in sheet.data_validations.dataValidation
+        if not any(f"{column}2" in dv.sqref for column in ("F", "G", "H"))
     ]
     for dv in sheet.data_validations.dataValidation:
         if "D2" in dv.sqref:
             dv.formula1 = '"Aktif,Tidak aktif"'
-    class_sheet.data_validations.dataValidation = [
-        dv for dv in class_sheet.data_validations.dataValidation if "B2" not in dv.sqref
-    ]
-    grades = sorted({item.grade for item in classes})
-    for row, grade in enumerate(grades, 2):
-        class_sheet.cell(row, 5, grade)
-    class_sheet.column_dimensions["E"].hidden = True
-    workbook.defined_names.add(
-        DefinedName(
-            "jenjang_list", attr_text=f"'classes'!$E$2:$E${max(2, len(grades) + 1)}"
-        )
+    validation = DataValidation(
+        type="custom", formula1='OR(H2="",COUNTIF(class_ids,H2)=1)', allow_blank=True
     )
-    for column, grade in enumerate(grades, 6):
-        letter = get_column_letter(column)
-        names = [item.class_name for item in classes if item.grade == grade]
-        for row, name in enumerate(names, 2):
-            cell = class_sheet.cell(row, column, name)
-            cell.data_type = "s"
-        class_sheet.column_dimensions[letter].hidden = True
-        workbook.defined_names.add(
-            DefinedName(
-                f"kelas_{grade}",
-                attr_text=f"'classes'!${letter}$2:${letter}${len(names) + 1}",
-            )
-        )
-    _dropdown(sheet, "F2:F1048576", "jenjang_list", strict=False)
-    _dropdown(sheet, "G2:G1048576", 'INDIRECT("kelas_"&$F2)', strict=False)
-    _dropdown(class_sheet, "B2:B1048576", "jenjang_list", strict=False)
-    _protect_data_sheet(sheet, editable_columns=range(2, 8))
-    _protect_data_sheet(class_sheet, editable_columns=range(2, 4))
-    sheet.column_dimensions["H"].hidden = True
+    validation.showErrorMessage = True
+    validation.errorTitle = "ID kelas tidak valid"
+    validation.error = (
+        "Ketik ID kelas yang tercantum pada sheet classes, misalnya 17 atau N1."
+    )
+    sheet.add_data_validation(validation)
+    validation.add("H2:H1048576")
+    # Reuse the template's subdued metadata fill for read-only derived cells.
+    derived_fill = copy(workbook["instructions"]["D6"].fill)
+    for row in range(2, max(2, len(students) + 1) + NEW_ENTRY_ROWS + 1):
+        for column, result_column in ((6, 2), (7, 3)):
+            cell = sheet.cell(row, column)
+            cell.value = class_lookup_formula(row, result_column)
+            cell.fill = copy(derived_fill)
+            font = copy(cell.font)
+            font.italic = True
+            cell.font = font
+    _protect_data_sheet(sheet, editable_columns=(2, 3, 4, 5, 8))
+    _protect_data_sheet(class_sheet, editable_columns=(2, 3))
+    sheet.column_dimensions["H"].hidden = False
     sheet["H1"].comment = Comment(
-        "Metadata internal Absensa. Jangan mengubah ID kelas siswa; pilih jenjang dan nama kelas.",
+        "Ketik ID dari classes, termasuk ID sementara N1, N2, dan seterusnya. Tidak ada dropdown.",
         "Absensa",
     )
-    for target in (sheet, class_sheet):
-        target.cell(1, 1).comment = Comment(
-            "ID dilindungi dan tidak boleh diubah. Baris baru menggunakan ID kosong.",
+    for column in (6, 7):
+        sheet.cell(1, column).comment = Comment(
+            "Kolom rumus, hanya baca. Ubah jenjang/nama kelas pada sheet classes.",
             "Absensa",
         )
+    for target in (sheet, class_sheet):
+        target.cell(1, 1).comment = Comment(
+            "ID tetap dan dilindungi. ID N adalah referensi sementara yang difinalisasi Absensa saat impor.",
+            "Absensa",
+        )
+    # IDs of reserved rows are text, unlike existing numeric database IDs.
+    class_sheet.data_validations.dataValidation = [
+        dv for dv in class_sheet.data_validations.dataValidation if "A2" not in dv.sqref
+    ]
     workbook.calculation = CalcProperties(
         calcMode="auto", fullCalcOnLoad=True, forceFullCalc=True
     )

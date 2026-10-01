@@ -17,9 +17,8 @@
       <label for="import-row-nisn">NISN</label>
       <input id="import-row-nisn" name="nisn" value="{{ values.nisn or '' }}" required pattern="[0-9]{10}" maxlength="10" inputmode="numeric" title="NISN harus berisi tepat 10 digit.">
     </div>
-    <p class="field-help">Pilih jenjang dan nama kelas yang tercantum pada sheet classes. Tambahkan kelas baru di sheet tersebut sebelum mengimpor. Siswa baru wajib memiliki kelas; siswa lama dapat dikosongkan kedua nilainya untuk melepas kelas.</p>
-    <div class="form-field"><label for="import-row-grade">Jenjang</label><input id="import-row-grade" name="grade" type="number" min="1" max="20" value="{{ values.grade or '' }}"></div>
-    <div class="form-field"><label for="import-row-class-name">Nama kelas</label><input id="import-row-class-name" name="class_name" maxlength="20" value="{{ values.class_name or '' }}"></div>
+    <div class="form-field"><label for="import-row-class-id">ID kelas</label><input id="import-row-class-id" name="class_id" value="{{ values.class_id or '' }}" autocomplete="off"><p class="field-help">Ketik ID dari sheet classes, misalnya 17 atau N1. Jenjang dan nama kelas hanya dapat diubah pada sheet classes.</p></div>
+    <div class="form-field"><label>Kelas dari sheet classes</label><output>{{ row.class_name }}</output></div>
     <div class="form-field">
       <label for="import-row-current">Status siswa</label>
       <select id="import-row-current" name="current">

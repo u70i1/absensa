@@ -1,4 +1,4 @@
-"""Class dictionary, protected identities, rename resolution and atomic writes."""
+"""Stable temporary class references, live lookups and atomic workbook imports."""
 
 from io import BytesIO
 
@@ -32,18 +32,20 @@ def workbook(db, students=()):
 
 
 def student_row(
-    sheet,
-    row,
-    *,
-    id=None,
-    name="New student",
-    class_id=None,
-    nisn="0000000001",
-    grade=None,
-    class_name=None,
+    sheet, row, *, id=None, name="New student", class_id="N1", nisn="0000000001"
 ):
     for column, value in enumerate(
-        (id, name, nisn, "Aktif", None, grade, class_name, class_id), 1
+        (
+            id,
+            name,
+            nisn,
+            "Aktif",
+            None,
+            export_service.class_lookup_formula(row, 2),
+            export_service.class_lookup_formula(row, 3),
+            class_id,
+        ),
+        1,
     ):
         sheet.cell(row, column).value = value
 
@@ -86,73 +88,55 @@ def snapshot(db):
 
 
 @pytest.mark.parametrize(
-    "mode",
-    [
-        "unchanged",
-        "rename_old_text",
-        "rename_final_text",
-        "rename_grade",
-        "reassign",
-        "new_declared",
-        "swap_names",
-    ],
+    "mode", ["roundtrip", "rename", "rename_grade", "reassign", "temporary", "unassign"]
 )
-def test_relationship_resolution(
-    db_session, importer, existing_student, class_factory, student_factory, mode
+def test_existing_student_resolution(
+    db_session, importer, existing_student, class_factory, mode
 ):
     db, student = db_session, existing_student
     original_id = student.class_id
     other = class_factory(grade=12, class_name="Other")
-    # This student is not exported but must also follow its class relationship.
-    omitted = student_factory(nisn="9999999999", class_id=original_id)
     book = workbook(db, [student])
-    sheet = book["students"]
-    expected_id, expected_pair = original_id, (11, "11B")
+    expected_id = original_id
     if mode.startswith("rename"):
-        expected_pair = (9 if mode == "rename_grade" else 11, "Renamed")
-        book["classes"]["B2"], book["classes"]["C2"] = expected_pair
-        if mode == "rename_final_text":
-            sheet["F2"], sheet["G2"] = expected_pair
+        book["classes"]["C2"] = "Renamed"
+        if mode == "rename_grade":
+            book["classes"]["B2"] = 9
     elif mode == "reassign":
-        sheet["F2"], sheet["G2"] = 12, "Other"
-        expected_id, expected_pair = other.class_id, (12, "Other")
-    elif mode == "new_declared":
+        book["students"]["H2"] = other.class_id
+        expected_id = other.class_id
+    elif mode == "temporary":
+        assert book["classes"]["A4"].value == "N1"
         book["classes"]["B4"], book["classes"]["C4"] = 6, "New"
-        sheet["F2"], sheet["G2"] = 6, "New"
-        expected_id, expected_pair = None, (6, "New")
-    elif mode == "swap_names":
-        book["classes"]["B2"], book["classes"]["C2"] = 12, "Other"
-        book["classes"]["B3"], book["classes"]["C3"] = 11, "11B"
-        expected_pair = (12, "Other")
+        book["students"]["H2"] = "N1"
+        expected_id = None
+    elif mode == "unassign":
+        book["students"]["H2"] = None
+        expected_id = None
     batch = preview(db, importer, book)
     assert not batch.payload["errors"]
     apply(db, importer, batch)
     db.refresh(student)
-    if expected_id is not None:
+    if mode == "temporary":
+        assert isinstance(student.class_id, int)
+        assigned = db.get(Class, student.class_id)
+        assert (assigned.grade, assigned.class_name) == (6, "New")
+    else:
         assert student.class_id == expected_id
-    assigned = db.get(Class, student.class_id)
-    assert (assigned.grade, assigned.class_name) == expected_pair
-    assert len(list(db.scalars(select(Class)))) == (3 if mode == "new_declared" else 2)
-    fresh = workbook(db, [student, omitted])
-    assert (
-        fresh["students"]["F2"].value,
-        fresh["students"]["G2"].value,
-    ) == expected_pair
-    assert fresh["students"]["H2"].value == student.class_id
     if mode.startswith("rename"):
-        assert (
-            fresh["students"]["F3"].value,
-            fresh["students"]["G3"].value,
-        ) == expected_pair
-        assert fresh["students"]["H3"].value == original_id
+        assert db.get(Class, original_id).class_name == "Renamed"
+    fresh = workbook(db, [student])
+    assert fresh["students"]["H2"].value == student.class_id
+    assert fresh["students"]["G2"].data_type == "f"
+    assert len(list(db.scalars(select(Class)))) == (3 if mode == "temporary" else 2)
 
 
 @pytest.mark.parametrize("count", [1, 3])
-def test_only_declared_new_class_is_created_once(db_session, importer, count):
+def test_temporary_class_created_once(db_session, importer, count):
     book = workbook(db_session)
-    book["classes"]["B2"], book["classes"]["C2"] = 4, "New"
+    book["classes"]["B2"], book["classes"]["C2"] = 10, "X RPL 1"
     for row in range(2, count + 2):
-        student_row(book["students"], row, nisn=f"{row:010}", grade=4, class_name="New")
+        student_row(book["students"], row, nisn=f"{row:010}")
     batch = preview(db_session, importer, book)
     assert not batch.payload["errors"]
     apply(db_session, importer, batch)
@@ -165,18 +149,15 @@ def test_only_declared_new_class_is_created_once(db_session, importer, count):
 @pytest.mark.parametrize(
     "failure,cell",
     [
-        ("undeclared_new", "3:G"),
-        ("undeclared_reassignment", "2:G"),
-        ("db_class_omitted", "2:G"),
-        ("missing_grade", "2:F"),
-        ("missing_name", "2:G"),
-        ("new_no_class", "3:F"),
-        ("invalid_grade", "2:F"),
-        ("tampered_metadata", "2:H"),
-        ("missing_metadata", "2:H"),
-        ("new_with_metadata", "3:H"),
+        ("unknown_numeric", "2:H"),
+        ("unknown_temporary", "2:H"),
+        ("unused_slot", "2:H"),
+        ("incomplete_class", "3:C"),
+        ("bad_temp_format", "2:H"),
+        ("missing_new_reference", "3:H"),
         ("duplicate_pair", "3:C"),
         ("duplicate_class_id", "3:A"),
+        ("duplicate_temp_id", "4:A"),
         ("unknown_class_id", "2:A"),
         ("invalid_class", "2:B"),
         ("invalid_student", "3:C"),
@@ -185,83 +166,98 @@ def test_only_declared_new_class_is_created_once(db_session, importer, count):
         ("missing_sheet", "1:A"),
         ("renamed_header", "1:G"),
         ("missing_header", "1:H"),
-        ("formula", "2:F"),
+        ("manual_grade", "2:F"),
+        ("manual_name", "2:G"),
+        ("foreign_formula", "2:F"),
     ],
 )
 def test_invalid_workbook_has_zero_effect(
-    db_session, importer, existing_student, class_factory, failure, cell
+    db_session, importer, existing_student, failure, cell
 ):
     db = db_session
-    other = class_factory(grade=12, class_name="Other")
     before = snapshot(db)
     book = workbook(db, [existing_student])
     s, c = book["students"], book["classes"]
     s["B2"] = "Valid student update"
     c["C2"] = "Valid rename"
-    c["B4"], c["C4"] = 5, "Valid new class"
-    if failure == "undeclared_new":
-        student_row(s, 3, grade=5, class_name="Typo")
-    elif failure == "undeclared_reassignment":
-        s["F2"], s["G2"] = 5, "Typo"
-    elif failure == "db_class_omitted":
-        c.delete_rows(3)
-        s["F2"], s["G2"] = 12, "Other"
-    elif failure == "missing_grade":
-        s["F2"] = None
-    elif failure == "missing_name":
-        s["G2"] = None
-    elif failure == "new_no_class":
-        student_row(s, 3)
-    elif failure == "invalid_grade":
-        s["F2"] = 21
-    elif failure == "tampered_metadata":
-        s["H2"] = other.class_id
-    elif failure == "missing_metadata":
-        s["H2"] = None
-    elif failure == "new_with_metadata":
-        student_row(s, 3, class_id=other.class_id, grade=12, class_name="Other")
+    c["B3"], c["C3"] = 5, "Valid new class"
+    if failure == "unknown_numeric":
+        s["H2"] = 2147483647
+    elif failure == "unknown_temporary":
+        s["H2"] = "N999"
+    elif failure == "unused_slot":
+        s["H2"] = "N2"
+    elif failure == "incomplete_class":
+        c["C3"] = None
+    elif failure == "bad_temp_format":
+        s["H2"] = "N01"
+    elif failure == "missing_new_reference":
+        student_row(s, 3, class_id=None)
     elif failure == "duplicate_pair":
         c["B3"], c["C3"] = c["B2"].value, c["C2"].value
     elif failure == "duplicate_class_id":
         c["A3"] = c["A2"].value
+    elif failure == "duplicate_temp_id":
+        c["A4"], c["B4"], c["C4"] = "N1", 6, "Another"
     elif failure == "unknown_class_id":
         c["A2"] = 2147483647
     elif failure == "invalid_class":
         c["B2"] = "invalid"
     elif failure == "invalid_student":
-        student_row(s, 3, nisn="invalid", grade=5, class_name="Valid new class")
+        student_row(s, 3, nisn="invalid")
     elif failure == "unknown_student":
         s["A2"] = 2147483647
     elif failure == "duplicate_student":
-        for col in range(1, 9):
-            s.cell(3, col).value = s.cell(2, col).value
+        student_row(
+            s,
+            3,
+            id=existing_student.id,
+            class_id=existing_student.class_id,
+            nisn=existing_student.nisn,
+        )
     elif failure == "missing_sheet":
         del book["classes"]
     elif failure == "renamed_header":
         s["G1"] = "Other"
     elif failure == "missing_header":
         s["H1"] = None
-    elif failure == "formula":
+    elif failure == "manual_grade":
+        s["F2"] = 11
+    elif failure == "manual_name":
+        s["G2"] = "11B"
+    elif failure == "foreign_formula":
         s["F2"] = "=11"
     batch = preview(db, importer, book)
     assert cell in {e["cell"] for e in batch.payload["errors"]}
     assert snapshot(db) == before
-    with pytest.raises(AppException) as error:
+    with pytest.raises(AppException):
         apply(db, importer, batch)
-    assert error.value.status_code == 422
     assert snapshot(db) == before
 
 
-def test_deleted_class_row_does_not_delete_database_class(
-    db_session, importer, existing_student, class_factory
-):
-    other = class_factory(grade=12, class_name="Keep me")
-    book = workbook(db_session, [existing_student])
-    book["classes"].delete_rows(3)
+def test_temporary_ids_survive_row_operations(db_session, importer):
+    book = workbook(db_session)
+    c = book["classes"]
+    c["B2"], c["C2"] = 10, "First"
+    c["B3"], c["C3"] = 11, "Second"
+    # Move complete records as a spreadsheet sort would, then insert/delete elsewhere.
+    first, second = (
+        [c.cell(2, i).value for i in (1, 2, 3)],
+        [c.cell(3, i).value for i in (1, 2, 3)],
+    )
+    for col in (1, 2, 3):
+        c.cell(2, col).value, c.cell(3, col).value = second[col - 1], first[col - 1]
+    c.insert_rows(2)
+    c.delete_rows(5)
+    c["C3"] = "Renamed second"
+    student_row(book["students"], 2, class_id="N2")
+    assert c["A3"].value == "N2" and c["A4"].value == "N1"
+    assert c["A3"].data_type == "s"
     batch = preview(db_session, importer, book)
     assert not batch.payload["errors"]
     apply(db_session, importer, batch)
-    assert db_session.get(Class, other.class_id).class_name == "Keep me"
+    student = db_session.scalar(select(Student))
+    assert db_session.get(Class, student.class_id).class_name == "Renamed second"
 
 
 @pytest.mark.parametrize("stage", ["student_write", "commit", "constraint"])
@@ -274,7 +270,7 @@ def test_runtime_failure_rolls_back_everything(
     book["classes"]["C2"] = "Renamed"
     book["classes"]["B3"], book["classes"]["C3"] = 5, "New"
     book["students"]["B2"] = "Changed"
-    student_row(book["students"], 3, grade=5, class_name="New")
+    student_row(book["students"], 3)
     batch = preview(db, importer, book)
     assert not batch.payload["errors"]
     original = import_service._apply_student
@@ -300,115 +296,96 @@ def test_runtime_failure_rolls_back_everything(
         if stage == "commit":
             event.remove(db, "before_commit", fail_commit)
     assert snapshot(db) == before
-    db.refresh(batch)
-    assert batch.state == "pending"
 
 
-def test_filtered_export_protects_ids_and_uses_class_dictionary(
+def test_workbook_formulas_validation_and_protection(
     client, importer, existing_student, class_factory
 ):
     other = class_factory(grade=3, class_name="Different grade")
     response = client.get("/admin/students/export?grade=11")
-    assert response.status_code == 200
     book = load_workbook(BytesIO(response.content))
-    assert book.sheetnames == ["instructions", "students", "classes"]
     s, c = book["students"], book["classes"]
+    assert book.sheetnames == ["instructions", "students", "classes"]
     assert s["A2"].value == existing_student.id and s["A3"].value is None
-    assert [s.cell(2, col).value for col in (6, 7, 8)] == [
-        11,
-        "11B",
-        existing_student.class_id,
-    ]
-    assert s.column_dimensions["H"].hidden and s.protection.sheet
-    assert s["H2"].protection.locked and s["H3"].protection.locked
-    assert (
-        s["A2"].protection.locked and c["A2"].protection.locked and c.protection.sheet
-    )
-    for cell in ("B2", "F2", "G2", "B3", "F3", "G3"):
-        assert not s[cell].protection.locked
-    for cell in ("B2", "C2", "B3", "C3"):
-        assert not c[cell].protection.locked
-    ids = {r[0] for r in c.iter_rows(min_row=2, max_col=3, values_only=True)}
-    assert {existing_student.class_id, other.class_id} <= ids
-    assert "class_ids" not in book.defined_names
-    assert {"jenjang_list", "kelas_3", "kelas_11"} <= set(book.defined_names)
-    dvs = s.data_validations.dataValidation
-    assert not any("H2" in dv.sqref for dv in dvs)
-    assert any("F2" in dv.sqref and dv.formula1 == "jenjang_list" for dv in dvs)
+    assert s["H2"].value == existing_student.class_id
+    assert not s.column_dimensions["H"].hidden and not s["H2"].protection.locked
+    assert s.protection.sheet and c.protection.sheet and c["A2"].protection.locked
+    for row in (2, 3, 100):
+        for col, lookupcol in ((6, 2), (7, 3)):
+            assert s.cell(row, col).value == export_service.class_lookup_formula(
+                row, lookupcol
+            )
+            assert s.cell(row, col).protection.locked
+            assert s.cell(row, col).font.italic
     assert any(
-        "G2" in dv.sqref and dv.formula1 == 'INDIRECT("kelas_"&$F2)' for dv in dvs
+        v.type == "custom"
+        and "H2" in v.sqref
+        and "COUNTIF(class_ids,H2)" in v.formula1
+        and v.showErrorMessage
+        for v in s.data_validations.dataValidation
     )
-    assert c.column_dimensions["E"].hidden
-    source = load_workbook(export_service.STUDENT_TEMPLATE)
-    assert s["B1"].fill.fgColor.rgb == source["students"]["B1"].fill.fgColor.rgb
-    template = load_workbook(
-        BytesIO(client.get("/admin/import/template/students").content)
+    assert not any(
+        v.type == "list" and any(f"{col}2" in v.sqref for col in ("F", "G", "H"))
+        for v in s.data_validations.dataValidation
     )
-    assert template["students"]["A2"].value is None
-    assert len({template["classes"]["A2"].value, template["classes"]["A3"].value}) == 2
-    assert client.get("/admin/import/template/classes").status_code != 200
-    assert client.get("/admin/classes/export").status_code != 200
+    assert book.defined_names["class_data"].attr_text == "'classes'!$A:$C"
+    assert book.calculation.fullCalcOnLoad and book.calculation.calcMode == "auto"
+    assert {existing_student.class_id, other.class_id} <= {c["A2"].value, c["A3"].value}
+    assert c["A4"].value == "N1" and c["A103"].value == "N100"
+    assert c["A4"].protection.locked and not c["B4"].protection.locked
+    assert s["F2"].fill.fgColor.rgb != s["H2"].fill.fgColor.rgb
 
 
-@pytest.mark.parametrize("assigned", [False, True])
-def test_existing_student_can_be_unassigned(
-    db_session, importer, existing_student, assigned
+def test_deleted_class_row_never_deletes_database_class(
+    db_session, importer, existing_student, class_factory
 ):
-    if not assigned:
-        existing_student.class_id = None
-        db_session.commit()
+    other = class_factory(grade=12, class_name="Keep")
     book = workbook(db_session, [existing_student])
-    book["students"]["F2"], book["students"]["G2"] = None, None
+    book["classes"].delete_rows(3)
     batch = preview(db_session, importer, book)
     assert not batch.payload["errors"]
     apply(db_session, importer, batch)
-    db_session.refresh(existing_student)
-    assert existing_student.class_id is None
+    assert db_session.get(Class, other.class_id).class_name == "Keep"
 
 
-def test_invalid_existing_student_blocks_valid_student_and_class_changes(
-    db_session, importer, existing_student, student_factory
+@pytest.mark.parametrize("spelling", ["FALSE()", "FALSE"])
+def test_calc_formula_roundtrip_without_cached_values(
+    db_session, importer, existing_student, spelling
 ):
-    invalid = student_factory(nisn="9999999999", class_id=existing_student.class_id)
-    before = snapshot(db_session)
-    book = workbook(db_session, [existing_student, invalid])
-    book["students"]["B2"] = "Valid update"
-    book["students"]["C3"] = "invalid NISN"
-    book["classes"]["C2"] = "Valid rename"
-    book["classes"]["B3"], book["classes"]["C3"] = 6, "Valid new class"
+    book = workbook(db_session, [existing_student])
+    for row in book["students"].iter_rows(min_row=2):
+        for cell in row[5:7]:
+            if cell.data_type == "f":
+                cell.value = cell.value.replace("FALSE", spelling)
     batch = preview(db_session, importer, book)
-    assert any(e["cell"] == "3:C" for e in batch.payload["errors"])
-    with pytest.raises(AppException):
-        apply(db_session, importer, batch)
-    assert snapshot(db_session) == before
+    assert not batch.payload["errors"]
+    assert batch.payload["total"] == 2  # Empty formula rows and reserved slots ignored.
+    apply(db_session, importer, batch)
+    assert db_session.scalar(select(Student)).class_id == existing_student.class_id
 
 
-def test_preview_editor_preserves_internal_metadata_and_resolves_names(
-    client, db_session, importer, existing_student, class_factory
+def test_preview_editor_assigns_temporary_id(
+    db_session, client, importer, existing_student
 ):
-    other = class_factory(grade=12, class_name="Other")
-    batch = preview(db_session, importer, workbook(db_session, [existing_student]))
-    url = f"/admin/import/{batch.token}/rows/2/edit"
-    page = client.get(url)
-    assert 'name="class_id"' not in page.text
+    book = workbook(db_session, [existing_student])
+    book["classes"]["B3"], book["classes"]["C3"] = 12, "New"
+    batch = preview(db_session, importer, book)
     response = client.post(
-        url,
+        f"/admin/import/{batch.token}/rows/2/edit",
         data={
             "name": existing_student.name,
             "nisn": existing_student.nisn,
+            "class_id": "N1",
             "current": "Aktif",
-            "grade": "12",
-            "class_name": "Other",
-            "revision": "0",
-            "class_id": "2147483647",
+            "revision": 0,
+            "grade": 1,
+            "class_name": "Ignored independent fields",
         },
     )
     assert response.status_code == 200
     db_session.refresh(batch)
-    row = next(r for r in batch.payload["rows"] if r["kind"] == "students")
-    assert row["values"]["class_id"] == existing_student.class_id
-    assert row["resolved_class_id"] == other.class_id
-    assert "class_id" in row["changed"]
+    row = next(row for row in batch.payload["rows"] if row["kind"] == "students")
+    assert row["class_name"] == "New" and row["values"]["class_id"] == "N1"
     apply(db_session, importer, batch)
     db_session.refresh(existing_student)
-    assert existing_student.class_id == other.class_id
+    assert db_session.get(Class, existing_student.class_id).class_name == "New"

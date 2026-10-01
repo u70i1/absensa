@@ -95,25 +95,30 @@ contents produce explicit errors. Photos are validated during preview and
 applied together with the entire valid import. Photo limits match the profile upload
 service (5 MiB and 20 megapixels per image; 50 MiB of normalized photos total).
 
-Keep sheet names and column names unchanged. Student IDs and existing class IDs
-are protected. The final `ID KELAS` column in `students` is hidden, protected
-relationship metadata and must not be edited. Administrators assign students using
-`JENJANG` and `NAMA KELAS`; exports populate these directly from the actual relationship.
-Dropdowns derive from `classes`, including dependent class-name choices by jenjang.
+Keep sheet names, column names, student IDs and existing class IDs unchanged.
+In `students`, enter `ID KELAS` manually (there is no dropdown). Excel validation
+checks that it exists in `classes`. `JENJANG` and `NAMA KELAS` are protected,
+visually subdued VLOOKUP formula columns: change class descriptions in `classes`
+and the student cells recalculate automatically. Import resolves IDs directly and
+never depends on formula caches or accepts independent student class descriptions.
+New students require a class ID; existing students may clear it to become unassigned.
 
-Create classes only in `classes`, with a blank ID and unique jenjang/name pair.
-Students can reference those new classes in the same import. Student rows never
-create classes implicitly: undeclared pairs are rejected, even if they exist in the
-database but were removed from the workbook. New students require both fields;
-existing students may leave both blank to remain/become unassigned.
+The generator reserves 100 new-class rows with literal, protected IDs `N1` through
+`N100`. These are allocated before editing, not by a row-number formula: moving,
+inserting, deleting or editing other rows never renumbers them. Fill both class
+fields to use a reserved ID; unused slots are ignored. An incomplete/unknown ID
+cannot be assigned to a student. Macro-free XLSX cannot safely assign persistent
+IDs on edit, so Absensa finalizes them to numeric database IDs during import.
+Temporary IDs are scoped to their workbook, including when importing archives.
+For additional classes, import and download a fresh workbook with more reserved
+slots. Blank-ID class rows are also finalized during import but cannot be referenced
+by students until exported again with their database IDs.
 
-Renaming a class (including its jenjang) preserves its database ID. Existing students
-whose visible pair matches either the original or final name remain attached to the
-same class; a different pair intentionally reassigns them to a declared class. Hidden
-student metadata is checked against the current database relationship. Fresh exports
-always show current class values. Removing class rows never deletes database records;
-use the Classes dashboard for explicit deletion. Empty rows are ignored, formulas in
-data fields are rejected, and NISN/guardian phone numbers should be text to retain zeros.
+Create classes only in `classes`. Class names and jenjang may change without changing
+the ID, and students retain the same class relationship. Duplicate class pairs/IDs
+and undeclared student references reject the entire upload. Removing class rows never
+deletes database records; use the Classes dashboard for explicit deletion. NISN and
+guardian phone numbers should be text to retain leading zeros.
 
 Uploads produce previews with create/update tables, highlighted changes, source
 filenames, staged photos, editable drafts, and errors formatted as

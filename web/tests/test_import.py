@@ -12,6 +12,7 @@ from app.models.student import Student
 from app.services import export_service, import_service
 from app.services.admin_auth_service import create_admin_session
 from app.services.exceptions import AppException
+from app.services.export_service import class_lookup_formula
 from openpyxl import load_workbook
 from sqlalchemy import func, select
 
@@ -32,14 +33,23 @@ def workbook_bytes(kind, rows, *, class_name="10A"):
         BytesIO(export_service.build_students_workbook([], "test", []))
     )
     sheet = workbook[kind]
-    class_rows = {None: (10, class_name)} if kind == "students" and rows else {}
+    class_rows = {"N1": (10, class_name)} if kind == "students" and rows else {}
     for number, row in enumerate(rows, 2):
         if kind == "students" and len(row) == 6 and any(v is not None for v in row):
             student_id, name, metadata_id, nisn, status, phone = row
             grade, label = (11, "11B") if metadata_id else (10, class_name)
             if metadata_id is not None:
                 class_rows[metadata_id] = (grade, label)
-            row = [student_id, name, nisn, status, phone, grade, label, metadata_id]
+            row = [
+                student_id,
+                name,
+                nisn,
+                status,
+                phone,
+                class_lookup_formula(number, 2),
+                class_lookup_formula(number, 3),
+                metadata_id or "N1",
+            ]
         for column, value in enumerate(row, 1):
             sheet.cell(number, column).value = value
     for number, (class_id, (grade, label)) in enumerate(class_rows.items(), 2):

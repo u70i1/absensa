@@ -1,5 +1,6 @@
 """Review spreadsheets and archive photos, then apply entire workbooks atomically."""
 
+import re
 from collections import Counter
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
@@ -18,7 +19,11 @@ from app.services import (
     student_photo_service,
 )
 from app.services.exceptions import AppException
-from app.services.export_service import CLASS_COLUMNS, STUDENT_COLUMNS
+from app.services.export_service import (
+    CLASS_COLUMNS,
+    STUDENT_COLUMNS,
+    class_lookup_formula,
+)
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 from pydantic import ValidationError
@@ -31,7 +36,7 @@ MAX_ROWS = 10000
 COLUMNS = {"students": STUDENT_COLUMNS, "classes": CLASS_COLUMNS}
 FIELD_ERRORS = {
     "id": "ID harus berupa bilangan bulat positif, atau kosong untuk data baru.",
-    "class_id": "ID KELAS harus berupa bilangan bulat positif, atau kosong jika belum ditentukan.",
+    "class_id": "ID KELAS harus berupa ID angka atau ID sementara seperti N1 yang tercantum pada sheet classes.",
     "name": "NAMA wajib diisi, maksimal 255 karakter.",
     "nisn": "NISN wajib berisi tepat 10 digit. Gunakan format teks untuk mempertahankan nol di depan.",
     "current": "STATUS wajib diisi dengan Aktif atau Tidak aktif.",
@@ -59,6 +64,12 @@ def _value(field, value):
         if value not in ("Aktif", "Tidak aktif"):
             raise ValueError(FIELD_ERRORS[field])
         return value == "Aktif"
+    if (
+        field == "class_id"
+        and isinstance(value, str)
+        and re.fullmatch(r"N[1-9][0-9]*", value)
+    ):
+        return value
     if field in {"id", "class_id", "grade"}:
         if isinstance(value, bool):
             raise ValueError(FIELD_ERRORS[field])
@@ -80,6 +91,16 @@ def _value(field, value):
             return str(int(value))
         raise ValueError(FIELD_ERRORS[field])
     return value
+
+
+def _is_class_lookup(value, row: int, result_column: int) -> bool:
+    if not isinstance(value, str):
+        return False
+    # Calc serializes FALSE as FALSE(); both are standard XLSX formulas.
+    normalized = (
+        re.sub(r"\s+", "", value).upper().replace("FALSE()", "FALSE").replace("$", "")
+    )
+    return normalized == class_lookup_formula(row, result_column).upper()
 
 
 def _read_rows(content: bytes):
@@ -147,11 +168,36 @@ def _read_rows(content: bytes):
             if header_errors:
                 continue
             schema = StudentImportRow if kind == "students" else ClassImportRow
+            seen_class_ids = set()
             for number, cells in enumerate(rows, 2):
+                if kind == "classes" and cells[0].value not in (None, ""):
+                    reference = str(cells[0].value).strip()
+                    if reference in seen_class_ids:
+                        errors.append(
+                            _error(
+                                kind,
+                                number,
+                                "class_id",
+                                "ID kelas berulang dalam sheet, termasuk baris cadangan. Setiap ID harus unik.",
+                            )
+                        )
+                    seen_class_ids.add(reference)
+                if (
+                    kind == "classes"
+                    and isinstance(cells[0].value, str)
+                    and re.fullmatch(r"N[1-9][0-9]*", cells[0].value)
+                    and all(c.value in (None, "") for c in cells[1:])
+                ):
+                    continue
                 if all(
                     cell.value is None
                     or (isinstance(cell.value, str) and not cell.value.strip())
-                    for cell in cells
+                    or (
+                        kind == "students"
+                        and index in (5, 6)
+                        and _is_class_lookup(cell.value, number, index - 3)
+                    )
+                    for index, cell in enumerate(cells)
                 ):
                     continue
                 used_rows += 1
@@ -160,6 +206,15 @@ def _read_rows(content: bytes):
                 values, row_errors = {}, []
                 for (_, field), cell in zip(columns, cells):
                     try:
+                        if kind == "students" and field in {"grade", "class_name"}:
+                            if cell.value not in (None, "") and not _is_class_lookup(
+                                cell.value, number, 2 if field == "grade" else 3
+                            ):
+                                raise ValueError(
+                                    "Kolom ini hanya boleh berisi rumus bawaan. Ubah jenjang/nama kelas pada sheet classes, bukan students."
+                                )
+                            values[field] = None
+                            continue
                         if cell.data_type in {"f", "e"}:
                             raise ValueError(
                                 "Gunakan nilai langsung, bukan rumus atau nilai kesalahan Excel."
@@ -205,6 +260,11 @@ def _read_rows(content: bytes):
 STUDENT_FIELDS = ("name", "class_id", "nisn", "current", "guardian_phone")
 
 
+def _reference_key(row, value):
+    # Temporary references are local to each workbook in an archive.
+    return (row.get("file", ""), value) if isinstance(value, str) else value
+
+
 def _review_workbook(db: Session, rows: list[dict]):
     """Plan against the final class and student state without mutating ORM objects."""
     classes = {item.class_id: item for item in db.scalars(select(Class))}
@@ -229,16 +289,16 @@ def _review_workbook(db: Session, rows: list[dict]):
         (class_rows, classes, "class_id"),
         (student_rows, students, "id"),
     ):
-        counts = Counter(r["values"][id_field] for r in group)
+        counts = Counter(_reference_key(r, r["values"][id_field]) for r in group)
         for row in group:
             value = row["values"][id_field]
-            if value is not None and value not in existing:
+            if isinstance(value, int) and value not in existing:
                 error(
                     row,
                     id_field,
                     f"ID {value} tidak ditemukan. Jangan mengubah ID yang sudah ada; kosongkan ID untuk data baru.",
                 )
-            if value is not None and counts[value] > 1:
+            if value is not None and counts[_reference_key(row, value)] > 1:
                 error(
                     row,
                     id_field,
@@ -247,15 +307,18 @@ def _review_workbook(db: Session, rows: list[dict]):
 
     for index, row in enumerate(class_rows):
         values = row["values"]
-        key = values["class_id"] if values["class_id"] is not None else f"new:{index}"
+        key = (
+            _reference_key(row, values["class_id"])
+            if values["class_id"] is not None
+            else f"new:{index}"
+        )
         final_classes[key] = (values["grade"], values["class_name"])
     declared_classes = {
-        row["values"]["class_id"]
+        (row.get("file", ""), row["values"]["class_id"])
         if row["values"]["class_id"] is not None
         else f"new:{index}": (row["values"]["grade"], row["values"]["class_name"])
         for index, row in enumerate(class_rows)
     }
-    declared_pairs = {pair: key for key, pair in declared_classes.items()}
     pair_counts = Counter(final_classes.values())
     for row in class_rows:
         values = row["values"]
@@ -278,47 +341,28 @@ def _review_workbook(db: Session, rows: list[dict]):
         values = row["values"]
         if nisn_counts[values["nisn"]] > 1:
             error(row, "nisn", "NISN sudah digunakan atau berulang dalam workbook.")
-        student = students.get(values["id"])
-        metadata_id = values["class_id"]
-        if metadata_id != (student.class_id if student else None):
+        reference = values["class_id"]
+        pair = (
+            declared_classes.get((row.get("file", ""), reference))
+            if reference is not None
+            else None
+        )
+        if reference is not None and (
+            pair is None or (isinstance(reference, int) and reference not in classes)
+        ):
             error(
                 row,
                 "class_id",
-                "Metadata kelas siswa berubah atau tidak sesuai database. Jangan mengubah kolom tersembunyi. Unduh ekspor terbaru lalu ulangi perubahan.",
+                f"ID kelas {reference} tidak ditemukan atau belum lengkap pada sheet classes. Isi kelas tersebut terlebih dahulu.",
             )
-        pair = (values["grade"], values["class_name"])
-        resolved = None
-        if pair == (None, None) and student is not None:
-            pair = None  # Existing students may remain/become unassigned.
-        elif None in pair:
-            for field in ("grade", "class_name"):
-                if values[field] is None:
-                    error(
-                        row,
-                        field,
-                        FIELD_ERRORS[field]
-                        + " Pilih kelas yang tercantum pada sheet classes.",
-                    )
-        else:
-            original = classes.get(metadata_id)
-            original_pair = (original.grade, original.class_name) if original else None
-            final_pair = declared_classes.get(metadata_id)
-            if (
-                metadata_id is not None
-                and final_pair is not None
-                and pair in (original_pair, final_pair)
-            ):
-                pair, resolved = final_pair, metadata_id
-            else:
-                resolved = declared_pairs.get(pair)
-                if resolved is None:
-                    error(
-                        row,
-                        "class_name",
-                        f'Kelas "{pair[1]}" pada jenjang {pair[0]} tidak ditemukan. Tambahkan kelas tersebut terlebih dahulu pada sheet classes.',
-                    )
+        if reference is None and values["id"] is None:
+            error(
+                row,
+                "class_id",
+                "ID KELAS wajib diisi untuk siswa baru. Gunakan ID dari sheet classes.",
+            )
         row["class_key"] = list(pair) if pair is not None else None
-        row["resolved_class_id"] = resolved if isinstance(resolved, int) else None
+        row["resolved_class_id"] = reference if isinstance(reference, int) else None
         row["class_name"] = pair[1] if pair is not None else "—"
 
     valid = []
@@ -543,13 +587,15 @@ def edit_preview_row(
     fields = [
         field
         for _, field in COLUMNS[kind]
-        if field != id_field and not (kind == "students" and field == "class_id")
+        if field != id_field
+        and not (kind == "students" and field in {"grade", "class_name"})
     ]
     try:
         parsed = {field: _value(field, values.get(field)) for field in fields}
         parsed[id_field] = original["values"][id_field]
         if kind == "students":
-            parsed["class_id"] = original["values"]["class_id"]
+            parsed["grade"] = None
+            parsed["class_name"] = None
         schema = StudentImportRow if kind == "students" else ClassImportRow
         parsed = schema.model_validate(parsed).model_dump()
         if kind == "students":
@@ -639,7 +685,7 @@ def apply_preview(
                     | {
                         r["values"]["class_id"]
                         for r in groups["students"]
-                        if r["values"]["class_id"] is not None
+                        if isinstance(r["values"]["class_id"], int)
                     }
                 )
             locked = {
@@ -679,7 +725,11 @@ def apply_preview(
         )
         for row in groups["classes"]:
             values = row["values"]
-            item = db.get(Class, values["class_id"]) if values["class_id"] else Class()
+            item = (
+                db.get(Class, values["class_id"])
+                if isinstance(values["class_id"], int)
+                else Class()
+            )
             item.grade, item.class_name = values["grade"], values["class_name"]
             db.add(item)
         db.flush()
