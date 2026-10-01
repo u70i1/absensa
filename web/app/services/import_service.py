@@ -46,11 +46,11 @@ FIELD_ERRORS = {
 }
 
 
-def _error(kind, row, field, message):
+def _error(kind, row, field, message, sheet_name=None):
     column = next(i for i, (_, key) in enumerate(COLUMNS[kind], 1) if key == field)
     return {
         "cell": f"{row}:{get_column_letter(column)}",
-        "sheet": kind,
+        "sheet": sheet_name or kind,
         "message": message,
     }
 
@@ -144,13 +144,33 @@ def _read_rows(content: bytes):
                 ),
                 422,
             )
-        for kind in ("classes", "students"):
-            if kind not in workbook.sheetnames:
+        sheet_specs = []
+        if "classes" in workbook.sheetnames:
+            sheet_specs.append(("classes", "classes", 0))
+        student_sheet_names = []
+        if "students" in workbook.sheetnames:
+            student_sheet_names.append("students")
+        # A copied student worksheet may use any tab name. Recognize it from
+        # its first two headers, then validate the complete header normally.
+        for name in workbook.sheetnames:
+            if name in {"instructions", "students", "classes"}:
                 continue
-            sheet, columns = workbook[kind], COLUMNS[kind]
+            candidate = workbook[name]
+            first_cells = next(candidate.iter_rows(max_row=1, max_col=2), ())
+            if len(first_cells) == 2 and tuple(c.value for c in first_cells) == (
+                STUDENT_COLUMNS[0][0],
+                STUDENT_COLUMNS[1][0],
+            ):
+                student_sheet_names.append(name)
+        sheet_specs.extend(
+            ("students", name, index * 100001)
+            for index, name in enumerate(student_sheet_names, 1)
+        )
+        for kind, sheet_name, sheet_offset in sheet_specs:
+            sheet, columns = workbook[sheet_name], COLUMNS[kind]
             if (sheet.max_row or 0) > 100000 or (sheet.max_column or 0) > 100:
                 raise AppException(
-                    f"{kind} > 1:A > Ukuran sheet melebihi batas template.", 422
+                    f"{sheet_name} > 1:A > Ukuran sheet melebihi batas template.", 422
                 )
             rows = sheet.iter_rows(max_col=len(columns))
             header = next(rows, ())
@@ -160,6 +180,7 @@ def _read_rows(content: bytes):
                     1,
                     field,
                     f'Kolom wajib "{name}" tidak ditemukan atau diganti. Gunakan urutan kolom template.',
+                    sheet_name,
                 )
                 for (name, field), cell in zip(columns, header)
                 if cell.value != name
@@ -179,6 +200,7 @@ def _read_rows(content: bytes):
                                 number,
                                 "class_id",
                                 "ID kelas berulang dalam sheet, termasuk baris cadangan. Setiap ID harus unik.",
+                                sheet_name,
                             )
                         )
                     seen_class_ids.add(reference)
@@ -194,8 +216,8 @@ def _read_rows(content: bytes):
                     or (isinstance(cell.value, str) and not cell.value.strip())
                     or (
                         kind == "students"
-                        and index in (5, 6)
-                        and _is_class_lookup(cell.value, number, index - 3)
+                        and index in (6, 7)
+                        and _is_class_lookup(cell.value, number, index - 4)
                     )
                     for index, cell in enumerate(cells)
                 ):
@@ -221,7 +243,9 @@ def _read_rows(content: bytes):
                             )
                         values[field] = _value(field, cell.value)
                     except ValueError as exc:
-                        row_errors.append(_error(kind, number, field, str(exc)))
+                        row_errors.append(
+                            _error(kind, number, field, str(exc), sheet_name)
+                        )
                 # Validate independent fields even when another cell failed parsing.
                 try:
                     validated = schema.model_validate(values).model_dump()
@@ -235,18 +259,27 @@ def _read_rows(content: bytes):
                             number,
                             str(e["loc"][0]),
                             FIELD_ERRORS[str(e["loc"][0])],
+                            sheet_name,
                         )
                         for e in exc.errors()
                     )
                 errors.extend(row_errors)
                 if not row_errors:
-                    parsed.append({"row": number, "kind": kind, "values": values})
+                    parsed.append(
+                        {
+                            "row": number,
+                            "kind": kind,
+                            "sheet": sheet_name,
+                            "sheet_offset": sheet_offset,
+                            "values": values,
+                        }
+                    )
         if not used_rows and not errors:
             raise AppException(
                 "File tidak berisi data. Isi baris di bawah judul kolom terlebih dahulu.",
                 422,
             )
-        return parsed, errors, used_rows
+        return parsed, errors, used_rows, max(1, len(student_sheet_names) + 1)
     except AppException:
         raise
     except Exception as exc:
@@ -279,7 +312,9 @@ def _review_workbook(db: Session, rows: list[dict]):
     def error(row, field, message):
         errors.append(
             {
-                **_error(row["kind"], row["row"], field, message),
+                **_error(
+                    row["kind"], row["row"], field, message, row.get("sheet")
+                ),
                 "file": row.get("file", ""),
             }
         )
@@ -442,7 +477,7 @@ def create_preview(
                     "Total isi workbook terlalu besar setelah dibuka (maksimal 200 MB).",
                     413,
                 )
-            parsed, file_errors, used = _read_rows(workbook_content)
+            parsed, file_errors, used, sheet_slots = _read_rows(workbook_content)
             total += used
             if total > MAX_ROWS:
                 raise AppException(
@@ -451,15 +486,13 @@ def create_preview(
             for row in parsed:
                 row.update(
                     file=name,
-                    key=offset
-                    + row["row"]
-                    + (100001 if row["kind"] == "classes" else 0),
+                    key=offset + row["sheet_offset"] + row["row"],
                 )
             all_rows.extend(parsed)
             errors.extend({**error, "file": name} for error in file_errors)
             files.append({"name": name, "kind": "mixed", "rows": used})
             # Each sheet is bounded at 100,000 rows, so keys cannot collide.
-            offset += 200002
+            offset += sheet_slots * 100001
         except AppException as exc:
             if not archive or exc.status_code == 413:
                 raise

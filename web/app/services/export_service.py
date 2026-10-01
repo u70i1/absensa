@@ -24,9 +24,9 @@ STUDENT_COLUMNS = (
     ("NISN", "nisn"),
     ("STATUS", "current"),
     ("NOMOR WALI", "guardian_phone"),
+    ("ID KELAS", "class_id"),
     ("JENJANG", "grade"),
     ("NAMA KELAS", "class_name"),
-    ("ID KELAS", "class_id"),
 )
 CLASS_COLUMNS = (
     ("ID KELAS", "class_id"),
@@ -94,7 +94,7 @@ def _populate_sheet(sheet, columns, items):
 
 
 def class_lookup_formula(row: int, result_column: int) -> str:
-    return f'=IF(H{row}="","",IFERROR(VLOOKUP(H{row},class_data,{result_column},FALSE),""))'
+    return f'=IF(F{row}="","",IFERROR(VLOOKUP(F{row},class_data,{result_column},FALSE),""))'
 
 
 def _protect_data_sheet(sheet, editable_columns):
@@ -154,7 +154,7 @@ def build_students_workbook(students, filter_summary: str, classes) -> bytes:
         if "D2" in dv.sqref:
             dv.formula1 = '"Aktif,Tidak aktif"'
     validation = DataValidation(
-        type="custom", formula1='OR(H2="",COUNTIF(class_ids,H2)=1)', allow_blank=True
+        type="custom", formula1='OR(F2="",COUNTIF(class_ids,F2)=1)', allow_blank=True
     )
     validation.showErrorMessage = True
     validation.errorTitle = "ID kelas tidak valid"
@@ -162,25 +162,30 @@ def build_students_workbook(students, filter_summary: str, classes) -> bytes:
         "Ketik ID kelas yang tercantum pada sheet classes, misalnya 17 atau N1."
     )
     sheet.add_data_validation(validation)
-    validation.add("H2:H1048576")
+    validation.add("F2:F1048576")
     # Reuse the template's subdued metadata fill for read-only derived cells.
     derived_fill = copy(workbook["instructions"]["D6"].fill)
     for row in range(2, max(2, len(students) + 1) + NEW_ENTRY_ROWS + 1):
-        for column, result_column in ((6, 2), (7, 3)):
+        for column, result_column in ((7, 2), (8, 3)):
             cell = sheet.cell(row, column)
             cell.value = class_lookup_formula(row, result_column)
             cell.fill = copy(derived_fill)
             font = copy(cell.font)
             font.italic = True
             cell.font = font
-    _protect_data_sheet(sheet, editable_columns=(2, 3, 4, 5, 8))
+    _protect_data_sheet(sheet, editable_columns=(1, 2, 3, 4, 5, 6))
+    # Existing class assignments are identities and stay protected. Empty cells
+    # remain writable so administrators can assign classes to new student rows.
+    for row in range(2, sheet.max_row + 1):
+        if sheet.cell(row, 6).value not in (None, ""):
+            sheet.cell(row, 6).protection = Protection(locked=True)
     _protect_data_sheet(class_sheet, editable_columns=(2, 3))
-    sheet.column_dimensions["H"].hidden = False
-    sheet["H1"].comment = Comment(
+    sheet.column_dimensions["F"].hidden = False
+    sheet["F1"].comment = Comment(
         "Ketik ID dari classes, termasuk ID sementara N1, N2, dan seterusnya. Tidak ada dropdown.",
         "Absensa",
     )
-    for column in (6, 7):
+    for column in (7, 8):
         sheet.cell(1, column).comment = Comment(
             "Kolom rumus, hanya baca. Ubah jenjang/nama kelas pada sheet classes.",
             "Absensa",
