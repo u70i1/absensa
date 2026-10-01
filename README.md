@@ -47,6 +47,13 @@ logo are set; saving only one is rejected. Leave both empty to disable them. Car
 logo and school name are centered at the top, above the photo, with regular-weight text. Logos use the same validated
 photo storage and upload limits as student photos. Back up `PHOTOS_DIR` with the DB.
 
+**Rasio foto** sets the photo's width-to-height ratio for previews, printing, and
+PNG downloads. It defaults to **3:4** for Indonesian 3×4 school portraits. Both
+ratio fields accept positive decimal numbers, for example **3.5:4.5**. Photos are
+center-cropped to this ratio and centered within the existing photo area, keeping
+the card dimensions and barcode layout fixed. Run the database migration below
+to add these settings; existing configurations receive the 3:4 default.
+
 Install the updated `web/requirements.txt` and run `.venv/bin/alembic upgrade head`
 from `web/`. PNG export requires the native Cairo library (`libcairo2` on
 Debian/Ubuntu, `cairo` on Arch); the Docker image includes it. The migration adds

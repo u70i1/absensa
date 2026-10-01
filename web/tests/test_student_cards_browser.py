@@ -52,12 +52,26 @@ def test_card_ui_ratio_selection_preview_and_confirmation(
     page, context = card_browser
     page.goto("http://testserver/admin/cards")
     page.get_by_role("button", name="Pengaturan cetak").click()
+    assert page.locator("#photo-ratio-width").input_value() == "3.0"
+    assert page.locator("#photo-ratio-height").input_value() == "4.0"
+    page.locator("#photo-ratio-width").fill("3.5")
+    page.locator("#photo-ratio-height").fill("0")
+    assert not page.locator("#photo-ratio-height").evaluate(
+        "input => input.checkValidity()"
+    )
+    page.locator("#photo-ratio-height").fill("4.5")
+    assert page.locator("#photo-ratio-width").evaluate("input => input.checkValidity()")
+    assert page.locator("#photo-ratio-height").evaluate(
+        "input => input.checkValidity()"
+    )
     page.locator("#card-width").fill("80")
     assert page.locator("#card-height").input_value() == "128"
     page.locator("#card-height").fill("100")
     assert page.locator("#card-width").input_value() == "62.5"
     page.get_by_role("button", name="Simpan pengaturan").click()
     page.get_by_text("Pengaturan cetak berhasil disimpan untuk semua kartu.").wait_for()
+    assert page.locator("#photo-ratio-width").input_value() == "3.5"
+    assert page.locator("#photo-ratio-height").input_value() == "4.5"
     page.locator("[data-close-modal]").first.click()
     page.locator("#student-modal").wait_for(state="hidden")
     page.locator("#card-scope").select_option("selected")

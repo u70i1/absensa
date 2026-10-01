@@ -12,6 +12,12 @@
     <div class="form-field"><label for="card-gap">Jarak antarkartu (mm)</label><input id="card-gap" name="gap_mm" type="number" min="0" max="20" step="0.1" value="{{ values.gap_mm }}" required></div>
   </fieldset>
   <fieldset class="card-settings-section">
+    <legend>Rasio foto</legend>
+    <p class="field-help" id="photo-ratio-help">Rasio lebar : tinggi, awal 3 : 4 untuk pasfoto 3×4. Boleh desimal, misalnya 3.5 : 4.5. Foto dipotong di tengah sesuai rasio dan disesuaikan dengan area foto pada kartu.</p>
+    <div class="form-field"><label for="photo-ratio-width">Rasio lebar foto</label><input id="photo-ratio-width" name="photo_ratio_width" type="number" min="0" step="any" value="{{ values.photo_ratio_width }}" aria-describedby="photo-ratio-help" required></div>
+    <div class="form-field"><label for="photo-ratio-height">Rasio tinggi foto</label><input id="photo-ratio-height" name="photo_ratio_height" type="number" min="0" step="any" value="{{ values.photo_ratio_height }}" aria-describedby="photo-ratio-help" required></div>
+  </fieldset>
+  <fieldset class="card-settings-section">
     <legend>Watermark kartu</legend>
     <p class="field-help" id="watermark-help">Isi nama sekolah dan logo bersama-sama untuk menampilkan watermark. Kosongkan keduanya untuk menonaktifkannya.</p>
     <div class="form-field"><label for="school-name">Nama sekolah</label><input id="school-name" name="school_name" maxlength="160" value="{{ values.school_name or '' }}" aria-describedby="watermark-help"></div>

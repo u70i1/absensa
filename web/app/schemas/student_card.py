@@ -12,6 +12,8 @@ class CardSettings(BaseModel):
     width_mm: Decimal = Field(default=Decimal(70), ge=40, le=150, decimal_places=3)
     height_mm: Decimal = Field(default=Decimal(112), ge=64, le=240, decimal_places=3)
     gap_mm: Decimal = Field(default=Decimal(3), ge=0, le=20, decimal_places=3)
+    photo_ratio_width: float = Field(default=3.0, gt=0, allow_inf_nan=False)
+    photo_ratio_height: float = Field(default=4.0, gt=0, allow_inf_nan=False)
     school_name: str = Field(default="", max_length=160)
     logo_path: str | None = None
 

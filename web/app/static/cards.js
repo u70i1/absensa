@@ -16,6 +16,16 @@ function validateWatermark(form) {
     ? 'Isi nama sekolah dan logo bersama-sama, atau kosongkan keduanya.' : '');
 }
 
+function validatePhotoRatio(form) {
+  if (!form) return;
+  ['photo_ratio_width', 'photo_ratio_height'].forEach(name => {
+    const input = form.elements[name];
+    const value = input.valueAsNumber;
+    input.setCustomValidity(Number.isFinite(value) && value > 0
+      ? '' : 'Rasio foto harus berupa angka positif. Boleh menggunakan desimal.');
+  });
+}
+
 document.addEventListener('click', (event) => {
   const form = event.target.closest('[data-card-settings]');
   if (!form) return;
@@ -67,11 +77,17 @@ document.addEventListener('htmx:beforeSwap', event => {
   if (event.detail.target?.id === 'modal-content') clearLogoPreviewUrl();
 });
 document.getElementById('student-modal')?.addEventListener('close', clearLogoPreviewUrl);
-document.addEventListener('htmx:afterSwap', () => validateWatermark(document.querySelector('[data-card-settings]')));
-document.addEventListener('DOMContentLoaded', () => validateWatermark(document.querySelector('[data-card-settings]')));
+function validateCardSettings() {
+  const form = document.querySelector('[data-card-settings]');
+  validateWatermark(form);
+  validatePhotoRatio(form);
+}
+document.addEventListener('htmx:afterSwap', validateCardSettings);
+document.addEventListener('DOMContentLoaded', validateCardSettings);
 document.addEventListener('input', (event) => {
   const form = event.target.closest('[data-card-settings]');
   if (form && event.target.name === 'school_name') validateWatermark(form);
+  if (form && ['photo_ratio_width', 'photo_ratio_height'].includes(event.target.name)) validatePhotoRatio(form);
   if (!form || !['width_mm', 'height_mm'].includes(event.target.name)) return;
   const value = Number(event.target.value);
   if (!Number.isFinite(value) || value <= 0) return;

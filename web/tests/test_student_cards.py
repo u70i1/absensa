@@ -33,6 +33,7 @@ def sample():
 def test_defaults_and_ratio():
     config = CardSettings()
     assert (config.width_mm, config.height_mm, config.gap_mm) == (70, 112, 3)
+    assert (config.photo_ratio_width, config.photo_ratio_height) == (3, 4)
     assert not config.watermark_enabled
     with pytest.raises(ValidationError):
         CardSettings(width_mm=70, height_mm=100)
@@ -65,6 +66,12 @@ def test_ratio_synchronization(data, width, height):
         {"gap_mm": 21},
         {"width_mm": "NaN"},
         {"school_name": "x" * 161},
+        {"photo_ratio_width": 0},
+        {"photo_ratio_height": -4},
+        {"photo_ratio_width": "NaN"},
+        {"photo_ratio_height": "Infinity"},
+        {"photo_ratio_width": "-Infinity"},
+        {"photo_ratio_height": ""},
     ],
 )
 def test_invalid_settings(data):
@@ -104,6 +111,42 @@ def test_png_resolution_and_filename(sample):
     assert cards.card_filename(sample) == "0081234567-abiansyah-viadi.png"
     sample.name = '../../Asdrölf <script> / "Fickner"'
     assert cards.card_filename(sample) == "0081234567-asdrolf-script-fickner.png"
+
+
+@pytest.mark.parametrize("width,height", [(3, 4), (1, 1), (4, 3), (3.5, 4.5)])
+@pytest.mark.parametrize("has_photo", [False, True])
+def test_photo_ratio_and_center_crop(
+    sample, tmp_path, monkeypatch, width, height, has_photo
+):
+    monkeypatch.setattr(settings, "photos_dir", str(tmp_path))
+    if has_photo:
+        # A wide image with colored edges makes a centered portrait crop visible.
+        image = Image.new("RGB", (1200, 600), "blue")
+        image.paste("red", (0, 0, 200, 600))
+        image.paste("green", (1000, 0, 1200, 600))
+        image.save(tmp_path / "portrait.png")
+        sample.photo_path = "portrait.png"
+    config = CardSettings(photo_ratio_width=width, photo_ratio_height=height)
+    root = ElementTree.fromstring(cards.render_student_card(sample, config))
+    ns = {"s": "http://www.w3.org/2000/svg"}
+    photo = root.find("s:image[@clip-path]", ns)
+    clip = root.find("s:defs/s:clipPath/s:rect", ns)
+    bounds = {key: float(photo.attrib[key]) for key in ("x", "y", "width", "height")}
+    assert bounds["width"] / bounds["height"] == pytest.approx(width / height)
+    assert max(bounds["width"], bounds["height"]) == 720
+    assert bounds["x"] + bounds["width"] / 2 == 400
+    assert bounds["y"] + bounds["height"] / 2 == 496
+    assert all(clip.attrib[key] == photo.attrib[key] for key in bounds)
+    with Image.open(
+        BytesIO(base64.b64decode(photo.attrib["href"].split(",")[1]))
+    ) as cropped:
+        assert cropped.width / cropped.height == pytest.approx(
+            width / height, abs=0.002
+        )
+        if has_photo:
+            # Sample just inside the crop, away from JPEG/resampling edges.
+            r, g, b = cropped.getpixel((8, cropped.height // 2))
+            assert b > 240 and r < 10 and g < 10
 
 
 def test_barcode_can_be_decoded(sample):
@@ -152,9 +195,8 @@ def test_white_card_and_barcode_width(sample):
     bars = root.find("s:g[@data-barcode]", ns).findall("s:rect", ns)
     left = float(bars[0].attrib["x"])
     right = float(bars[-1].attrib["x"]) + float(bars[-1].attrib["width"])
-    photo = root.find("s:defs/s:clipPath/s:rect", ns)
-    assert left == float(photo.attrib["x"])
-    assert right - left == pytest.approx(float(photo.attrib["width"]))
+    assert left == 40
+    assert right - left == pytest.approx(720)
     with Image.open(
         BytesIO(cards.render_student_card_png(sample, CardSettings()))
     ) as image:
@@ -319,6 +361,59 @@ def test_settings_database_ratio_constraint(db_session):
     with pytest.raises(IntegrityError):
         db_session.flush()
     db_session.rollback()
+
+
+@pytest.mark.parametrize("field", ["photo_ratio_width", "photo_ratio_height"])
+@pytest.mark.parametrize("value", [0, -1, float("inf"), float("nan")])
+def test_settings_database_photo_ratio_constraint(db_session, field, value):
+    from sqlalchemy.exc import IntegrityError
+
+    config = db_session.get(StudentCardSettings, 1)
+    setattr(config, field, value)
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+    db_session.rollback()
+
+
+def test_photo_ratio_settings_persist_and_apply(
+    card_admin, db_session, existing_student
+):
+    response = card_admin.post(
+        "/admin/cards/settings",
+        data={"photo_ratio_width": "3.5", "photo_ratio_height": "4.5"},
+    )
+    assert response.status_code == 200
+    db_session.expire_all()
+    saved = configuration.get_settings(db_session)
+    assert (saved.photo_ratio_width, saved.photo_ratio_height) == (3.5, 4.5)
+    modal = card_admin.get("/admin/cards/settings")
+    assert 'name="photo_ratio_width"' in modal.text and 'value="3.5"' in modal.text
+    preview = card_admin.get(f"/admin/cards/{existing_student.id}/preview")
+    printed = card_admin.post(
+        "/admin/cards/operate",
+        data={"scope": "selected", "ids": existing_student.id, "action": "print"},
+    )
+    for response in [preview, printed]:
+        assert response.status_code == 200
+        svg = base64.b64decode(
+            re.search(r'data:image/svg\+xml;base64,([^" ]+)', response.text)[1]
+        )
+        photo = ElementTree.fromstring(svg).find("{http://www.w3.org/2000/svg}image")
+        assert float(photo.attrib["width"]) / float(
+            photo.attrib["height"]
+        ) == pytest.approx(3.5 / 4.5)
+    downloaded = card_admin.post(
+        "/admin/cards/operate",
+        data={"scope": "selected", "ids": existing_student.id, "action": "download"},
+    )
+    assert downloaded.content == cards.render_student_card_png(existing_student, saved)
+    bad = card_admin.post(
+        "/admin/cards/settings",
+        data={"photo_ratio_width": "3.5", "photo_ratio_height": "0"},
+    )
+    assert bad.status_code == 422
+    assert 'value="3.5"' in bad.text and 'value="0"' in bad.text
+    assert configuration.get_settings(db_session) == saved
 
 
 def test_scopes(db_session, class_factory):

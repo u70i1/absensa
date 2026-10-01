@@ -110,6 +110,8 @@ def settings_error_values(db, data):
                 "width_mm",
                 "height_mm",
                 "gap_mm",
+                "photo_ratio_width",
+                "photo_ratio_height",
                 "school_name",
                 "dimension_source",
                 "remove_logo",
@@ -137,6 +139,8 @@ def save_settings(
                     "width_mm": "70",
                     "height_mm": "112",
                     "gap_mm": "3",
+                    "photo_ratio_width": "3",
+                    "photo_ratio_height": "4",
                     "school_name": "",
                     "dimension_source": "width",
                 }.items()
@@ -153,7 +157,7 @@ def save_settings(
         message = (
             exc.detail
             if isinstance(exc, AppException)
-            else "Periksa ukuran kartu (lebar 40–150 mm, rasio 5:8), jarak 0–20 mm, dan nama sekolah maksimal 160 karakter."
+            else "Periksa ukuran kartu (lebar 40–150 mm, rasio 5:8), jarak 0–20 mm, rasio foto berupa angka positif (boleh desimal), dan nama sekolah maksimal 160 karakter."
         )
         return render_modal(
             request,

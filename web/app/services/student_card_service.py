@@ -90,11 +90,11 @@ def _name_lines(name):
     return [(" ".join(words[:split]), 910), (" ".join(words[split:]), 965)]
 
 
-def _image_data(path, *, square=False):
+def _image_data(path, *, size=None):
     with Image.open(path) as image:
         image = ImageOps.exif_transpose(image).convert("RGB")
-        if square:
-            image = ImageOps.fit(image, (1024, 1024), method=Image.Resampling.LANCZOS)
+        if size:
+            image = ImageOps.fit(image, size, method=Image.Resampling.LANCZOS)
         else:
             image.thumbnail((512, 512))
         output = BytesIO()
@@ -104,13 +104,22 @@ def _image_data(path, *, square=False):
         )
 
 
-def _student_photo(student):
+def _photo_dimensions(config):
+    # Fit portrait, square, and landscape ratios into the existing photo area.
+    # Divide the smaller component by the larger to avoid overflow.
+    width, height = config.photo_ratio_width, config.photo_ratio_height
+    if width <= height:
+        return 720 * (width / height), 720
+    return 720, 720 * (height / width)
+
+
+def _student_photo(student, size):
     if student.photo_path:
         try:
-            return _image_data(photo_file(student.photo_path), square=True)
+            return _image_data(photo_file(student.photo_path), size=size)
         except (OSError, ValueError, AppException):
             pass
-    return _image_data(FALLBACK_PHOTO, square=True)
+    return _image_data(FALLBACK_PHOTO, size=size)
 
 
 def _watermark(config):
@@ -139,8 +148,7 @@ def render_student_card(student, config: CardSettings) -> str:
     """Render one self-contained, vector card, without any route/auth dependency."""
     try:
         barcode = Code128(student.nisn).build()[0]
-        # Align the bars with the photo and text; whitespace stays in the card's
-        # outer margins instead of adding padding inside the content container.
+        # Align the bars with the text and the full content area.
         module = 720 / len(barcode)
         bars = "".join(
             f'<rect x="{40 + run.start() * module:.4f}" y="1050" width="{len(run[0]) * module:.4f}" height="70"/>'
@@ -159,14 +167,24 @@ def render_student_card(student, config: CardSettings) -> str:
             16,
             fill="#64706c",
         )
-        photo = _student_photo(student)
+        photo_width, photo_height = _photo_dimensions(config)
+        photo_x = 40 + (720 - photo_width) / 2
+        photo_y = 136 + (720 - photo_height) / 2
+        size = (
+            max(1, round(photo_width / 720 * 1024)),
+            max(1, round(photo_height / 720 * 1024)),
+        )
+        photo = _student_photo(student, size)
+        photo_bounds = (
+            f'x="{photo_x}" y="{photo_y}" width="{photo_width}" height="{photo_height}"'
+        )
         return (
             '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1280" viewBox="0 0 800 1280" role="img">'
             f"<title>{escape(student.name)} · NISN {escape(student.nisn)}</title>"
-            '<defs><clipPath id="photo"><rect x="40" y="136" width="720" height="720" rx="30"/></clipPath></defs>'
+            f'<defs><clipPath id="photo"><rect {photo_bounds} rx="30"/></clipPath></defs>'
             '<rect x="1" y="1" width="798" height="1278" rx="30" fill="#ffffff" stroke="#64706c" stroke-width="2"/>'
             f"{_watermark(config)}"
-            f'<image x="40" y="136" width="720" height="720" clip-path="url(#photo)" href="{photo}"/>'
+            f'<image {photo_bounds} preserveAspectRatio="xMidYMid slice" clip-path="url(#photo)" href="{photo}"/>'
             f"{name}{nisn}"
             '<rect x="4" y="1040" width="792" height="90" fill="white"/>'
             f'<g data-barcode="{escape(student.nisn, {chr(34): "&quot;"})}" fill="black">{bars}</g>{hint}</svg>'
