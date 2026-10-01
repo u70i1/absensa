@@ -50,8 +50,9 @@ photo storage and upload limits as student photos. Back up `PHOTOS_DIR` with the
 **Rasio foto** sets the photo's width-to-height ratio for previews, printing, and
 PNG downloads. It defaults to **3:4** for Indonesian 3×4 school portraits. Both
 ratio fields accept positive decimal numbers, for example **3.5:4.5**. Photos are
-center-cropped to this ratio and centered within the existing photo area, keeping
-the card dimensions and barcode layout fixed. Run the database migration below
+center-cropped to this ratio and fill the card's content width. Portrait photos
+move the student details and barcode down; very tall ratios are cropped to the
+available height so all content stays inside the card. Run the database migration below
 to add these settings; existing configurations receive the 3:4 default.
 
 Install the updated `web/requirements.txt` and run `.venv/bin/alembic upgrade head`

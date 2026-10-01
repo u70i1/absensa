@@ -133,9 +133,13 @@ def test_photo_ratio_and_center_crop(
     clip = root.find("s:defs/s:clipPath/s:rect", ns)
     bounds = {key: float(photo.attrib[key]) for key in ("x", "y", "width", "height")}
     assert bounds["width"] / bounds["height"] == pytest.approx(width / height)
-    assert max(bounds["width"], bounds["height"]) == 720
+    assert bounds["width"] == 720
+    assert bounds["x"] == 40
     assert bounds["x"] + bounds["width"] / 2 == 400
-    assert bounds["y"] + bounds["height"] / 2 == 496
+    if bounds["height"] > 720:
+        assert bounds["y"] == 116
+    else:
+        assert bounds["y"] + bounds["height"] / 2 == 496
     assert all(clip.attrib[key] == photo.attrib[key] for key in bounds)
     with Image.open(
         BytesIO(base64.b64decode(photo.attrib["href"].split(",")[1]))
@@ -157,6 +161,32 @@ def test_barcode_can_be_decoded(sample):
         result = zxingcpp.read_barcode(image)
     assert result is not None
     assert result.text == sample.nisn
+
+
+@pytest.mark.parametrize("width,height", [(3, 4), (3.5, 4.5), (1, 10)])
+def test_full_width_portrait_keeps_details_inside_card(sample, width, height):
+    sample.name = "Abiansyah Viadi Muhammad Pratama Kusuma Wijaya"
+    root = ElementTree.fromstring(
+        cards.render_student_card(
+            sample, CardSettings(photo_ratio_width=width, photo_ratio_height=height)
+        )
+    )
+    ns = {"s": "http://www.w3.org/2000/svg"}
+    photo = root.find("s:image[@clip-path]", ns)
+    assert float(photo.attrib["width"]) == 720
+    assert float(photo.attrib["height"]) <= 960
+    photo_bottom = float(photo.attrib["y"]) + float(photo.attrib["height"])
+    details = root.findall("s:g[@aria-label]", ns)
+    # The first two groups are name lines; check room for their glyphs.
+    assert len(cards._name_lines(sample.name)) == 2
+    baselines = [
+        float(group.attrib["transform"].split(",")[1].rstrip(")")) for group in details
+    ]
+    assert baselines[0] - 40 >= photo_bottom
+    assert max(baselines) < 1280
+    bars = root.find("s:g[@data-barcode]", ns).findall("s:rect", ns)
+    assert float(bars[0].attrib["y"]) > baselines[-2]
+    assert float(bars[0].attrib["y"]) + float(bars[0].attrib["height"]) < 1280
 
 
 def test_watermark(sample, tmp_path, monkeypatch):

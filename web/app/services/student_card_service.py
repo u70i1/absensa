@@ -105,12 +105,10 @@ def _image_data(path, *, size=None):
 
 
 def _photo_dimensions(config):
-    # Fit portrait, square, and landscape ratios into the existing photo area.
-    # Divide the smaller component by the larger to avoid overflow.
-    width, height = config.photo_ratio_width, config.photo_ratio_height
-    if width <= height:
-        return 720 * (width / height), 720
-    return 720, 720 * (height / width)
+    # Fill the content width; reserve enough space for two name lines and barcode.
+    ratio = config.photo_ratio_width / config.photo_ratio_height
+    height = 960 if ratio <= 720 / 960 else 720 / ratio
+    return 720, height
 
 
 def _student_photo(student, size):
@@ -147,32 +145,47 @@ def _watermark(config):
 def render_student_card(student, config: CardSettings) -> str:
     """Render one self-contained, vector card, without any route/auth dependency."""
     try:
+        photo_width, photo_height = _photo_dimensions(config)
+        photo_x = 40
+        photo_y = 116 if photo_height > 720 else 136 + (720 - photo_height) / 2
+        name_lines = _name_lines(student.name)
+        name_size, nisn_y, barcode_y, barcode_height, hint_y = 48, 998, 1050, 70, 1142
+        if photo_height > 720:
+            first_baseline = photo_y + photo_height + 40
+            name_lines = [
+                (line, first_baseline + index * 42)
+                for index, (line, _) in enumerate(name_lines)
+            ]
+            name_size = 40
+            nisn_y = name_lines[-1][1] + 32
+            barcode_y = nisn_y + 18
+            barcode_height = 40
+            hint_y = barcode_y + 62
         barcode = Code128(student.nisn).build()[0]
         # Align the bars with the text and the full content area.
         module = 720 / len(barcode)
         bars = "".join(
-            f'<rect x="{40 + run.start() * module:.4f}" y="1050" width="{len(run[0]) * module:.4f}" height="70"/>'
+            f'<rect x="{40 + run.start() * module:.4f}" y="{barcode_y}" width="{len(run[0]) * module:.4f}" height="{barcode_height}"/>'
             for run in re.finditer("1+", barcode)
         )
         name = "".join(
-            _text(line, 40, y, 48, weight=700) for line, y in _name_lines(student.name)
+            _text(line, 40, y, name_size, weight=700) for line, y in name_lines
         )
-        nisn = _text("NISN", 40, 998, 25, fill="#384240") + _text(
-            student.nisn, 114, 998, 25, weight=700, max_width=646
+        nisn = _text("NISN", 40, nisn_y, 25, fill="#384240") + _text(
+            student.nisn, 114, nisn_y, 25, weight=700, max_width=646
         )
         hint = _text(
             "jaga barcode dari coretan, lipatan, atau goresan",
             40,
-            1142,
+            hint_y,
             16,
             fill="#64706c",
         )
-        photo_width, photo_height = _photo_dimensions(config)
-        photo_x = 40 + (720 - photo_width) / 2
-        photo_y = 136 + (720 - photo_height) / 2
+        # Bound the embedded bitmap to 1024 pixels on either side.
+        image_scale = 1024 / max(photo_width, photo_height)
         size = (
-            max(1, round(photo_width / 720 * 1024)),
-            max(1, round(photo_height / 720 * 1024)),
+            max(1, round(photo_width * image_scale)),
+            max(1, round(photo_height * image_scale)),
         )
         photo = _student_photo(student, size)
         photo_bounds = (
@@ -186,7 +199,7 @@ def render_student_card(student, config: CardSettings) -> str:
             f"{_watermark(config)}"
             f'<image {photo_bounds} preserveAspectRatio="xMidYMid slice" clip-path="url(#photo)" href="{photo}"/>'
             f"{name}{nisn}"
-            '<rect x="4" y="1040" width="792" height="90" fill="white"/>'
+            f'<rect x="4" y="{barcode_y - 10}" width="792" height="{barcode_height + 20}" fill="white"/>'
             f'<g data-barcode="{escape(student.nisn, {chr(34): "&quot;"})}" fill="black">{bars}</g>{hint}</svg>'
         )
     except Exception as exc:
