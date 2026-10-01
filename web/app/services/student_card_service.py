@@ -120,16 +120,17 @@ def _student_photo(student, size):
     return _image_data(FALLBACK_PHOTO, size=size)
 
 
-def _watermark(config):
+def _watermark(config, *, logo_data=None):
     if not config.watermark_enabled:
         return ""
-    try:
-        data = _image_data(photo_file(config.logo_path))
-    except (OSError, ValueError, AppException):
-        return ""
+    if logo_data is None:
+        try:
+            logo_data = _image_data(photo_file(config.logo_path))
+        except (OSError, ValueError, AppException):
+            return ""
     text_width = min(_text_width(config.school_name, 26, 400), 650)
     left = (800 - (54 + 16 + text_width)) / 2
-    logo = f'<image x="{left:.3f}" y="46" width="54" height="54" href="{data}"/>'
+    logo = f'<image x="{left:.3f}" y="46" width="54" height="54" href="{logo_data}"/>'
     name = _text(
         config.school_name,
         left + 70,
@@ -142,7 +143,7 @@ def _watermark(config):
     return f'<g data-watermark="true" opacity="0.45">{logo}{name}</g>'
 
 
-def render_student_card(student, config: CardSettings) -> str:
+def render_student_card(student, config: CardSettings, *, logo_data=None) -> str:
     """Render one self-contained, vector card, without any route/auth dependency."""
     try:
         photo_width, photo_height = _photo_dimensions(config)
@@ -196,7 +197,7 @@ def render_student_card(student, config: CardSettings) -> str:
             f"<title>{escape(student.name)} · NISN {escape(student.nisn)}</title>"
             f'<defs><clipPath id="photo"><rect {photo_bounds} rx="30"/></clipPath></defs>'
             '<rect x="1" y="1" width="798" height="1278" rx="30" fill="#ffffff" stroke="#64706c" stroke-width="2"/>'
-            f"{_watermark(config)}"
+            f"{_watermark(config, logo_data=logo_data)}"
             f'<image {photo_bounds} preserveAspectRatio="xMidYMid slice" clip-path="url(#photo)" href="{photo}"/>'
             f"{name}{nisn}"
             f'<rect x="4" y="{barcode_y - 10}" width="792" height="{barcode_height + 20}" fill="white"/>'

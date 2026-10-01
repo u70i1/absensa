@@ -47,6 +47,14 @@ logo are set; saving only one is rejected. Leave both empty to disable them. Car
 logo and school name are centered at the top, above the photo, with regular-weight text. Logos use the same validated
 photo storage and upload limits as student photos. Back up `PHOTOS_DIR` with the DB.
 
+The wider settings dialog shows a live card preview on the left using the bundled
+placeholder photo. Changes to dimensions, photo ratio, school name, and logo appear
+before saving. Sliders and keyboard inputs stay synchronized for width, height,
+and cutting gap. Measurements are limited to **200 mm**: at the fixed 5:8 ratio,
+the largest card is **125 × 200 mm**, and the gap allows **0–200 mm**. The migration
+scales existing cards taller than 200 mm down to 125 × 200 mm. On smaller screens,
+the preview appears above the settings.
+
 **Rasio foto** sets the photo's width-to-height ratio for previews, printing, and
 PNG downloads. It defaults to **3:4** for Indonesian 3×4 school portraits. Both
 ratio fields accept positive decimal numbers, for example **3.5:4.5**. Photos are

@@ -61,9 +61,10 @@ def test_ratio_synchronization(data, width, height):
     "data",
     [
         {"width_mm": 0},
-        {"width_mm": 151},
+        {"width_mm": 126},
         {"gap_mm": -1},
-        {"gap_mm": 21},
+        {"gap_mm": 201},
+        {"dimension_source": "height", "height_mm": 201},
         {"width_mm": "NaN"},
         {"school_name": "x" * 161},
         {"photo_ratio_width": 0},
@@ -77,6 +78,100 @@ def test_ratio_synchronization(data, width, height):
 def test_invalid_settings(data):
     with pytest.raises((ValidationError, ArithmeticError)):
         CardSettingsUpdate.model_validate(data)
+
+
+def test_settings_measurement_limits(card_admin, db_session):
+    response = card_admin.post(
+        "/admin/cards/settings",
+        data={"dimension_source": "height", "height_mm": "200", "gap_mm": "200"},
+    )
+    assert response.status_code == 200
+    saved = configuration.get_settings(db_session)
+    assert (saved.width_mm, saved.height_mm, saved.gap_mm) == (125, 200, 200)
+    for data in [{"width_mm": "126"}, {"gap_mm": "201"}]:
+        assert card_admin.post("/admin/cards/settings", data=data).status_code == 422
+        assert configuration.get_settings(db_session) == saved
+
+
+def test_measurement_migration_scales_existing_large_cards(db_session, monkeypatch):
+    from alembic.config import Config
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from alembic.script import ScriptDirectory
+
+    migration = (
+        ScriptDirectory.from_config(Config("alembic.ini"))
+        .get_revision("ab47ce918d20")
+        .module
+    )
+    monkeypatch.setattr(
+        migration, "op", Operations(MigrationContext.configure(db_session.connection()))
+    )
+    migration.downgrade()
+    config = db_session.get(StudentCardSettings, 1)
+    config.width_mm, config.height_mm = 150, 240
+    db_session.flush()
+    migration.upgrade()
+    db_session.expire_all()
+    saved = configuration.get_settings(db_session)
+    assert (saved.width_mm, saved.height_mm, saved.gap_mm) == (125, 200, 3)
+
+
+def test_unsaved_settings_preview_uses_placeholder_without_persisting(
+    card_admin, db_session, monkeypatch
+):
+    saved = configuration.get_settings(db_session)
+    paths = []
+    actual = cards._image_data
+
+    def record(path, **kwargs):
+        paths.append(path)
+        return actual(path, **kwargs)
+
+    monkeypatch.setattr(cards, "_image_data", record)
+    image = BytesIO()
+    Image.new("RGB", (50, 50), "blue").save(image, format="PNG")
+    response = card_admin.post(
+        "/admin/cards/settings/preview",
+        data={
+            "width_mm": "100",
+            "gap_mm": "35",
+            "photo_ratio_width": "3.5",
+            "photo_ratio_height": "4.5",
+            "school_name": "Sekolah Contoh",
+        },
+        files={"logo": ("logo.png", image.getvalue(), "image/png")},
+    )
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "private, no-store"
+    preview = response.json()
+    assert (preview["width_mm"], preview["height_mm"], preview["gap_mm"]) == (
+        100,
+        160,
+        35,
+    )
+    svg = base64.b64decode(preview["uri"].split(",")[1]).decode()
+    assert "Nama Siswa" in svg and "Sekolah Contoh" in svg
+    assert 'data-watermark="true"' in svg
+    assert cards.FALLBACK_PHOTO in paths
+    root = ElementTree.fromstring(svg)
+    photo = root.find("{http://www.w3.org/2000/svg}image[@clip-path]")
+    assert float(photo.attrib["width"]) / float(
+        photo.attrib["height"]
+    ) == pytest.approx(3.5 / 4.5)
+    db_session.expire_all()
+    assert configuration.get_settings(db_session) == saved
+    assert not list(configuration.photos.photo_file("logo.jpg").parent.glob("*"))
+    bad = card_admin.post(
+        "/admin/cards/settings/preview",
+        data={"height_mm": "201", "dimension_source": "height"},
+    )
+    assert bad.status_code == 422
+    bad_logo = card_admin.post(
+        "/admin/cards/settings/preview",
+        files={"logo": ("bad.png", b"not an image", "image/png")},
+    )
+    assert bad_logo.status_code == 415
 
 
 def test_renderer_is_auth_independent_and_fallback(sample, monkeypatch):
@@ -319,6 +414,7 @@ def test_zip_and_failure_cleanup(sample, monkeypatch):
         ("get", "/admin/cards/settings/logo", None),
         ("get", "/admin/cards/1/preview", None),
         ("post", "/admin/cards/settings", {"width_mm": 80}),
+        ("post", "/admin/cards/settings/preview", {"width_mm": 80}),
         (
             "post",
             "/admin/cards/operate",

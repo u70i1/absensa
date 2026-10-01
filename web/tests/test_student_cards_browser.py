@@ -2,6 +2,7 @@
 
 import shutil
 import subprocess
+from decimal import Decimal
 from io import BytesIO
 from urllib.parse import urlsplit
 
@@ -108,6 +109,82 @@ def test_card_ui_ratio_selection_preview_and_confirmation(
     assert len(context.pages) == 1
 
 
+def test_settings_preview_sliders_and_keyboard_stay_synchronized(
+    card_browser, db_session
+):
+    from app.schemas.student_card import CardSettings
+    from app.services.student_card_settings_service import get_settings
+
+    page, _ = card_browser
+    expect = playwright.expect
+    page.emulate_media(reduced_motion="reduce")
+    page.goto("http://testserver/admin/cards")
+    page.get_by_role("button", name="Pengaturan cetak").click()
+    preview = page.locator("[data-settings-preview]")
+    initial = preview.get_attribute("src")
+    expect(preview).to_be_visible()
+    assert page.locator("#student-modal").bounding_box()["width"] > 1000
+    assert (
+        preview.bounding_box()["x"]
+        < page.locator("[data-card-settings]").bounding_box()["x"]
+    )
+    page.locator("#card-width-slider").focus()
+    page.locator("#card-width-slider").press("ArrowRight")
+    expect(page.locator("#card-width")).to_have_value("70.005")
+    expect(page.locator("#card-height")).to_have_value("112.008")
+    expect(page.locator("#card-height-slider")).to_have_value("112.008")
+    page.locator("#card-height").fill("200")
+    expect(page.locator("#card-height-slider")).to_have_value("200")
+    expect(page.locator("#card-width")).to_have_value("125")
+    expect(page.locator("#card-width-slider")).to_have_value("125")
+    page.locator("#card-height-slider").press("ArrowLeft")
+    expect(page.locator("#card-height")).to_have_value("199.992")
+    expect(page.locator("#card-width")).to_have_value("124.995")
+    page.locator("#card-gap").fill("35.5")
+    expect(page.locator("#card-gap-slider")).to_have_value("35.5")
+    page.locator("#card-gap-slider").focus()
+    page.locator("#card-gap-slider").press("End")
+    expect(page.locator("#card-gap")).to_have_value("200")
+    page.locator("#photo-ratio-width").fill("1")
+    page.locator("#photo-ratio-height").fill("1")
+    page.wait_for_function(
+        "initial => document.querySelector('[data-settings-preview]').src !== initial",
+        arg=initial,
+    )
+    page.wait_for_function("""() => {
+      const svg = atob(document.querySelector('[data-settings-preview]').src.split(',')[1]);
+      const photo = new DOMParser().parseFromString(svg, 'image/svg+xml').querySelector('image[clip-path]');
+      return Number(photo.getAttribute('width')) === Number(photo.getAttribute('height'));
+    }""")
+    expect(page.locator("[data-preview-status]")).to_have_text("")
+    expect(page.locator("[data-preview-dimensions]")).to_have_text(
+        "124.995 × 199.992 mm"
+    )
+    expect(page.locator("[data-preview-gap]")).to_have_text("Jarak antarkartu: 200 mm")
+    assert get_settings(db_session) == CardSettings()
+    page.locator("#student-modal").screenshot(
+        path="/tmp/absensa-card-settings-desktop.png"
+    )
+    page.set_viewport_size({"width": 390, "height": 844})
+    assert page.locator("#student-modal").evaluate(
+        "dialog => dialog.scrollWidth <= dialog.clientWidth"
+    )
+    assert (
+        preview.bounding_box()["y"]
+        < page.locator("[data-card-settings]").bounding_box()["y"]
+    )
+    page.locator("#student-modal").screenshot(
+        path="/tmp/absensa-card-settings-mobile.png"
+    )
+    page.set_viewport_size({"width": 1440, "height": 1100})
+    page.get_by_role("button", name="Simpan pengaturan").click()
+    expect(
+        page.get_by_text("Pengaturan cetak berhasil disimpan untuk semua kartu.")
+    ).to_be_visible()
+    expect(page.locator("#card-gap-slider")).to_have_value("200")
+    assert get_settings(db_session).height_mm == Decimal("199.992")
+
+
 def test_print_pdf_has_whole_cards_across_paper_sizes(
     card_browser, card_admin, student_factory, tmp_path
 ):
@@ -191,6 +268,10 @@ def test_school_logo_editor(card_browser, tmp_path):
     )
     assert page.locator("[data-logo-preview]").is_visible()
     assert page.locator("[data-card-settings]").evaluate("form => form.checkValidity()")
+    page.wait_for_function("""() => {
+      const svg = atob(document.querySelector('[data-settings-preview]').src.split(',')[1]);
+      return svg.includes('Sekolah Nusantara') && svg.includes('data-watermark="true"');
+    }""")
     page.get_by_role("button", name="Simpan pengaturan").click()
     page.get_by_text("Pengaturan cetak berhasil disimpan untuk semua kartu.").wait_for()
     assert "/settings/logo" in page.locator("[data-logo-preview]").get_attribute("src")
@@ -205,6 +286,10 @@ def test_school_logo_editor(card_browser, tmp_path):
     assert page.locator("[data-logo-preview]").is_hidden()
     assert page.locator("#school-name").input_value() == ""
     assert page.locator("[data-card-settings]").evaluate("form => form.checkValidity()")
+    page.wait_for_function("""() => {
+      const svg = atob(document.querySelector('[data-settings-preview]').src.split(',')[1]);
+      return !svg.includes('data-watermark="true"');
+    }""")
     page.get_by_role("button", name="Simpan pengaturan").click()
     page.get_by_text("Pengaturan cetak berhasil disimpan untuk semua kartu.").wait_for()
     assert page.locator("[data-logo-preview]").is_hidden()

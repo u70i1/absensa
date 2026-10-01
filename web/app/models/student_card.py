@@ -27,8 +27,9 @@ class StudentCardSettings(Base):
     __table_args__ = (
         CheckConstraint("id = 1", name="ck_student_card_singleton"),
         CheckConstraint("width_mm * 8 = height_mm * 5", name="ck_student_card_ratio"),
-        CheckConstraint("width_mm BETWEEN 40 AND 150", name="ck_student_card_width"),
-        CheckConstraint("gap_mm BETWEEN 0 AND 20", name="ck_student_card_gap"),
+        CheckConstraint("width_mm BETWEEN 40 AND 125", name="ck_student_card_width"),
+        CheckConstraint("height_mm BETWEEN 64 AND 200", name="ck_student_card_height"),
+        CheckConstraint("gap_mm BETWEEN 0 AND 200", name="ck_student_card_gap"),
         CheckConstraint(
             "photo_ratio_width > 0 AND photo_ratio_width < 'Infinity'::float8 "
             "AND photo_ratio_height > 0 AND photo_ratio_height < 'Infinity'::float8",
