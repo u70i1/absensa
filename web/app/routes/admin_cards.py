@@ -1,10 +1,12 @@
 """Administrator boundaries for the reusable student card tools."""
 
+import base64
 import logging
 from datetime import datetime
 from itertools import chain, islice
 from tempfile import TemporaryFile
 from threading import BoundedSemaphore
+from types import SimpleNamespace
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
@@ -13,17 +15,23 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.routes.admin import list_query, query_error, render_modal
 from app.schemas.student import StudentListQuery
-from app.schemas.student_card import CardSettingsUpdate
+from app.schemas.student_card import CardSettings, CardSettingsUpdate
 from app.services import student_card_service as cards
 from app.services import student_card_settings_service as configuration
 from app.services.exceptions import AppException
 from app.services.student_card_scope_service import resolve_students
 from app.services.student_dashboard_service import dashboard_context
-from app.services.student_photo_service import photo_file
+from app.services.student_photo_service import normalize_photo, photo_file
 from app.services.student_service import get_student_by_id
 from app.templating import templates
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    Response,
+    StreamingResponse,
+)
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from starlette.datastructures import FormData
@@ -32,6 +40,33 @@ router = APIRouter(prefix="/admin/cards", dependencies=[Depends(require_admin)])
 Db = Annotated[Session, Depends(get_db)]
 logger = logging.getLogger(__name__)
 generation_slots = BoundedSemaphore(2)
+PREVIEW_STUDENT = SimpleNamespace(
+    id=0, name="Nama Siswa", nisn="0012345678", photo_path=None
+)
+
+
+def settings_preview_uri(config, *, logo_data=None):
+    svg = cards.render_student_card(PREVIEW_STUDENT, config, logo_data=logo_data)
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
+
+
+def render_settings(request, db, values, *, error=None, message=None, status_code=200):
+    try:
+        preview_config = CardSettings.model_validate(values)
+    except ValidationError:
+        preview_config = configuration.get_settings(db)
+    return render_modal(
+        request,
+        "modals/card-settings.html",
+        {
+            "values": values,
+            "error": error,
+            "message": message,
+            "preview_uri": settings_preview_uri(preview_config),
+            "preview_config": preview_config,
+        },
+        status_code,
+    )
 
 
 class TemporaryDocumentResponse(StreamingResponse):
@@ -84,9 +119,7 @@ def card_page(request: Request, db: Db):
 
 @router.get("/settings", name="admin_card_settings")
 def settings_modal(request: Request, db: Db):
-    return render_modal(
-        request, "modals/card-settings.html", {"values": configuration.get_settings(db)}
-    )
+    return render_settings(request, db, configuration.get_settings(db))
 
 
 @router.get("/settings/logo", name="admin_card_logo")
@@ -107,11 +140,8 @@ def settings_error_values(db, data):
         {
             key: data[key]
             for key in (
-                "width_mm",
-                "height_mm",
                 "gap_mm",
                 "school_name",
-                "dimension_source",
                 "remove_logo",
             )
             if key in data
@@ -125,23 +155,53 @@ async def card_form(request: Request):
         yield form
 
 
+def settings_form_values(data):
+    return CardSettingsUpdate.model_validate(
+        {
+            key: data.get(key, default)
+            for key, default in {
+                "gap_mm": "3",
+                "school_name": "",
+            }.items()
+        }
+    )
+
+
+@router.post("/settings/preview", name="admin_card_settings_preview")
+def settings_preview(db: Db, data: Annotated[FormData, Depends(card_form)]):
+    """Render unsaved settings with the placeholder photo; no files or DB writes."""
+    try:
+        values = settings_form_values(data)
+        saved = configuration.get_settings(db)
+        values.school_name = values.school_name.strip()
+        values.logo_path = (
+            None if data.get("remove_logo") == "true" else saved.logo_path
+        )
+        logo = data.get("logo")
+        logo_data = None
+        if getattr(logo, "filename", ""):
+            content = normalize_photo(logo.file)
+            values.logo_path = "preview"
+            logo_data = "data:image/jpeg;base64," + base64.b64encode(content).decode()
+        return JSONResponse(
+            content={
+                "uri": settings_preview_uri(values, logo_data=logo_data),
+                "width_mm": float(values.width_mm),
+                "height_mm": float(values.height_mm),
+                "gap_mm": float(values.gap_mm),
+            },
+            headers={"Cache-Control": "private, no-store"},
+        )
+    except (ValidationError, ArithmeticError):
+        return Response(status_code=422)
+
+
 @router.post("/settings", name="admin_card_settings_save")
 def save_settings(
     request: Request, db: Db, data: Annotated[FormData, Depends(card_form)]
 ):
     try:
-        values = CardSettingsUpdate.model_validate(
-            {
-                key: data.get(key, default)
-                for key, default in {
-                    "width_mm": "70",
-                    "height_mm": "112",
-                    "gap_mm": "3",
-                    "school_name": "",
-                    "dimension_source": "width",
-                }.items()
-            }
-        )
+        values = settings_form_values(data)
         logo = data.get("logo")
         configuration.update_settings(
             db,
@@ -153,35 +213,29 @@ def save_settings(
         message = (
             exc.detail
             if isinstance(exc, AppException)
-            else "Periksa ukuran kartu (lebar 40–150 mm, rasio 5:8), jarak 0–20 mm, dan nama sekolah maksimal 160 karakter."
+            else "Periksa jarak antarkartu (0–200 mm, maksimal 3 angka desimal) dan nama sekolah maksimal 160 karakter."
         )
-        return render_modal(
+        return render_settings(
             request,
-            "modals/card-settings.html",
-            {
-                "values": settings_error_values(db, data),
-                "error": message,
-            },
-            exc.status_code if isinstance(exc, AppException) else 422,
+            db,
+            settings_error_values(db, data),
+            error=message,
+            status_code=exc.status_code if isinstance(exc, AppException) else 422,
         )
     except Exception:
         logger.exception("Could not save card settings")
-        return render_modal(
+        return render_settings(
             request,
-            "modals/card-settings.html",
-            {
-                "values": settings_error_values(db, data),
-                "error": "Pengaturan gagal disimpan. Silakan coba lagi.",
-            },
-            500,
+            db,
+            settings_error_values(db, data),
+            error="Pengaturan gagal disimpan. Silakan coba lagi.",
+            status_code=500,
         )
-    return render_modal(
+    return render_settings(
         request,
-        "modals/card-settings.html",
-        {
-            "values": configuration.get_settings(db),
-            "message": "Pengaturan cetak berhasil disimpan untuk semua kartu.",
-        },
+        db,
+        configuration.get_settings(db),
+        message="Pengaturan cetak berhasil disimpan untuk semua kartu.",
     )
 
 

@@ -40,27 +40,37 @@ Choose the current page, selected rows, or every student (including inactive
 students). Processing every student ignores filters and requires confirmation.
 One card downloads as PNG; multiple cards download as a ZIP with NISN/name filenames.
 
-**Pengaturan cetak** saves server-wide dimensions, cutting gap, school name,
-and uploaded logo. Watermarks appear automatically when both the school name and
-logo are set; saving only one is rejected. Leave both empty to disable them. Cards default to **70 × 112 mm**, with a
-**3 mm** gap. Changing either dimension calculates the other at **5:8**. The optional
-logo and school name are centered at the top, above the photo, with regular-weight text. Logos use the same validated
-photo storage and upload limits as student photos. Back up `PHOTOS_DIR` with the DB.
+All cards use a fixed landscape size of **85.6 × 53.98 mm**, matching Indonesian
+KTP dimensions, with **3:4** center-cropped photos. The school header sits above
+the photo and student details; names and NISNs appear beside the photo, with a
+Code 128 barcode below and a **Kartu Presensi Absensa** label at the top right.
+
+**Pengaturan cetak** saves only the cutting gap, school name, and uploaded logo.
+The gap defaults to **3 mm** and accepts **0–200 mm**. Its slider and keyboard
+input stay synchronized. Both school name and logo are required to display the
+watermark; leave both empty to disable it. Logos use the same validated storage
+and upload limits as student photos. Back up `PHOTOS_DIR` with the database.
+
+The wider settings dialog shows a live card preview on the left using the bundled
+placeholder photo. School name and logo changes appear before saving. On smaller
+screens, the preview appears above the settings. Card dimensions and photo ratio
+are fixed throughout preview, printing, and PNG/ZIP export. The migration removes
+the retired size and ratio columns while preserving the saved gap and watermark.
 
 Install the updated `web/requirements.txt` and run `.venv/bin/alembic upgrade head`
 from `web/`. PNG export requires the native Cairo library (`libcairo2` on
 Debian/Ubuntu, `cairo` on Arch); the Docker image includes it. The migration adds
-the singleton `student_card_settings` table and its ratio constraint.
+the singleton `student_card_settings` table; subsequent migrations keep it in sync with the current settings.
 
 The shared renderer in `app/services/student_card_service.py` produces a
 self-contained SVG with bundled Inter outlines and local Code 128 barcodes.
 Preview, browser printing, and PNG exports use this same design. PNGs have at least
-300 DPI and an exact 5:8 pixel ratio. Missing photos use `static/images/no-photo.png`.
+300 DPI and physical-size metadata for 85.6 × 53.98 mm (rounded to whole pixels). Missing photos use `static/images/no-photo.png`.
 Single-card services do not require admin context; future student routes must
 authorize ownership before calling them. Existing card routes are admin-only.
 
 Printing opens the browser's native dialog after images load. Use actual size / 100%
-scale and paper large enough for the configured card dimensions plus 10 mm page
+scale and paper large enough for the 85.6 × 53.98 mm card dimensions plus 10 mm page
 margins. The document flows whole cards across pages and contains only cards.
 Exports render one PNG at a time into an anonymous temporary ZIP; response completion,
 disconnects, and generation failures close temporary files. Each application worker

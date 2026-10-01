@@ -39,9 +39,7 @@ def update_settings(db, values: CardSettingsUpdate, logo=None, *, remove_logo=Fa
             raise AppException(
                 "Isi nama sekolah dan logo bersama-sama, atau kosongkan keduanya.", 422
             )
-        for key, value in values.model_dump(
-            exclude={"logo_path", "dimension_source"}
-        ).items():
+        for key, value in values.model_dump(exclude={"logo_path"}).items():
             setattr(config, key, value)
         config.school_name = school_name
         config.watermark_enabled = bool(school_name and has_logo)

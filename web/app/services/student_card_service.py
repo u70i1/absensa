@@ -18,7 +18,7 @@ from xml.sax.saxutils import escape
 from zipfile import ZIP_STORED, ZipFile
 
 import cairosvg
-from app.schemas.student_card import CardSettings
+from app.schemas.student_card import CARD_HEIGHT_MM, CARD_WIDTH_MM, CardSettings
 from app.services.exceptions import AppException
 from app.services.student_photo_service import photo_file
 from app.templating import APP_DIR
@@ -30,10 +30,18 @@ from PIL import Image, ImageOps
 logger = logging.getLogger(__name__)
 FALLBACK_PHOTO = APP_DIR / "static/images/no-photo.png"
 PRINT_DPI = 300
+CARD_CANVAS_WIDTH = float(CARD_WIDTH_MM) * 10
+CARD_CANVAS_HEIGHT = float(CARD_HEIGHT_MM) * 10
+PHOTO_X, PHOTO_Y = 48, 111
+PHOTO_HEIGHT = CARD_CANVAS_HEIGHT - PHOTO_Y - 48
+PHOTO_WIDTH = PHOTO_HEIGHT * 3 / 4
+DETAILS_X = PHOTO_X + PHOTO_WIDTH + 32
+DETAILS_WIDTH = CARD_CANVAS_WIDTH - 48 - DETAILS_X
+BARCODE_Y = PHOTO_Y + PHOTO_HEIGHT - 96
 _font_lock = RLock()
 
 
-@lru_cache(maxsize=2)
+@lru_cache(maxsize=3)
 def _font(weight):
     font = TTFont(APP_DIR / "static/fonts/InterVariable.woff2")
     return (
@@ -75,26 +83,26 @@ def _text(text, x, y, size, *, weight=400, fill="#192321", max_width=720):
 
 def _name_lines(name):
     name = " ".join(name.split())
-    if _text_width(name, 48, 700) <= 720:
-        return [(name, 950)]
+    if _text_width(name, 36, 700) <= DETAILS_WIDTH:
+        return [(name, 146)]
     words = name.split()
     if len(words) == 1:
-        return [(name, 950)]
+        return [(name, 146)]
     split = min(
         range(1, len(words)),
         key=lambda i: max(
-            _text_width(" ".join(words[:i]), 48, 700),
-            _text_width(" ".join(words[i:]), 48, 700),
+            _text_width(" ".join(words[:i]), 36, 700),
+            _text_width(" ".join(words[i:]), 36, 700),
         ),
     )
-    return [(" ".join(words[:split]), 910), (" ".join(words[split:]), 965)]
+    return [(" ".join(words[:split]), 146), (" ".join(words[split:]), 190)]
 
 
-def _image_data(path, *, square=False):
+def _image_data(path, *, size=None):
     with Image.open(path) as image:
         image = ImageOps.exif_transpose(image).convert("RGB")
-        if square:
-            image = ImageOps.fit(image, (1024, 1024), method=Image.Resampling.LANCZOS)
+        if size:
+            image = ImageOps.fit(image, size, method=Image.Resampling.LANCZOS)
         else:
             image.thumbnail((512, 512))
         output = BytesIO()
@@ -104,71 +112,97 @@ def _image_data(path, *, square=False):
         )
 
 
-def _student_photo(student):
+def _student_photo(student, size):
     if student.photo_path:
         try:
-            return _image_data(photo_file(student.photo_path), square=True)
+            return _image_data(photo_file(student.photo_path), size=size)
         except (OSError, ValueError, AppException):
             pass
-    return _image_data(FALLBACK_PHOTO, square=True)
+    return _image_data(FALLBACK_PHOTO, size=size)
 
 
-def _watermark(config):
+def _attendance_label():
+    label = "Kartu Presensi Absensa"
+    width = _text_width(label, 12, 600) + 24
+    left = CARD_CANVAS_WIDTH - 48 - width
+    return (
+        f'<rect x="{left}" y="48" width="{width}" height="31" rx="15.5" fill="white" stroke="#656f6e"/>'
+        + _text(
+            label, left + 12, 70, 12, weight=600, fill="#2e3837", max_width=width - 24
+        )
+    )
+
+
+def _watermark(config, *, logo_data=None):
     if not config.watermark_enabled:
         return ""
-    try:
-        data = _image_data(photo_file(config.logo_path))
-    except (OSError, ValueError, AppException):
-        return ""
-    text_width = min(_text_width(config.school_name, 26, 400), 650)
-    left = (800 - (54 + 16 + text_width)) / 2
-    logo = f'<image x="{left:.3f}" y="46" width="54" height="54" href="{data}"/>'
-    name = _text(
-        config.school_name,
-        left + 70,
-        84,
-        26,
-        weight=400,
-        max_width=650,
-    )
-    # Only the top margin; the barcode and its white quiet zone never overlap it.
-    return f'<g data-watermark="true" opacity="0.45">{logo}{name}</g>'
+    if logo_data is None:
+        try:
+            logo_data = _image_data(photo_file(config.logo_path))
+        except (OSError, ValueError, AppException):
+            return ""
+    # Match the Figma header; long school names shrink before reaching the badge.
+    badge_width = _text_width("Kartu Presensi Absensa", 12, 600) + 24
+    max_width = CARD_CANVAS_WIDTH - 96 - badge_width - 32 - 28
+    logo = f'<image x="48" y="53.5" width="20" height="20" href="{logo_data}"/>'
+    name = _text(config.school_name, 76, 70.5, 18, fill="#161d1c", max_width=max_width)
+    return f'<g data-watermark="true" opacity="0.7">{logo}{name}</g>'
 
 
-def render_student_card(student, config: CardSettings) -> str:
-    """Render one self-contained, vector card, without any route/auth dependency."""
+def render_student_card(student, config: CardSettings, *, logo_data=None) -> str:
+    """Render the fixed landscape design with a centered 3:4 photo crop."""
     try:
         barcode = Code128(student.nisn).build()[0]
-        # Align the bars with the photo and text; whitespace stays in the card's
-        # outer margins instead of adding padding inside the content container.
-        module = 720 / len(barcode)
+        module = DETAILS_WIDTH / len(barcode)
         bars = "".join(
-            f'<rect x="{40 + run.start() * module:.4f}" y="1050" width="{len(run[0]) * module:.4f}" height="70"/>'
+            f'<rect x="{DETAILS_X + run.start() * module:.4f}" y="{BARCODE_Y}" width="{len(run[0]) * module:.4f}" height="72"/>'
             for run in re.finditer("1+", barcode)
         )
+        lines = _name_lines(student.name)
         name = "".join(
-            _text(line, 40, y, 48, weight=700) for line, y in _name_lines(student.name)
+            _text(
+                line,
+                DETAILS_X,
+                y,
+                36,
+                weight=700,
+                fill="#161d1c",
+                max_width=DETAILS_WIDTH,
+            )
+            for line, y in lines
         )
-        nisn = _text("NISN", 40, 998, 25, fill="#384240") + _text(
-            student.nisn, 114, 998, 25, weight=700, max_width=646
+        nisn_y = 183 + (len(lines) - 1) * 44
+        label_width = _text_width("NISN ", 18, 400)
+        nisn = _text("NISN ", DETAILS_X, nisn_y, 18, fill="#2e3837") + _text(
+            student.nisn,
+            DETAILS_X + label_width,
+            nisn_y,
+            18,
+            weight=700,
+            fill="#161d1c",
+            max_width=DETAILS_WIDTH - label_width,
         )
         hint = _text(
-            "jaga barcode dari coretan, lipatan, atau goresan",
-            40,
-            1142,
-            16,
-            fill="#64706c",
+            "jaga barcode ini dari coretan, lipatan, atau goresan",
+            DETAILS_X,
+            PHOTO_Y + PHOTO_HEIGHT - 2,
+            10,
+            fill="#626b6a",
+            max_width=DETAILS_WIDTH,
         )
-        photo = _student_photo(student)
+        photo = _student_photo(student, (768, 1024))
+        photo_bounds = (
+            f'x="{PHOTO_X}" y="{PHOTO_Y}" width="{PHOTO_WIDTH}" height="{PHOTO_HEIGHT}"'
+        )
         return (
-            '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1280" viewBox="0 0 800 1280" role="img">'
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{CARD_CANVAS_WIDTH:g}" height="{CARD_CANVAS_HEIGHT:g}" viewBox="0 0 {CARD_CANVAS_WIDTH:g} {CARD_CANVAS_HEIGHT:g}" role="img">'
             f"<title>{escape(student.name)} · NISN {escape(student.nisn)}</title>"
-            '<defs><clipPath id="photo"><rect x="40" y="136" width="720" height="720" rx="30"/></clipPath></defs>'
-            '<rect x="1" y="1" width="798" height="1278" rx="30" fill="#ffffff" stroke="#64706c" stroke-width="2"/>'
-            f"{_watermark(config)}"
-            f'<image x="40" y="136" width="720" height="720" clip-path="url(#photo)" href="{photo}"/>'
+            f'<defs><clipPath id="photo"><rect {photo_bounds} rx="16"/></clipPath></defs>'
+            f'<rect x="0.5" y="0.5" width="{CARD_CANVAS_WIDTH - 1:g}" height="{CARD_CANVAS_HEIGHT - 1:g}" rx="16" fill="#f4fbf9" stroke="#656f6e"/>'
+            f"{_watermark(config, logo_data=logo_data)}{_attendance_label()}"
+            f'<image {photo_bounds} preserveAspectRatio="xMidYMid slice" clip-path="url(#photo)" href="{photo}"/>'
             f"{name}{nisn}"
-            '<rect x="4" y="1040" width="792" height="90" fill="white"/>'
+            f'<rect x="{DETAILS_X}" y="{BARCODE_Y}" width="{DETAILS_WIDTH}" height="72" fill="white"/>'
             f'<g data-barcode="{escape(student.nisn, {chr(34): "&quot;"})}" fill="black">{bars}</g>{hint}</svg>'
         )
     except Exception as exc:
@@ -181,17 +215,20 @@ def render_student_card(student, config: CardSettings) -> str:
 
 def render_student_card_png(student, config: CardSettings) -> bytes:
     svg = render_student_card(student, config)
-    # Whole 5:8 pixel units, rounded up, retain the ratio at at least 300 DPI.
-    units = ceil(float(config.width_mm) * PRINT_DPI / (25.4 * 5))
-    width, height = int(units * 5), int(units * 8)
+    width = ceil(float(CARD_WIDTH_MM) * PRINT_DPI / 25.4)
+    height = ceil(float(CARD_HEIGHT_MM) * PRINT_DPI / 25.4)
     try:
         raw = cairosvg.svg2png(
             bytestring=svg.encode(), output_width=width, output_height=height
         )
         with Image.open(BytesIO(raw)) as image:
             output = BytesIO()
-            dpi = width / float(config.width_mm) * 25.4
-            image.save(output, format="PNG", dpi=(dpi, dpi))
+            # Independent DPI values account for whole-pixel rounding on each axis.
+            dpi = (
+                width / float(CARD_WIDTH_MM) * 25.4,
+                height / float(CARD_HEIGHT_MM) * 25.4,
+            )
+            image.save(output, format="PNG", dpi=dpi)
             return output.getvalue()
     except Exception as exc:
         logger.exception("Student card PNG generation failed")

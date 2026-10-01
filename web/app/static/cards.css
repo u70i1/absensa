@@ -7,6 +7,21 @@
 .card-settings-section { display: grid; gap: var(--space-6); min-width: 0; margin: 0; padding: var(--space-6) 0 0; border: 0; border-top: var(--border-subtle); }
 .card-settings-section legend { padding: 0 var(--space-3) 0 0; font-weight: var(--font-weight-semibold); font-size: var(--font-size-subheading); }
 .card-settings-section .field-help { margin: 0; }
+.student-modal:has([data-card-settings]), .dialog-card:has([data-card-settings]) { width: 1080px; max-width: calc(100vw - var(--space-6) - var(--space-6)); }
+.card-settings-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: var(--space-9); }
+.card-settings-preview { position: sticky; top: 0; display: grid; justify-items: center; gap: var(--space-5); min-width: 0; padding: var(--space-6); border: var(--border-subtle); border-radius: var(--radius-surface); background: var(--color-surface-container-low); text-align: center; }
+.card-settings-preview h3, .card-settings-preview p { margin: 0; }
+.card-settings-preview-stage { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 140px; }
+.card-settings-preview-stage img { display: block; width: 100%; height: auto; aspect-ratio: 85.6 / 53.98; }
+.card-preview-dimensions { font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; }
+.card-settings-layout > .student-form { min-width: 0; }
+.card-measure-controls { display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: center; gap: var(--space-5); }
+.card-measure-controls input[type='range'] { width: 100%; min-width: 0; padding: 0; accent-color: var(--color-surface-tint); cursor: pointer; }
+.card-measure-controls input[type='number'] { width: 100%; min-width: 0; }
+@media (max-width: 760px) {
+  .card-settings-layout { grid-template-columns: minmax(0, 1fr); }
+  .card-settings-preview { position: static; }
+}
 .card-logo-editor { display: grid; justify-items: start; gap: var(--space-5); }
 .card-logo-label { font-weight: var(--font-weight-medium); }
 .card-logo-preview { object-fit: contain; padding: var(--space-3); background: white; border: var(--border-subtle); border-radius: var(--radius-control); }

@@ -26,6 +26,17 @@ def class_query(request: Request) -> ClassListQuery:
     return ClassListQuery.model_validate(values)
 
 
+def class_filter_summary(query: ClassListQuery) -> str:
+    filters = []
+    if query.class_name:
+        filters.append(f'Pencarian kelas "{query.class_name}"')
+    if query.grade is not None:
+        filters.append(f"Jenjang {query.grade}")
+    if query.empty:
+        filters.append("Kelas kosong")
+    return ", ".join(filters) or "Semua kelas"
+
+
 def directory_url(query: ClassListQuery) -> str:
     values = query.model_dump(
         by_alias=True,

@@ -79,9 +79,20 @@ def get_student(db: Session, query: StudentListQuery):
     return list(db.execute(stmt).all())
 
 
-def get_students_for_export(db: Session, query: StudentListQuery):
+def get_students_for_export(
+    db: Session,
+    query: StudentListQuery,
+    *,
+    student_ids: list[int] | None = None,
+    class_ids: list[int] | None = None,
+):
     """Retrieve every student matching the list filters, without pagination."""
-    return list(db.execute(_student_list_statement(query)).all())
+    statement = _student_list_statement(query)
+    if student_ids is not None:
+        statement = statement.where(Student.id.in_(student_ids))
+    if class_ids is not None:
+        statement = statement.where(Student.class_id.in_(class_ids))
+    return list(db.execute(statement).all())
 
 
 def post_student(

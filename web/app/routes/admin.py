@@ -21,6 +21,7 @@ from app.services.student_dashboard_service import (
     dashboard_context,
     list_url,
     normalize_filters,
+    student_filter_summary,
 )
 from app.templating import templates
 from fastapi import APIRouter, Depends, Request
@@ -110,25 +111,45 @@ def export_students(request: Request, db: Db):
     except ValidationError:
         return query_error(request)
     query, classes = normalize_filters(db, query)
-    selected_class = next(
-        (class_ for class_ in classes if class_.class_id == query.class_id), None
-    )
-    filters = []
-    if query.q:
-        filters.append(f'Pencarian "{query.q}"')
-    if query.unassigned:
-        filters.append("Tanpa kelas")
-    elif selected_class:
-        filters.append(f"Kelas {selected_class.class_name}")
-    elif query.grade is not None:
-        filters.append(f"Jenjang {query.grade}")
-    elif query.class_name:
-        filters.append(f'Nama kelas "{query.class_name}"')
-
     students = student_service.get_students_for_export(db, query)
+    return students_export_response(
+        db, students, student_filter_summary(query, classes)
+    )
+
+
+@router.get("/students/export/confirm", name="admin_students_export_confirm")
+def confirm_student_export(request: Request, db: Db):
+    try:
+        query = list_query(request)
+    except ValidationError:
+        return query_error(request)
+    query, classes = normalize_filters(db, query)
+    return render_modal(
+        request,
+        "modals/export-confirm.html",
+        {
+            "back_url": list_url(query),
+            "export_count": student_service.count_students(db, query),
+            "filter_summary": student_filter_summary(query, classes),
+            "scope": "Semua siswa sesuai filter, termasuk halaman lainnya",
+            "directory_class_count": len(class_service.get_class_options(db)),
+            "download_url": request.url_for("admin_students_export"),
+            "download_method": "get",
+            "download_fields": query.model_dump(
+                by_alias=True,
+                exclude={"page", "limit"},
+                exclude_none=True,
+                exclude_defaults=True,
+            ).items(),
+        },
+    )
+
+
+def students_export_response(db: Session, students, filter_summary: str):
+    """Use the combined workbook for filtered and selected dashboard exports."""
     content = export_service.build_students_workbook(
         students,
-        ", ".join(filters) or "Semua siswa",
+        filter_summary,
         class_service.get_class_options(db),
     )
     filename = datetime.now(ZoneInfo(settings.timezone)).strftime(

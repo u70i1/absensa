@@ -30,46 +30,156 @@ def sample():
     )
 
 
-def test_defaults_and_ratio():
+def test_fixed_dimensions_and_editable_settings():
     config = CardSettings()
-    assert (config.width_mm, config.height_mm, config.gap_mm) == (70, 112, 3)
+    assert (config.width_mm, config.height_mm, config.gap_mm) == (
+        Decimal("85.6"),
+        Decimal("53.98"),
+        3,
+    )
+    assert set(CardSettings.model_fields) == {"gap_mm", "school_name", "logo_path"}
     assert not config.watermark_enabled
-    with pytest.raises(ValidationError):
-        CardSettings(width_mm=70, height_mm=100)
-
-
-@pytest.mark.parametrize(
-    "data,width,height",
-    [
-        ({"width_mm": 80, "height_mm": 112}, 80, 128),
-        (
-            {"dimension_source": "height", "height_mm": 100, "width_mm": 70},
-            Decimal("62.5"),
-            100,
-        ),
-        ({"width_mm": "70.125"}, Decimal("70.125"), Decimal("112.2")),
-    ],
-)
-def test_ratio_synchronization(data, width, height):
-    config = CardSettingsUpdate.model_validate(data)
-    assert config.width_mm == width
-    assert config.height_mm == height
+    # Retired settings cannot override the fixed design, including stale clients.
+    config = CardSettingsUpdate(
+        width_mm=100, height_mm=200, photo_ratio_width=1, photo_ratio_height=1
+    )
+    assert (config.width_mm, config.height_mm) == (Decimal("85.6"), Decimal("53.98"))
 
 
 @pytest.mark.parametrize(
     "data",
     [
-        {"width_mm": 0},
-        {"width_mm": 151},
         {"gap_mm": -1},
-        {"gap_mm": 21},
-        {"width_mm": "NaN"},
+        {"gap_mm": 201},
+        {"gap_mm": "NaN"},
+        {"gap_mm": "Infinity"},
+        {"gap_mm": "3.0001"},
         {"school_name": "x" * 161},
     ],
 )
 def test_invalid_settings(data):
-    with pytest.raises((ValidationError, ArithmeticError)):
+    with pytest.raises(ValidationError):
         CardSettingsUpdate.model_validate(data)
+
+
+def test_gap_limits(card_admin, db_session):
+    for gap in (0, 200, "3.125"):
+        response = card_admin.post("/admin/cards/settings", data={"gap_mm": gap})
+        assert response.status_code == 200
+        assert configuration.get_settings(db_session).gap_mm == Decimal(str(gap))
+    for gap in (-1, 201):
+        assert (
+            card_admin.post("/admin/cards/settings", data={"gap_mm": gap}).status_code
+            == 422
+        )
+        assert configuration.get_settings(db_session).gap_mm == Decimal("3.125")
+
+
+def test_fixed_card_migration_preserves_gap_and_watermark(db_session, monkeypatch):
+    from alembic.config import Config
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from alembic.script import ScriptDirectory
+    from sqlalchemy import inspect, text
+
+    migration = (
+        ScriptDirectory.from_config(Config("alembic.ini"))
+        .get_revision("c64e308f7a12")
+        .module
+    )
+    monkeypatch.setattr(
+        migration, "op", Operations(MigrationContext.configure(db_session.connection()))
+    )
+    config = db_session.get(StudentCardSettings, 1)
+    config.gap_mm, config.school_name, config.logo_path, config.watermark_enabled = (
+        Decimal("7.5"),
+        "Retained School",
+        "logo.jpg",
+        True,
+    )
+    db_session.flush()
+    migration.downgrade()
+    db_session.execute(
+        text(
+            "UPDATE student_card_settings SET width_mm = 125, height_mm = 200, photo_ratio_width = 4, photo_ratio_height = 5"
+        )
+    )
+    migration.upgrade()
+    db_session.expire_all()
+    saved = db_session.get(StudentCardSettings, 1)
+    assert (
+        saved.gap_mm,
+        saved.school_name,
+        saved.logo_path,
+        saved.watermark_enabled,
+    ) == (Decimal("7.5"), "Retained School", "logo.jpg", True)
+    columns = {
+        column["name"]
+        for column in inspect(db_session.connection()).get_columns(
+            "student_card_settings"
+        )
+    }
+    assert columns == {"id", "gap_mm", "school_name", "logo_path", "watermark_enabled"}
+
+
+def test_unsaved_settings_preview_uses_placeholder_without_persisting(
+    card_admin, db_session, monkeypatch
+):
+    saved = configuration.get_settings(db_session)
+    paths = []
+    actual = cards._image_data
+
+    def record(path, **kwargs):
+        paths.append(path)
+        return actual(path, **kwargs)
+
+    monkeypatch.setattr(cards, "_image_data", record)
+    image = BytesIO()
+    Image.new("RGB", (50, 50), "blue").save(image, format="PNG")
+    response = card_admin.post(
+        "/admin/cards/settings/preview",
+        data={
+            "gap_mm": "35",
+            "school_name": "Sekolah Contoh",
+            "width_mm": "100",
+            "photo_ratio_width": "1",
+        },
+        files={"logo": ("logo.png", image.getvalue(), "image/png")},
+    )
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "private, no-store"
+    preview = response.json()
+    assert (preview["width_mm"], preview["height_mm"], preview["gap_mm"]) == (
+        85.6,
+        53.98,
+        35,
+    )
+    svg = base64.b64decode(preview["uri"].split(",")[1]).decode()
+    assert "Nama Siswa" in svg and "Sekolah Contoh" in svg
+    assert 'data-watermark="true"' in svg
+    assert cards.FALLBACK_PHOTO in paths
+    photo = ElementTree.fromstring(svg).find(
+        "{http://www.w3.org/2000/svg}image[@clip-path]"
+    )
+    assert float(photo.attrib["width"]) / float(
+        photo.attrib["height"]
+    ) == pytest.approx(3 / 4)
+    db_session.expire_all()
+    assert configuration.get_settings(db_session) == saved
+    assert not list(configuration.photos.photo_file("logo.jpg").parent.glob("*"))
+    assert (
+        card_admin.post(
+            "/admin/cards/settings/preview", data={"gap_mm": "201"}
+        ).status_code
+        == 422
+    )
+    assert (
+        card_admin.post(
+            "/admin/cards/settings/preview",
+            files={"logo": ("bad.png", b"not an image", "image/png")},
+        ).status_code
+        == 415
+    )
 
 
 def test_renderer_is_auth_independent_and_fallback(sample, monkeypatch):
@@ -83,82 +193,139 @@ def test_renderer_is_auth_independent_and_fallback(sample, monkeypatch):
     monkeypatch.setattr(cards, "_image_data", record)
     svg = cards.render_student_card(sample, CardSettings())
     assert cards.FALLBACK_PHOTO in paths
-    assert str(cards.FALLBACK_PHOTO).endswith("static/images/no-photo.png")
-    assert 'viewBox="0 0 800 1280"' in svg
+    assert 'viewBox="0 0 856 539.8"' in svg
     assert 'data-barcode="0081234567"' in svg
+    assert "Kartu Presensi Absensa" in svg
     assert "http://" not in svg.replace('xmlns="http://www.w3.org/2000/svg"', "")
     assert "data-watermark" not in svg
-    sample.photo_path = "missing.jpg"
-    assert cards.render_student_card(sample, CardSettings()) == svg
-    sample.photo_path = "../outside.png"
-    assert cards.render_student_card(sample, CardSettings()) == svg
+    for path in ("missing.jpg", "../outside.png"):
+        sample.photo_path = path
+        assert cards.render_student_card(sample, CardSettings()) == svg
 
 
-def test_png_resolution_and_filename(sample):
+def test_png_resolution_physical_size_and_filename(sample):
     png = cards.render_student_card_png(sample, CardSettings())
     with Image.open(BytesIO(png)) as image:
-        assert image.width * 8 == image.height * 5
-        assert image.width >= 70 / 25.4 * 300
-        assert image.height >= 112 / 25.4 * 300
-        assert image.info["dpi"][0] >= 300
+        assert image.size == (1012, 638)
+        assert image.width > image.height
+        assert all(dpi >= 300 for dpi in image.info["dpi"])
+        assert image.width / image.info["dpi"][0] * 25.4 == pytest.approx(
+            85.6, abs=0.01
+        )
+        assert image.height / image.info["dpi"][1] * 25.4 == pytest.approx(
+            53.98, abs=0.01
+        )
     assert cards.card_filename(sample) == "0081234567-abiansyah-viadi.png"
     sample.name = '../../Asdrölf <script> / "Fickner"'
     assert cards.card_filename(sample) == "0081234567-asdrolf-script-fickner.png"
 
 
-def test_barcode_can_be_decoded(sample):
-    # Optional independent decoder; not a runtime dependency.
+@pytest.mark.parametrize("has_photo", [False, True])
+def test_fixed_photo_ratio_and_center_crop(sample, tmp_path, monkeypatch, has_photo):
+    monkeypatch.setattr(settings, "photos_dir", str(tmp_path))
+    if has_photo:
+        image = Image.new("RGB", (1200, 600), "blue")
+        image.paste("red", (0, 0, 200, 600))
+        image.paste("green", (1000, 0, 1200, 600))
+        image.save(tmp_path / "portrait.png")
+        sample.photo_path = "portrait.png"
+    root = ElementTree.fromstring(cards.render_student_card(sample, CardSettings()))
+    ns = {"s": "http://www.w3.org/2000/svg"}
+    photo = root.find("s:image[@clip-path]", ns)
+    clip = root.find("s:defs/s:clipPath/s:rect", ns)
+    bounds = {key: float(photo.attrib[key]) for key in ("x", "y", "width", "height")}
+    assert bounds == pytest.approx({"x": 48, "y": 111, "width": 285.6, "height": 380.8})
+    assert bounds["width"] / bounds["height"] == pytest.approx(3 / 4)
+    assert all(clip.attrib[key] == photo.attrib[key] for key in bounds)
+    with Image.open(
+        BytesIO(base64.b64decode(photo.attrib["href"].split(",")[1]))
+    ) as cropped:
+        assert cropped.size == (768, 1024)
+        if has_photo:
+            r, g, b = cropped.getpixel((8, cropped.height // 2))
+            assert b > 240 and r < 10 and g < 10
+
+
+@pytest.mark.parametrize("has_photo", [False, True])
+def test_barcode_can_be_decoded(sample, tmp_path, monkeypatch, has_photo):
     zxingcpp = pytest.importorskip("zxingcpp")
-    png = cards.render_student_card_png(sample, CardSettings())
-    with Image.open(BytesIO(png)) as image:
+    if has_photo:
+        monkeypatch.setattr(settings, "photos_dir", str(tmp_path))
+        Image.new("RGB", (600, 800), "blue").save(tmp_path / "portrait.png")
+        sample.photo_path = "portrait.png"
+    with Image.open(
+        BytesIO(cards.render_student_card_png(sample, CardSettings()))
+    ) as image:
         result = zxingcpp.read_barcode(image)
     assert result is not None
     assert result.text == sample.nisn
 
 
-def test_watermark(sample, tmp_path, monkeypatch):
+def test_landscape_details_and_long_name_do_not_overlap_photo_or_barcode(sample):
+    sample.name = "Abiansyah Viadi Muhammad Pratama Kusuma Wijaya"
+    root = ElementTree.fromstring(cards.render_student_card(sample, CardSettings()))
+    ns = {"s": "http://www.w3.org/2000/svg"}
+    lines = cards._name_lines(sample.name)
+    assert len(lines) == 2
+    for line, baseline in lines:
+        group = next(
+            group
+            for group in root.findall("s:g", ns)
+            if group.attrib.get("aria-label") == line
+        )
+        x, y = map(
+            float,
+            group.attrib["transform"]
+            .removeprefix("translate(")
+            .removesuffix(")")
+            .split(","),
+        )
+        assert x == pytest.approx(365.6)
+        assert y == baseline
+        assert y < cards.BARCODE_Y - 36
+    nisn = root.find("s:g[@aria-label='NISN ']", ns)
+    assert nisn.attrib["transform"].endswith(",227)")
+
+
+def test_watermark_matches_landscape_header(sample, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "photos_dir", str(tmp_path))
     Image.new("RGB", (100, 50), "blue").save(tmp_path / "logo.png")
     config = CardSettings(school_name="Sekolah <Indah>", logo_path="logo.png")
     svg = cards.render_student_card(sample, config)
-    assert 'data-watermark="true"' in svg
-    assert "Sekolah &lt;Indah&gt;" in svg
-    assert svg.count("data:image/jpeg") == 2
     root = ElementTree.fromstring(svg)
     ns = {"s": "http://www.w3.org/2000/svg"}
     watermark = root.find("s:g[@data-watermark='true']", ns)
     logo = watermark.find("s:image", ns)
-    width = min(cards._text_width(config.school_name, 26, 400), 650)
-    assert float(logo.attrib["x"]) + (70 + width) / 2 == pytest.approx(400, abs=0.001)
-    text = watermark.find("s:g", ns)
-    assert text.attrib["transform"].endswith(",84)")
-    missing = cards.render_student_card(
-        sample, config.model_copy(update={"logo_path": "missing.png"})
-    )
-    assert missing.count("data:image/jpeg") == 1
-    assert "data-watermark" not in missing
-    disabled = cards.render_student_card(
-        sample, config.model_copy(update={"school_name": "", "logo_path": None})
-    )
-    assert "data-watermark" not in disabled
-    assert "Sekolah" not in disabled
-    assert disabled.count("data:image/jpeg") == 1
+    assert logo.attrib["x"] == "48" and logo.attrib["y"] == "53.5"
+    assert logo.attrib["width"] == logo.attrib["height"] == "20"
+    assert watermark.attrib["opacity"] == "0.7"
+    assert watermark.find("s:g", ns).attrib["transform"] == "translate(76,70.5)"
+    assert "Sekolah &lt;Indah&gt;" in svg
+    assert svg.count("data:image/jpeg") == 2
+    for disabled_config in [
+        config.model_copy(update={"logo_path": "missing.png"}),
+        config.model_copy(update={"school_name": "", "logo_path": None}),
+    ]:
+        disabled = cards.render_student_card(sample, disabled_config)
+        assert "data-watermark" not in disabled
+        assert disabled.count("data:image/jpeg") == 1
+        assert "Kartu Presensi Absensa" in disabled
 
 
-def test_white_card_and_barcode_width(sample):
-    svg = cards.render_student_card(sample, CardSettings())
-    root = ElementTree.fromstring(svg)
+def test_card_background_and_barcode_geometry(sample):
+    root = ElementTree.fromstring(cards.render_student_card(sample, CardSettings()))
     ns = {"s": "http://www.w3.org/2000/svg"}
     bars = root.find("s:g[@data-barcode]", ns).findall("s:rect", ns)
     left = float(bars[0].attrib["x"])
     right = float(bars[-1].attrib["x"]) + float(bars[-1].attrib["width"])
-    photo = root.find("s:defs/s:clipPath/s:rect", ns)
-    assert left == float(photo.attrib["x"])
-    assert right - left == pytest.approx(float(photo.attrib["width"]))
+    assert left == pytest.approx(365.6)
+    assert right == pytest.approx(808)
+    assert float(bars[0].attrib["y"]) == pytest.approx(395.8)
+    assert float(bars[0].attrib["height"]) == 72
     with Image.open(
         BytesIO(cards.render_student_card_png(sample, CardSettings()))
     ) as image:
-        assert image.convert("RGB").getpixel((image.width // 2, 20)) == (255, 255, 255)
+        assert image.convert("RGB").getpixel((image.width // 2, 20)) == (244, 251, 249)
 
 
 def test_watermark_requires_both_fields_and_preserves_saved_logo(
@@ -247,6 +414,7 @@ def test_zip_and_failure_cleanup(sample, monkeypatch):
         ("get", "/admin/cards/settings/logo", None),
         ("get", "/admin/cards/1/preview", None),
         ("post", "/admin/cards/settings", {"width_mm": 80}),
+        ("post", "/admin/cards/settings/preview", {"width_mm": 80}),
         (
             "post",
             "/admin/cards/operate",
@@ -268,25 +436,18 @@ def test_admin_required(client, method, path, data):
 def test_settings_persist_and_validate_logo(card_admin, db_session):
     assert configuration.get_settings(db_session) == CardSettings()
     response = card_admin.post(
-        "/admin/cards/settings",
-        data={
-            "width_mm": 80,
-            "height_mm": 1,
-            "gap_mm": 4,
-        },
+        "/admin/cards/settings", data={"gap_mm": 4, "width_mm": 80, "height_mm": 1}
     )
     assert response.status_code == 200
     saved = configuration.get_settings(db_session)
-    assert (saved.width_mm, saved.height_mm, saved.gap_mm) == (80, 128, 4)
-    assert not saved.watermark_enabled
-    response = card_admin.post(
-        "/admin/cards/settings", data={"dimension_source": "height", "height_mm": 100}
+    assert (saved.width_mm, saved.height_mm, saved.gap_mm) == (
+        Decimal("85.6"),
+        Decimal("53.98"),
+        4,
     )
-    assert response.status_code == 200
-    assert configuration.get_settings(db_session).width_mm == Decimal("62.5")
-    bad = card_admin.post("/admin/cards/settings", data={"width_mm": -1})
+    bad = card_admin.post("/admin/cards/settings", data={"gap_mm": -1})
     assert bad.status_code == 422
-    assert configuration.get_settings(db_session).width_mm == Decimal("62.5")
+    assert configuration.get_settings(db_session) == saved
     bad_logo = card_admin.post(
         "/admin/cards/settings",
         files={"logo": ("logo.svg", b"<svg/>", "image/svg+xml")},
@@ -311,14 +472,61 @@ def test_settings_persist_and_validate_logo(card_admin, db_session):
     assert not photo_file(stored).exists()
 
 
-def test_settings_database_ratio_constraint(db_session):
+@pytest.mark.parametrize("value", [-1, 201])
+def test_settings_database_gap_constraint(db_session, value):
     from sqlalchemy.exc import IntegrityError
 
     config = db_session.get(StudentCardSettings, 1)
-    config.height_mm = 100
+    config.gap_mm = value
     with pytest.raises(IntegrityError):
         db_session.flush()
     db_session.rollback()
+
+
+def test_fixed_settings_apply_to_preview_print_and_download(
+    card_admin, db_session, existing_student
+):
+    assert (
+        card_admin.post(
+            "/admin/cards/settings",
+            data={"gap_mm": "5", "photo_ratio_width": "1", "photo_ratio_height": "1"},
+        ).status_code
+        == 200
+    )
+    modal = card_admin.get("/admin/cards/settings")
+    for field in (
+        "width_mm",
+        "height_mm",
+        "photo_ratio_width",
+        "photo_ratio_height",
+        "dimension_source",
+    ):
+        assert f'name="{field}"' not in modal.text
+    saved = configuration.get_settings(db_session)
+    preview = card_admin.get(f"/admin/cards/{existing_student.id}/preview")
+    printed = card_admin.post(
+        "/admin/cards/operate",
+        data={"scope": "selected", "ids": existing_student.id, "action": "print"},
+    )
+    assert "width: 85.6mm; height: 53.98mm" in printed.text
+    assert "margin: 0 5.000mm 5.000mm 0" in printed.text
+    for response in [preview, printed]:
+        assert response.status_code == 200
+        svg = base64.b64decode(
+            re.search(r'data:image/svg\+xml;base64,([^" ]+)', response.text)[1]
+        )
+        assert svg.decode() == cards.render_student_card(existing_student, saved)
+        photo = ElementTree.fromstring(svg).find(
+            "{http://www.w3.org/2000/svg}image[@clip-path]"
+        )
+        assert float(photo.attrib["width"]) / float(
+            photo.attrib["height"]
+        ) == pytest.approx(3 / 4)
+    downloaded = card_admin.post(
+        "/admin/cards/operate",
+        data={"scope": "selected", "ids": existing_student.id, "action": "download"},
+    )
+    assert downloaded.content == cards.render_student_card_png(existing_student, saved)
 
 
 def test_scopes(db_session, class_factory):

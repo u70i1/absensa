@@ -2,10 +2,12 @@
 
 import shutil
 import subprocess
+from decimal import Decimal
 from io import BytesIO
 from urllib.parse import urlsplit
 
 import pytest
+from openpyxl import load_workbook
 from PIL import Image
 
 playwright = pytest.importorskip("playwright.sync_api")
@@ -51,12 +53,17 @@ def test_card_ui_ratio_selection_preview_and_confirmation(
     page, context = card_browser
     page.goto("http://testserver/admin/cards")
     page.get_by_role("button", name="Pengaturan cetak").click()
-    page.locator("#card-width").fill("80")
-    assert page.locator("#card-height").input_value() == "128"
-    page.locator("#card-height").fill("100")
-    assert page.locator("#card-width").input_value() == "62.5"
+    assert (
+        page.locator(
+            "#card-width, #card-height, #photo-ratio-width, #photo-ratio-height"
+        ).count()
+        == 0
+    )
+    page.locator("#card-gap").fill("4")
+    assert page.locator("#card-gap-slider").input_value() == "4"
     page.get_by_role("button", name="Simpan pengaturan").click()
     page.get_by_text("Pengaturan cetak berhasil disimpan untuk semua kartu.").wait_for()
+    assert page.locator("#card-gap").input_value() == "4.000"
     page.locator("[data-close-modal]").first.click()
     page.locator("#student-modal").wait_for(state="hidden")
     page.locator("#card-scope").select_option("selected")
@@ -78,7 +85,7 @@ def test_card_ui_ratio_selection_preview_and_confirmation(
     page.locator('#modal-content img[alt^="Kartu"]').wait_for()
     assert (
         page.locator("#modal-content img").evaluate("image => image.naturalWidth")
-        == 800
+        == 856
     )
     page.locator("[data-close-modal]").first.click()
     page.locator("#student-modal").wait_for(state="hidden")
@@ -91,6 +98,72 @@ def test_card_ui_ratio_selection_preview_and_confirmation(
     assert "sumber daya" in dialogs[0] and "waktu" in dialogs[0]
     assert page.locator('[name="confirmed"]').input_value() == "false"
     assert len(context.pages) == 1
+
+
+def test_settings_preview_sliders_and_keyboard_stay_synchronized(
+    card_browser, db_session
+):
+    from app.schemas.student_card import CardSettings
+    from app.services.student_card_settings_service import get_settings
+
+    page, _ = card_browser
+    expect = playwright.expect
+    page.emulate_media(reduced_motion="reduce")
+    page.goto("http://testserver/admin/cards")
+    page.get_by_role("button", name="Pengaturan cetak").click()
+    preview = page.locator("[data-settings-preview]")
+    initial = preview.get_attribute("src")
+    expect(preview).to_be_visible()
+    assert page.locator("#student-modal").bounding_box()["width"] > 1000
+    assert (
+        preview.bounding_box()["x"]
+        < page.locator("[data-card-settings]").bounding_box()["x"]
+    )
+    assert (
+        page.locator(
+            '[name="width_mm"], [name="height_mm"], [name="photo_ratio_width"], [name="photo_ratio_height"]'
+        ).count()
+        == 0
+    )
+    page.locator("#card-gap").fill("35.5")
+    expect(page.locator("#card-gap-slider")).to_have_value("35.5")
+    page.locator("#card-gap-slider").focus()
+    with page.expect_response("**/settings/preview") as incoming:
+        page.locator("#card-gap-slider").press("End")
+    response = incoming.value.json()
+    assert (response["width_mm"], response["height_mm"], response["gap_mm"]) == (
+        85.6,
+        53.98,
+        200,
+    )
+    expect(page.locator("#card-gap")).to_have_value("200")
+    expect(preview).to_have_attribute("src", initial)
+    expect(page.locator("[data-preview-status]")).to_have_text("")
+    expect(page.locator("[data-preview-dimensions]")).to_have_text("85.6 × 53.98 mm")
+    expect(page.locator("[data-preview-gap]")).to_have_text("Jarak antarkartu: 200 mm")
+    assert get_settings(db_session) == CardSettings()
+    page.locator("#student-modal").screenshot(
+        path="/tmp/absensa-card-settings-desktop.png"
+    )
+    page.set_viewport_size({"width": 390, "height": 844})
+    assert page.locator("#student-modal").evaluate(
+        "dialog => dialog.scrollWidth <= dialog.clientWidth"
+    )
+    assert (
+        preview.bounding_box()["y"]
+        < page.locator("[data-card-settings]").bounding_box()["y"]
+    )
+    page.locator("#student-modal").screenshot(
+        path="/tmp/absensa-card-settings-mobile.png"
+    )
+    page.set_viewport_size({"width": 1440, "height": 1100})
+    page.get_by_role("button", name="Simpan pengaturan").click()
+    expect(
+        page.get_by_text("Pengaturan cetak berhasil disimpan untuk semua kartu.")
+    ).to_be_visible()
+    expect(page.locator("#card-gap-slider")).to_have_value("200")
+    assert get_settings(db_session).gap_mm == Decimal(200)
+    assert get_settings(db_session).height_mm == Decimal("53.98")
 
 
 def test_print_pdf_has_whole_cards_across_paper_sizes(
@@ -108,7 +181,11 @@ def test_print_pdf_has_whole_cards_across_paper_sizes(
     page.set_content(response.text, wait_until="load")
     page.wait_for_function("window.printWasCalled === true")
     assert page.locator(".student-card").count() == 9
-    for paper, landscape in [("A4", False), ("Letter", False), ("A4", True)]:
+    for paper, landscape, pages in [
+        ("A4", False, 2),
+        ("Letter", False, 2),
+        ("A4", True, 1),
+    ]:
         document = tmp_path / f"cards-{paper}-{landscape}.pdf"
         page.pdf(
             path=str(document), format=paper, landscape=landscape, print_background=True
@@ -121,7 +198,7 @@ def test_print_pdf_has_whole_cards_across_paper_sizes(
             capture_output=True,
         )
         raster_pages = sorted(tmp_path.glob(f"{raster_prefix.name}-*.png"))
-        assert len(raster_pages) == 3
+        assert len(raster_pages) == pages
         complete_cards = 0
         for raster in raster_pages:
             with Image.open(raster).convert("RGB") as image:
@@ -149,9 +226,9 @@ def test_print_pdf_has_whole_cards_across_paper_sizes(
                                 if ink[neighbor]:
                                     ink[neighbor] = 0
                                     stack.append(neighbor)
-                    if right - left > 190 and bottom - top > 250:
-                        assert 196 <= right - left <= 200
-                        assert 315 <= bottom - top <= 320
+                    if right - left > 235 and bottom - top > 145:
+                        assert 241 <= right - left <= 245
+                        assert 151 <= bottom - top <= 155
                         complete_cards += 1
         assert complete_cards == 9
 
@@ -160,7 +237,7 @@ def test_school_logo_editor(card_browser, tmp_path):
     page, _ = card_browser
     page.goto("http://testserver/admin/cards")
     page.get_by_role("button", name="Pengaturan cetak").click()
-    playwright.expect(page.get_by_role("group", name="Ukuran kartu")).to_have_count(1)
+    playwright.expect(page.get_by_role("group", name="Jarak cetak")).to_have_count(1)
     playwright.expect(page.get_by_role("group", name="Watermark kartu")).to_have_count(
         1
     )
@@ -176,6 +253,10 @@ def test_school_logo_editor(card_browser, tmp_path):
     )
     assert page.locator("[data-logo-preview]").is_visible()
     assert page.locator("[data-card-settings]").evaluate("form => form.checkValidity()")
+    page.wait_for_function("""() => {
+      const svg = atob(document.querySelector('[data-settings-preview]').src.split(',')[1]);
+      return svg.includes('Sekolah Nusantara') && svg.includes('data-watermark="true"');
+    }""")
     page.get_by_role("button", name="Simpan pengaturan").click()
     page.get_by_text("Pengaturan cetak berhasil disimpan untuk semua kartu.").wait_for()
     assert "/settings/logo" in page.locator("[data-logo-preview]").get_attribute("src")
@@ -190,6 +271,10 @@ def test_school_logo_editor(card_browser, tmp_path):
     assert page.locator("[data-logo-preview]").is_hidden()
     assert page.locator("#school-name").input_value() == ""
     assert page.locator("[data-card-settings]").evaluate("form => form.checkValidity()")
+    page.wait_for_function("""() => {
+      const svg = atob(document.querySelector('[data-settings-preview]').src.split(',')[1]);
+      return !svg.includes('data-watermark="true"');
+    }""")
     page.get_by_role("button", name="Simpan pengaturan").click()
     page.get_by_text("Pengaturan cetak berhasil disimpan untuk semua kartu.").wait_for()
     assert page.locator("[data-logo-preview]").is_hidden()
@@ -301,6 +386,75 @@ def test_selection_survives_student_pagination(card_browser, db_session, dashboa
         "form => new FormData(form).getAll('ids')"
     )
     assert set(ids) == {str(first_id), str(last_id)}
+
+
+@pytest.mark.parametrize("kind", ["students", "classes"])
+def test_selected_export_can_cancel_and_download_retained_selection(
+    card_browser, class_factory, student_factory, kind
+):
+    page, _ = card_browser
+    expect = playwright.expect
+    first_class = class_factory(class_name="Alpha")
+    second_class = class_factory(class_name="Beta")
+    first = student_factory(name="Alpha", class_id=first_class.class_id)
+    student_factory(name="Beta", nisn="1000000002", class_id=second_class.class_id)
+    first_id = first.id if kind == "students" else first_class.class_id
+    page.emulate_media(reduced_motion="reduce")
+    page.goto(f"http://testserver/admin/{kind}")
+    page.locator("[data-selection-toggle]").click()
+    page.locator(f'.row-selection[value="{first_id}"]').check()
+    search = "#student-search" if kind == "students" else "#class-search"
+    page.locator(search).fill("Beta")
+    expect(page.locator(f'.row-selection[value="{first_id}"]')).to_have_count(0)
+    expect(page.locator("[data-selection-count]")).to_have_text(
+        "1 dipilih · 1 di luar tampilan ini"
+    )
+    page.locator('#table-selection [value="export"]').click()
+    expect(page.locator("#modal-title")).to_have_text("Ekspor 1 siswa?")
+    expect(page.locator("#modal-content")).to_contain_text("Beta")
+    expect(page.locator("#modal-content")).to_contain_text("Alpha")
+    downloads = []
+    page.on("download", lambda download: downloads.append(download))
+    page.locator("#modal-content .modal-actions [data-close-modal]").click()
+    expect(page.locator("#student-modal")).not_to_be_visible()
+    assert not downloads
+    page.locator('#table-selection [value="export"]').click()
+    expect(page.locator("#modal-title")).to_have_text("Ekspor 1 siswa?")
+    with page.expect_download() as incoming:
+        page.get_by_role("button", name="Konfirmasi ekspor").click()
+    with open(incoming.value.path(), "rb") as source:
+        book = load_workbook(source)
+    ids = {
+        row[0].value
+        for row in book["students"].iter_rows(min_row=2)
+        if row[0].value is not None
+    }
+    assert ids == {first.id}
+    assert "Beta" in book["instructions"]["D6"].value
+    expect(page.locator("#student-modal")).not_to_be_visible()
+    assert "Beta" in page.url
+
+
+def test_filtered_export_opens_confirmation_before_download(
+    card_browser, student_factory
+):
+    page, _ = card_browser
+    student_factory(name="Cut", nisn="1000000001")
+    student_factory(name="Other", nisn="1000000002")
+    page.goto("http://testserver/admin/students?q=Cut")
+    page.get_by_role("link", name="> Ekspor data", exact=True).click()
+    playwright.expect(page.locator("#modal-title")).to_have_text("Ekspor 1 siswa?")
+    playwright.expect(page.locator("#modal-content")).to_contain_text('Pencarian "Cut"')
+    with page.expect_download() as incoming:
+        page.get_by_role("button", name="Konfirmasi ekspor").click()
+    with open(incoming.value.path(), "rb") as source:
+        book = load_workbook(source)
+    names = {
+        row[1].value
+        for row in book["students"].iter_rows(min_row=2)
+        if row[0].value is not None
+    }
+    assert names == {"Cut"}
 
 
 @pytest.mark.parametrize("kind", ["classes", "students"])
