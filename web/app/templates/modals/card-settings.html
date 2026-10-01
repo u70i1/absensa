@@ -4,29 +4,19 @@
 <aside class="card-settings-preview" aria-label="Pratinjau pengaturan kartu">
   <h3>Pratinjau kartu</h3>
   <div class="card-settings-preview-stage">
-    <img data-settings-preview src="{{ preview_uri }}" alt="Pratinjau kartu dengan foto contoh" width="800" height="1280" style="width:{{ preview_config.width_mm|float * 2.4 }}px">
+    <img data-settings-preview src="{{ preview_uri }}" alt="Pratinjau kartu dengan foto contoh" width="856" height="540">
   </div>
   <p class="card-preview-dimensions" data-preview-dimensions>{{ preview_config.width_mm|float }} × {{ preview_config.height_mm|float }} mm</p>
   <p class="field-help" data-preview-gap>Jarak antarkartu: {{ preview_config.gap_mm|float }} mm</p>
-  <p class="field-help">Menggunakan foto contoh. Tampilan diperbarui sebelum pengaturan disimpan.</p>
   <p class="field-help" data-preview-status role="status" aria-live="polite"></p>
 </aside>
 <form class="student-form" method="post" action="{{ url_for('admin_card_settings_save') }}" enctype="multipart/form-data"
   hx-post="{{ url_for('admin_card_settings_save') }}" hx-encoding="multipart/form-data" hx-target="#modal-content" hx-swap="innerHTML"
   hx-disabled-elt="find button[type='submit']" hx-sync="this:drop" data-card-settings data-preview-url="{{ url_for('admin_card_settings_preview') }}">
   {% if error %}<p class="form-errors" role="alert">{{ error }}</p>{% endif %}
-  <input type="hidden" name="dimension_source" value="{{ values.dimension_source or 'width' }}">
   <fieldset class="card-settings-section">
-    <legend>Ukuran kartu</legend>
-    <div class="form-field"><label for="card-width">Lebar kartu (mm)</label><div class="card-measure-controls"><input id="card-width" name="width_mm" type="number" min="40" max="125" step="0.005" value="{{ values.width_mm }}" required><input id="card-width-slider" type="range" min="40" max="125" step="0.005" value="{{ values.width_mm }}" data-card-measure="width_mm" aria-label="Geser lebar kartu (mm)"></div></div>
-    <div class="form-field"><label for="card-height">Tinggi kartu (mm)</label><div class="card-measure-controls"><input id="card-height" name="height_mm" type="number" min="64" max="200" step="0.008" value="{{ values.height_mm }}" required><input id="card-height-slider" type="range" min="64" max="200" step="0.008" value="{{ values.height_mm }}" data-card-measure="height_mm" aria-label="Geser tinggi kartu (mm)"></div><p class="field-help">Rasio tetap 5:8. Ukuran awal 70 × 112 mm. Batas tinggi 200 mm berarti lebar maksimal 125 mm.</p></div>
-    <div class="form-field"><label for="card-gap">Jarak antarkartu (mm)</label><div class="card-measure-controls"><input id="card-gap" name="gap_mm" type="number" min="0" max="200" step="0.1" value="{{ values.gap_mm }}" required><input id="card-gap-slider" type="range" min="0" max="200" step="0.1" value="{{ values.gap_mm }}" data-card-measure="gap_mm" aria-label="Geser jarak antarkartu (mm)"></div></div>
-  </fieldset>
-  <fieldset class="card-settings-section">
-    <legend>Rasio foto</legend>
-    <p class="field-help" id="photo-ratio-help">Rasio lebar : tinggi, awal 3 : 4 untuk pasfoto 3×4. Boleh desimal, misalnya 3.5 : 4.5. Foto memenuhi lebar area foto dan dipotong di tengah. Rasio yang terlalu tinggi dipotong agar tetap muat pada kartu.</p>
-    <div class="form-field"><label for="photo-ratio-width">Rasio lebar foto</label><input id="photo-ratio-width" name="photo_ratio_width" type="number" min="0" step="any" value="{{ values.photo_ratio_width }}" aria-describedby="photo-ratio-help" required></div>
-    <div class="form-field"><label for="photo-ratio-height">Rasio tinggi foto</label><input id="photo-ratio-height" name="photo_ratio_height" type="number" min="0" step="any" value="{{ values.photo_ratio_height }}" aria-describedby="photo-ratio-help" required></div>
+    <legend>Jarak cetak</legend>
+    <div class="form-field"><label for="card-gap">Jarak antarkartu (mm)</label><div class="card-measure-controls"><input id="card-gap" name="gap_mm" type="number" min="0" max="200" step="0.001" value="{{ values.gap_mm }}" required><input id="card-gap-slider" type="range" min="0" max="200" step="0.001" value="{{ values.gap_mm }}" data-card-measure="gap_mm" aria-label="Geser jarak antarkartu (mm)"></div></div>
   </fieldset>
   <fieldset class="card-settings-section">
     <legend>Watermark kartu</legend>

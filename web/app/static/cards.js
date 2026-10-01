@@ -22,16 +22,12 @@ function queueSettingsPreview(form) {
   clearSettingsPreview();
   const layout = form.closest('.card-settings-layout');
   const status = layout.querySelector('[data-preview-status]');
-  const fields = ['width_mm', 'height_mm', 'gap_mm', 'photo_ratio_width', 'photo_ratio_height'];
+  const fields = ['gap_mm'];
   if (fields.some(name => !form.elements[name].checkValidity())) {
-    status.textContent = 'Periksa ukuran dan rasio foto untuk memperbarui pratinjau.';
+    status.textContent = 'Periksa jarak antarkartu untuk memperbarui pratinjau.';
     return;
   }
-  const width = form.elements.width_mm.valueAsNumber;
-  const height = form.elements.height_mm.valueAsNumber;
   const gap = form.elements.gap_mm.valueAsNumber;
-  layout.querySelector('[data-settings-preview]').style.width = `${width * 2.4}px`;
-  layout.querySelector('[data-preview-dimensions]').textContent = `${width} × ${height} mm`;
   layout.querySelector('[data-preview-gap]').textContent = `Jarak antarkartu: ${gap} mm`;
   cardSettingsPreviewTimer = setTimeout(async () => {
     const controller = new AbortController();
@@ -70,16 +66,6 @@ function validateWatermark(form) {
   const hasName = Boolean(form.elements.school_name.value.trim());
   form.elements.school_name.setCustomValidity(hasLogo !== hasName
     ? 'Isi nama sekolah dan logo bersama-sama, atau kosongkan keduanya.' : '');
-}
-
-function validatePhotoRatio(form) {
-  if (!form) return;
-  ['photo_ratio_width', 'photo_ratio_height'].forEach(name => {
-    const input = form.elements[name];
-    const value = input.valueAsNumber;
-    input.setCustomValidity(Number.isFinite(value) && value > 0
-      ? '' : 'Rasio foto harus berupa angka positif. Boleh menggunakan desimal.');
-  });
 }
 
 document.addEventListener('click', (event) => {
@@ -145,7 +131,6 @@ document.getElementById('student-modal')?.addEventListener('close', () => {
 function validateCardSettings() {
   const form = document.querySelector('[data-card-settings]');
   validateWatermark(form);
-  validatePhotoRatio(form);
   syncCardMeasureSliders(form);
 }
 document.addEventListener('htmx:afterSwap', validateCardSettings);
@@ -156,15 +141,6 @@ document.addEventListener('input', (event) => {
   const name = event.target.dataset.cardMeasure || event.target.name;
   if (event.target.dataset.cardMeasure) form.elements[name].value = event.target.value;
   if (name === 'school_name') validateWatermark(form);
-  if (['photo_ratio_width', 'photo_ratio_height'].includes(name)) validatePhotoRatio(form);
-  if (['width_mm', 'height_mm'].includes(name)) {
-    const value = form.elements[name].valueAsNumber;
-    if (Number.isFinite(value) && value > 0) {
-      const widthChanged = name === 'width_mm';
-      form.elements.dimension_source.value = widthChanged ? 'width' : 'height';
-      form.elements[widthChanged ? 'height_mm' : 'width_mm'].value = Number((value * (widthChanged ? 8 / 5 : 5 / 8)).toFixed(3));
-    }
-  }
   syncCardMeasureSliders(form);
   if (name !== 'logo') queueSettingsPreview(form);
 });

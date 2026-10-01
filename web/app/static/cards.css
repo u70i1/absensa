@@ -8,11 +8,11 @@
 .card-settings-section legend { padding: 0 var(--space-3) 0 0; font-weight: var(--font-weight-semibold); font-size: var(--font-size-subheading); }
 .card-settings-section .field-help { margin: 0; }
 .student-modal:has([data-card-settings]), .dialog-card:has([data-card-settings]) { width: 1080px; max-width: calc(100vw - var(--space-6) - var(--space-6)); }
-.card-settings-layout { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); align-items: start; gap: var(--space-9); }
+.card-settings-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: var(--space-9); }
 .card-settings-preview { position: sticky; top: 0; display: grid; justify-items: center; gap: var(--space-5); min-width: 0; padding: var(--space-6); border: var(--border-subtle); border-radius: var(--radius-surface); background: var(--color-surface-container-low); text-align: center; }
 .card-settings-preview h3, .card-settings-preview p { margin: 0; }
 .card-settings-preview-stage { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 140px; }
-.card-settings-preview-stage img { display: block; max-width: 100%; height: auto; }
+.card-settings-preview-stage img { display: block; width: 100%; height: auto; aspect-ratio: 85.6 / 53.98; }
 .card-preview-dimensions { font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; }
 .card-settings-layout > .student-form { min-width: 0; }
 .card-measure-controls { display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: center; gap: var(--space-5); }
@@ -21,7 +21,6 @@
 @media (max-width: 760px) {
   .card-settings-layout { grid-template-columns: minmax(0, 1fr); }
   .card-settings-preview { position: static; }
-  .card-settings-preview-stage img { max-width: 200px; }
 }
 .card-logo-editor { display: grid; justify-items: start; gap: var(--space-5); }
 .card-logo-label { font-weight: var(--font-weight-medium); }

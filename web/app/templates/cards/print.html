@@ -8,7 +8,7 @@
   .student-card { display: inline-block; vertical-align: top; width: {{ config.width_mm }}mm; height: {{ config.height_mm }}mm;
     margin: 0 {{ config.gap_mm }}mm {{ config.gap_mm }}mm 0; padding: 0;
     break-inside: avoid; page-break-inside: avoid; }
-  .student-card img { display: block; width: 100%; height: 100%; aspect-ratio: 5 / 8; }
+  .student-card img { display: block; width: 100%; height: 100%; aspect-ratio: 85.6 / 53.98; }
   @media screen { body { padding: 10mm; background: #e8edeb; } }
   @media print { html, body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
 </style></head><body><main class="cards">{% for card in cards %}<article class="student-card"><img src="{{ card.uri }}" alt="Kartu {{ card.name }}"></article>{% endfor %}</main>

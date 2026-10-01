@@ -140,13 +140,8 @@ def settings_error_values(db, data):
         {
             key: data[key]
             for key in (
-                "width_mm",
-                "height_mm",
                 "gap_mm",
-                "photo_ratio_width",
-                "photo_ratio_height",
                 "school_name",
-                "dimension_source",
                 "remove_logo",
             )
             if key in data
@@ -165,13 +160,8 @@ def settings_form_values(data):
         {
             key: data.get(key, default)
             for key, default in {
-                "width_mm": "70",
-                "height_mm": "112",
                 "gap_mm": "3",
-                "photo_ratio_width": "3",
-                "photo_ratio_height": "4",
                 "school_name": "",
-                "dimension_source": "width",
             }.items()
         }
     )
@@ -223,7 +213,7 @@ def save_settings(
         message = (
             exc.detail
             if isinstance(exc, AppException)
-            else "Periksa ukuran kartu (lebar 40–125 mm, tinggi 64–200 mm, rasio 5:8), jarak 0–200 mm, rasio foto berupa angka positif (boleh desimal), dan nama sekolah maksimal 160 karakter."
+            else "Periksa jarak antarkartu (0–200 mm, maksimal 3 angka desimal) dan nama sekolah maksimal 160 karakter."
         )
         return render_settings(
             request,

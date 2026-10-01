@@ -53,26 +53,17 @@ def test_card_ui_ratio_selection_preview_and_confirmation(
     page, context = card_browser
     page.goto("http://testserver/admin/cards")
     page.get_by_role("button", name="Pengaturan cetak").click()
-    assert page.locator("#photo-ratio-width").input_value() == "3.0"
-    assert page.locator("#photo-ratio-height").input_value() == "4.0"
-    page.locator("#photo-ratio-width").fill("3.5")
-    page.locator("#photo-ratio-height").fill("0")
-    assert not page.locator("#photo-ratio-height").evaluate(
-        "input => input.checkValidity()"
+    assert (
+        page.locator(
+            "#card-width, #card-height, #photo-ratio-width, #photo-ratio-height"
+        ).count()
+        == 0
     )
-    page.locator("#photo-ratio-height").fill("4.5")
-    assert page.locator("#photo-ratio-width").evaluate("input => input.checkValidity()")
-    assert page.locator("#photo-ratio-height").evaluate(
-        "input => input.checkValidity()"
-    )
-    page.locator("#card-width").fill("80")
-    assert page.locator("#card-height").input_value() == "128"
-    page.locator("#card-height").fill("100")
-    assert page.locator("#card-width").input_value() == "62.5"
+    page.locator("#card-gap").fill("4")
+    assert page.locator("#card-gap-slider").input_value() == "4"
     page.get_by_role("button", name="Simpan pengaturan").click()
     page.get_by_text("Pengaturan cetak berhasil disimpan untuk semua kartu.").wait_for()
-    assert page.locator("#photo-ratio-width").input_value() == "3.5"
-    assert page.locator("#photo-ratio-height").input_value() == "4.5"
+    assert page.locator("#card-gap").input_value() == "4.000"
     page.locator("[data-close-modal]").first.click()
     page.locator("#student-modal").wait_for(state="hidden")
     page.locator("#card-scope").select_option("selected")
@@ -94,7 +85,7 @@ def test_card_ui_ratio_selection_preview_and_confirmation(
     page.locator('#modal-content img[alt^="Kartu"]').wait_for()
     assert (
         page.locator("#modal-content img").evaluate("image => image.naturalWidth")
-        == 800
+        == 856
     )
     page.locator("[data-close-modal]").first.click()
     page.locator("#student-modal").wait_for(state="hidden")
@@ -128,38 +119,27 @@ def test_settings_preview_sliders_and_keyboard_stay_synchronized(
         preview.bounding_box()["x"]
         < page.locator("[data-card-settings]").bounding_box()["x"]
     )
-    page.locator("#card-width-slider").focus()
-    page.locator("#card-width-slider").press("ArrowRight")
-    expect(page.locator("#card-width")).to_have_value("70.005")
-    expect(page.locator("#card-height")).to_have_value("112.008")
-    expect(page.locator("#card-height-slider")).to_have_value("112.008")
-    page.locator("#card-height").fill("200")
-    expect(page.locator("#card-height-slider")).to_have_value("200")
-    expect(page.locator("#card-width")).to_have_value("125")
-    expect(page.locator("#card-width-slider")).to_have_value("125")
-    page.locator("#card-height-slider").press("ArrowLeft")
-    expect(page.locator("#card-height")).to_have_value("199.992")
-    expect(page.locator("#card-width")).to_have_value("124.995")
+    assert (
+        page.locator(
+            '[name="width_mm"], [name="height_mm"], [name="photo_ratio_width"], [name="photo_ratio_height"]'
+        ).count()
+        == 0
+    )
     page.locator("#card-gap").fill("35.5")
     expect(page.locator("#card-gap-slider")).to_have_value("35.5")
     page.locator("#card-gap-slider").focus()
-    page.locator("#card-gap-slider").press("End")
+    with page.expect_response("**/settings/preview") as incoming:
+        page.locator("#card-gap-slider").press("End")
+    response = incoming.value.json()
+    assert (response["width_mm"], response["height_mm"], response["gap_mm"]) == (
+        85.6,
+        53.98,
+        200,
+    )
     expect(page.locator("#card-gap")).to_have_value("200")
-    page.locator("#photo-ratio-width").fill("1")
-    page.locator("#photo-ratio-height").fill("1")
-    page.wait_for_function(
-        "initial => document.querySelector('[data-settings-preview]').src !== initial",
-        arg=initial,
-    )
-    page.wait_for_function("""() => {
-      const svg = atob(document.querySelector('[data-settings-preview]').src.split(',')[1]);
-      const photo = new DOMParser().parseFromString(svg, 'image/svg+xml').querySelector('image[clip-path]');
-      return Number(photo.getAttribute('width')) === Number(photo.getAttribute('height'));
-    }""")
+    expect(preview).to_have_attribute("src", initial)
     expect(page.locator("[data-preview-status]")).to_have_text("")
-    expect(page.locator("[data-preview-dimensions]")).to_have_text(
-        "124.995 × 199.992 mm"
-    )
+    expect(page.locator("[data-preview-dimensions]")).to_have_text("85.6 × 53.98 mm")
     expect(page.locator("[data-preview-gap]")).to_have_text("Jarak antarkartu: 200 mm")
     assert get_settings(db_session) == CardSettings()
     page.locator("#student-modal").screenshot(
@@ -182,7 +162,8 @@ def test_settings_preview_sliders_and_keyboard_stay_synchronized(
         page.get_by_text("Pengaturan cetak berhasil disimpan untuk semua kartu.")
     ).to_be_visible()
     expect(page.locator("#card-gap-slider")).to_have_value("200")
-    assert get_settings(db_session).height_mm == Decimal("199.992")
+    assert get_settings(db_session).gap_mm == Decimal(200)
+    assert get_settings(db_session).height_mm == Decimal("53.98")
 
 
 def test_print_pdf_has_whole_cards_across_paper_sizes(
@@ -200,7 +181,11 @@ def test_print_pdf_has_whole_cards_across_paper_sizes(
     page.set_content(response.text, wait_until="load")
     page.wait_for_function("window.printWasCalled === true")
     assert page.locator(".student-card").count() == 9
-    for paper, landscape in [("A4", False), ("Letter", False), ("A4", True)]:
+    for paper, landscape, pages in [
+        ("A4", False, 2),
+        ("Letter", False, 2),
+        ("A4", True, 1),
+    ]:
         document = tmp_path / f"cards-{paper}-{landscape}.pdf"
         page.pdf(
             path=str(document), format=paper, landscape=landscape, print_background=True
@@ -213,7 +198,7 @@ def test_print_pdf_has_whole_cards_across_paper_sizes(
             capture_output=True,
         )
         raster_pages = sorted(tmp_path.glob(f"{raster_prefix.name}-*.png"))
-        assert len(raster_pages) == 3
+        assert len(raster_pages) == pages
         complete_cards = 0
         for raster in raster_pages:
             with Image.open(raster).convert("RGB") as image:
@@ -241,9 +226,9 @@ def test_print_pdf_has_whole_cards_across_paper_sizes(
                                 if ink[neighbor]:
                                     ink[neighbor] = 0
                                     stack.append(neighbor)
-                    if right - left > 190 and bottom - top > 250:
-                        assert 196 <= right - left <= 200
-                        assert 315 <= bottom - top <= 320
+                    if right - left > 235 and bottom - top > 145:
+                        assert 241 <= right - left <= 245
+                        assert 151 <= bottom - top <= 155
                         complete_cards += 1
         assert complete_cards == 9
 
@@ -252,7 +237,7 @@ def test_school_logo_editor(card_browser, tmp_path):
     page, _ = card_browser
     page.goto("http://testserver/admin/cards")
     page.get_by_role("button", name="Pengaturan cetak").click()
-    playwright.expect(page.get_by_role("group", name="Ukuran kartu")).to_have_count(1)
+    playwright.expect(page.get_by_role("group", name="Jarak cetak")).to_have_count(1)
     playwright.expect(page.get_by_role("group", name="Watermark kartu")).to_have_count(
         1
     )
