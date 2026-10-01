@@ -19,8 +19,9 @@
     </form>
     <div class="control-actions">
       <button type="button" class="button secondary" data-selection-toggle aria-pressed="false" aria-controls="table-selection">Pilih</button>
-      {% if not card_mode %}<a class="button tertiary" href="{{ url_for('admin_students_export') }}?{{ request.url.query }}"
-        download>&gt; Ekspor data</a>
+      {% if not card_mode %}<a class="button tertiary" href="{{ url_for('admin_students_export_confirm') }}?{{ request.url.query }}"
+        hx-get="{{ url_for('admin_students_export_confirm') }}?{{ request.url.query }}" hx-target="#modal-content"
+        hx-swap="innerHTML" aria-haspopup="dialog">&gt; Ekspor data</a>
       <button id="add-student" class="button primary" type="button"
         hx-get="{{ url_for('admin_student_new') }}?{{ request.url.query }}" hx-target="#modal-content"
         hx-swap="innerHTML" aria-haspopup="dialog">+ Tambah Siswa</button>{% endif %}

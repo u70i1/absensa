@@ -1,0 +1,24 @@
+<div class="modal-heading">
+  <h2 id="modal-title" tabindex="-1">Ekspor {{ export_count }} siswa?</h2>
+  <p>Tinjau jumlah dan pilihan data sebelum mengunduh file Excel.</p>
+</div>
+<dl class="student-details">
+  <div><dt>Jumlah siswa</dt><dd>{{ export_count }} siswa</dd></div>
+  {% if selection_kind == 'classes' %}<div><dt>Kelas terpilih</dt><dd>{{ selection_count }} kelas</dd></div>{% endif %}
+  <div><dt>{{ 'Filter daftar' if selection_kind else 'Filter' }}</dt><dd>{{ filter_summary }}</dd></div>
+  <div><dt>Lingkup ekspor</dt><dd>{{ scope }}</dd></div>
+</dl>
+{% if selection_kind %}
+<p class="field-help">Semua pilihan Anda ikut diekspor, termasuk pilihan dari halaman atau filter sebelumnya.</p>
+<ul class="selection-review">
+  {% for record in selected_records %}<li>{% if selection_kind == 'students' %}{{ record.name }} · {{ record.nisn }}{% else %}Jenjang {{ record.grade }} · {{ record.class_name }}{% endif %}</li>{% endfor %}
+</ul>
+{% endif %}
+<p class="field-help">Sheet classes tetap memuat seluruh daftar kelas ({{ directory_class_count }} kelas) agar file dapat digunakan untuk impor kembali.</p>
+<form method="{{ download_method }}" action="{{ download_url }}" hx-boost="false" data-export-download>
+  {% for name, value in download_fields %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+  <div class="modal-actions">
+    <button type="button" class="button secondary" data-close-modal>Batal</button>
+    <button type="submit" class="button primary">Konfirmasi ekspor</button>
+  </div>
+</form>

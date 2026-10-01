@@ -10,6 +10,31 @@ from sqlalchemy.orm import Session
 PAGE_SIZE = 50
 
 
+def student_filter_summary(query: StudentListQuery, classes) -> str:
+    """Describe the same student filters used by the dashboard and export."""
+    filters = []
+    if query.q:
+        filters.append(f'Pencarian "{query.q}"')
+    if query.name:
+        filters.append(f'Nama "{query.name}"')
+    if query.nisn:
+        filters.append(f"NISN {query.nisn}")
+    selected_class = next(
+        (item for item in classes if item.class_id == query.class_id), None
+    )
+    if query.unassigned:
+        filters.append("Tanpa kelas")
+    elif selected_class:
+        filters.append(
+            f"Kelas {selected_class.class_name} (Jenjang {selected_class.grade})"
+        )
+    elif query.grade is not None:
+        filters.append(f"Jenjang {query.grade}")
+    if query.class_name:
+        filters.append(f'Nama kelas "{query.class_name}"')
+    return ", ".join(filters) or "Semua siswa"
+
+
 def list_url(query: StudentListQuery, *, base_url="/admin/students", **changes) -> str:
     values = query.model_dump(by_alias=True, exclude={"limit"}) | changes
     values = {

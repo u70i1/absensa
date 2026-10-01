@@ -6,6 +6,7 @@ from io import BytesIO
 from urllib.parse import urlsplit
 
 import pytest
+from openpyxl import load_workbook
 from PIL import Image
 
 playwright = pytest.importorskip("playwright.sync_api")
@@ -301,6 +302,75 @@ def test_selection_survives_student_pagination(card_browser, db_session, dashboa
         "form => new FormData(form).getAll('ids')"
     )
     assert set(ids) == {str(first_id), str(last_id)}
+
+
+@pytest.mark.parametrize("kind", ["students", "classes"])
+def test_selected_export_can_cancel_and_download_retained_selection(
+    card_browser, class_factory, student_factory, kind
+):
+    page, _ = card_browser
+    expect = playwright.expect
+    first_class = class_factory(class_name="Alpha")
+    second_class = class_factory(class_name="Beta")
+    first = student_factory(name="Alpha", class_id=first_class.class_id)
+    student_factory(name="Beta", nisn="1000000002", class_id=second_class.class_id)
+    first_id = first.id if kind == "students" else first_class.class_id
+    page.emulate_media(reduced_motion="reduce")
+    page.goto(f"http://testserver/admin/{kind}")
+    page.locator("[data-selection-toggle]").click()
+    page.locator(f'.row-selection[value="{first_id}"]').check()
+    search = "#student-search" if kind == "students" else "#class-search"
+    page.locator(search).fill("Beta")
+    expect(page.locator(f'.row-selection[value="{first_id}"]')).to_have_count(0)
+    expect(page.locator("[data-selection-count]")).to_have_text(
+        "1 dipilih · 1 di luar tampilan ini"
+    )
+    page.locator('#table-selection [value="export"]').click()
+    expect(page.locator("#modal-title")).to_have_text("Ekspor 1 siswa?")
+    expect(page.locator("#modal-content")).to_contain_text("Beta")
+    expect(page.locator("#modal-content")).to_contain_text("Alpha")
+    downloads = []
+    page.on("download", lambda download: downloads.append(download))
+    page.locator("#modal-content .modal-actions [data-close-modal]").click()
+    expect(page.locator("#student-modal")).not_to_be_visible()
+    assert not downloads
+    page.locator('#table-selection [value="export"]').click()
+    expect(page.locator("#modal-title")).to_have_text("Ekspor 1 siswa?")
+    with page.expect_download() as incoming:
+        page.get_by_role("button", name="Konfirmasi ekspor").click()
+    with open(incoming.value.path(), "rb") as source:
+        book = load_workbook(source)
+    ids = {
+        row[0].value
+        for row in book["students"].iter_rows(min_row=2)
+        if row[0].value is not None
+    }
+    assert ids == {first.id}
+    assert "Beta" in book["instructions"]["D6"].value
+    expect(page.locator("#student-modal")).not_to_be_visible()
+    assert "Beta" in page.url
+
+
+def test_filtered_export_opens_confirmation_before_download(
+    card_browser, student_factory
+):
+    page, _ = card_browser
+    student_factory(name="Cut", nisn="1000000001")
+    student_factory(name="Other", nisn="1000000002")
+    page.goto("http://testserver/admin/students?q=Cut")
+    page.get_by_role("link", name="> Ekspor data", exact=True).click()
+    playwright.expect(page.locator("#modal-title")).to_have_text("Ekspor 1 siswa?")
+    playwright.expect(page.locator("#modal-content")).to_contain_text('Pencarian "Cut"')
+    with page.expect_download() as incoming:
+        page.get_by_role("button", name="Konfirmasi ekspor").click()
+    with open(incoming.value.path(), "rb") as source:
+        book = load_workbook(source)
+    names = {
+        row[1].value
+        for row in book["students"].iter_rows(min_row=2)
+        if row[0].value is not None
+    }
+    assert names == {"Cut"}
 
 
 @pytest.mark.parametrize("kind", ["classes", "students"])

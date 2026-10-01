@@ -52,6 +52,14 @@ document.addEventListener("click", (event) => {
   if (event.target.closest("[data-close-modal]")) closeModal();
 });
 
+// Let the browser handle the attachment response from the confirmation form.
+document.addEventListener("submit", (event) => {
+  if (event.target.matches("[data-export-download]") && modal.open) {
+    // Capture the form fields before closing/clearing the modal.
+    window.setTimeout(closeModal, 0);
+  }
+});
+
 // Delegate to the real link so rows replaced by HTMX remain clickable.
 document.addEventListener("click", (event) => {
   if (event.defaultPrevented || event.target.closest("a, button, input, select, textarea")) return;
