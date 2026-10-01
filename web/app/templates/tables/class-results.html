@@ -51,8 +51,6 @@
     </form>
     <div class="control-actions">
       <button type="button" class="button secondary" data-selection-toggle aria-pressed="false" aria-controls="table-selection">Pilih</button>
-      <a class="button tertiary" href="{{ url_for('admin_classes_export') }}?{{ filter_query }}" download>&gt; Ekspor
-        data</a>
       <button id="add-class" class="button class-add-button" type="button"
         hx-get="{{ url_for('admin_class_new') }}?{{ filter_query }}" hx-target="#modal-content" hx-swap="innerHTML"
         aria-haspopup="dialog">

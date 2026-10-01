@@ -127,7 +127,9 @@ def export_students(request: Request, db: Db):
 
     students = student_service.get_students_for_export(db, query)
     content = export_service.build_students_workbook(
-        students, ", ".join(filters) or "Semua siswa"
+        students,
+        ", ".join(filters) or "Semua siswa",
+        class_service.get_class_options(db),
     )
     filename = datetime.now(ZoneInfo(settings.timezone)).strftime(
         "ekspor-siswa-%Y-%m-%d.xlsx"

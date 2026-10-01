@@ -1,5 +1,6 @@
-"""Review spreadsheets and archive photos, then apply selected rows atomically."""
+"""Review spreadsheets and archive photos, then apply entire workbooks atomically."""
 
+import re
 from collections import Counter
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
@@ -7,25 +8,27 @@ from io import BytesIO
 from pathlib import Path
 from secrets import token_urlsafe
 from typing import BinaryIO
-from zipfile import ZipFile
+from zipfile import BadZipFile, ZipFile
 
 from app.models.class_ import Class
 from app.models.import_batch import ImportBatch, ImportPhoto
 from app.models.student import Student
 from app.schemas.import_ import ClassImportRow, StudentImportRow
 from app.services import (
-    class_service,
     import_archive_service,
     student_photo_service,
-    student_service,
 )
 from app.services.exceptions import AppException
-from app.services.export_service import CLASS_COLUMNS, STUDENT_COLUMNS
+from app.services.export_service import (
+    CLASS_COLUMNS,
+    STUDENT_COLUMNS,
+    class_lookup_formula,
+)
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 from pydantic import ValidationError
-from sqlalchemy import delete, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import delete, select, text
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 MAX_BYTES = 10 * 1024 * 1024
@@ -33,7 +36,7 @@ MAX_ROWS = 10000
 COLUMNS = {"students": STUDENT_COLUMNS, "classes": CLASS_COLUMNS}
 FIELD_ERRORS = {
     "id": "ID harus berupa bilangan bulat positif, atau kosong untuk data baru.",
-    "class_id": "ID KELAS harus berupa bilangan bulat positif, atau kosong jika belum ditentukan.",
+    "class_id": "ID KELAS harus berupa ID angka atau ID sementara seperti N1 yang tercantum pada sheet classes.",
     "name": "NAMA wajib diisi, maksimal 255 karakter.",
     "nisn": "NISN wajib berisi tepat 10 digit. Gunakan format teks untuk mempertahankan nol di depan.",
     "current": "STATUS wajib diisi dengan Aktif atau Tidak aktif.",
@@ -43,11 +46,11 @@ FIELD_ERRORS = {
 }
 
 
-def _error(kind, row, field, message):
+def _error(kind, row, field, message, sheet_name=None):
     column = next(i for i, (_, key) in enumerate(COLUMNS[kind], 1) if key == field)
     return {
-        "cell": f"{get_column_letter(column)}{row}",
-        "sheet": kind,
+        "cell": f"{row}:{get_column_letter(column)}",
+        "sheet": sheet_name or kind,
         "message": message,
     }
 
@@ -61,6 +64,12 @@ def _value(field, value):
         if value not in ("Aktif", "Tidak aktif"):
             raise ValueError(FIELD_ERRORS[field])
         return value == "Aktif"
+    if (
+        field == "class_id"
+        and isinstance(value, str)
+        and re.fullmatch(r"N[1-9][0-9]*", value)
+    ):
+        return value
     if field in {"id", "class_id", "grade"}:
         if isinstance(value, bool):
             raise ValueError(FIELD_ERRORS[field])
@@ -77,14 +86,24 @@ def _value(field, value):
             field in {"nisn", "guardian_phone"}
             and isinstance(value, (int, float))
             and not isinstance(value, bool)
+            and int(value) == value
         ):
-            if int(value) == value:
-                return str(int(value))
+            return str(int(value))
         raise ValueError(FIELD_ERRORS[field])
     return value
 
 
-def _read_rows(content: bytes, kind: str | None = None):
+def _is_class_lookup(value, row: int, result_column: int) -> bool:
+    if not isinstance(value, str):
+        return False
+    # Calc serializes FALSE as FALSE(); both are standard XLSX formulas.
+    normalized = (
+        re.sub(r"\s+", "", value).upper().replace("FALSE()", "FALSE").replace("$", "")
+    )
+    return normalized == class_lookup_formula(row, result_column).upper()
+
+
+def _read_rows(content: bytes):
     try:
         with ZipFile(BytesIO(content)) as archive:
             entries = archive.infolist()
@@ -108,62 +127,131 @@ def _read_rows(content: bytes, kind: str | None = None):
             "File Excel rusak atau bukan file .xlsx yang valid.", 422
         ) from exc
     try:
-        detected = [name for name in COLUMNS if name in workbook.sheetnames]
-        if kind is None:
-            if len(detected) != 1:
-                raise AppException(
-                    "File harus memiliki tepat satu sheet data: students atau classes.",
-                    422,
+        parsed, errors, used_rows = [], [], 0
+        for required in ("instructions", "students", "classes"):
+            if required not in workbook.sheetnames:
+                errors.append(
+                    {
+                        "sheet": required,
+                        "cell": "1:A",
+                        "message": "Sheet wajib tidak ditemukan. Jangan mengganti nama sheet.",
+                    }
                 )
-            kind = detected[0]
-        if kind not in workbook.sheetnames:
+        if not any(name in workbook.sheetnames for name in COLUMNS):
             raise AppException(
-                f"Sheet {kind} tidak ditemukan. Gunakan template yang sesuai.", 422
-            )
-        if any(name in workbook.sheetnames for name in COLUMNS if name != kind):
-            raise AppException("Gunakan satu template siswa atau kelas per file.", 422)
-        sheet = workbook[kind]
-        columns = COLUMNS[kind]
-        if (sheet.max_row or 0) > 100000 or (sheet.max_column or 0) > len(columns):
-            raise AppException(
-                "Ukuran sheet atau jumlah kolom tidak sesuai template.", 422
-            )
-        rows = sheet.iter_rows(max_col=len(columns))
-        header = next(rows, ())
-        if tuple(cell.value for cell in header) != tuple(name for name, _ in columns):
-            raise AppException(
-                "Judul atau urutan kolom tidak sesuai template. Unduh template terbaru.",
+                " | ".join(
+                    f"{e['sheet']} > {e['cell']} > {e['message']}" for e in errors
+                ),
                 422,
             )
-        parsed, errors = [], []
-        used_rows = 0
-        schema = StudentImportRow if kind == "students" else ClassImportRow
-        for number, cells in enumerate(rows, 2):
-            if all(
-                cell.value is None
-                or (isinstance(cell.value, str) and not cell.value.strip())
-                for cell in cells
-            ):
+        sheet_specs = []
+        if "classes" in workbook.sheetnames:
+            sheet_specs.append(("classes", "classes", 0))
+        student_sheet_names = []
+        if "students" in workbook.sheetnames:
+            student_sheet_names.append("students")
+        # A copied student worksheet may use any tab name. Recognize it from
+        # its first two headers, then validate the complete header normally.
+        for name in workbook.sheetnames:
+            if name in {"instructions", "students", "classes"}:
                 continue
-            used_rows += 1
-            if used_rows > MAX_ROWS:
-                raise AppException("Maksimal 10.000 baris data per file.", 422)
-            values, row_errors = {}, []
-            for (_, field), cell in zip(columns, cells):
-                try:
-                    if cell.data_type in {"f", "e"}:
-                        raise ValueError(
-                            "Gunakan nilai langsung, bukan rumus atau nilai kesalahan Excel."
+            candidate = workbook[name]
+            first_cells = next(candidate.iter_rows(max_row=1, max_col=2), ())
+            if len(first_cells) == 2 and tuple(c.value for c in first_cells) == (
+                STUDENT_COLUMNS[0][0],
+                STUDENT_COLUMNS[1][0],
+            ):
+                student_sheet_names.append(name)
+        sheet_specs.extend(
+            ("students", name, index * 100001)
+            for index, name in enumerate(student_sheet_names, 1)
+        )
+        for kind, sheet_name, sheet_offset in sheet_specs:
+            sheet, columns = workbook[sheet_name], COLUMNS[kind]
+            if (sheet.max_row or 0) > 100000 or (sheet.max_column or 0) > 100:
+                raise AppException(
+                    f"{sheet_name} > 1:A > Ukuran sheet melebihi batas template.", 422
+                )
+            rows = sheet.iter_rows(max_col=len(columns))
+            header = next(rows, ())
+            header_errors = [
+                _error(
+                    kind,
+                    1,
+                    field,
+                    f'Kolom wajib "{name}" tidak ditemukan atau diganti. Gunakan urutan kolom template.',
+                    sheet_name,
+                )
+                for (name, field), cell in zip(columns, header)
+                if cell.value != name
+            ]
+            errors.extend(header_errors)
+            if header_errors:
+                continue
+            schema = StudentImportRow if kind == "students" else ClassImportRow
+            seen_class_ids = set()
+            for number, cells in enumerate(rows, 2):
+                if kind == "classes" and cells[0].value not in (None, ""):
+                    reference = str(cells[0].value).strip()
+                    if reference in seen_class_ids:
+                        errors.append(
+                            _error(
+                                kind,
+                                number,
+                                "class_id",
+                                "ID kelas berulang dalam sheet, termasuk baris cadangan. Setiap ID harus unik.",
+                                sheet_name,
+                            )
                         )
-                    values[field] = _value(field, cell.value)
-                except ValueError as exc:
-                    row_errors.append(_error(kind, number, field, str(exc)))
-            if not row_errors:
+                    seen_class_ids.add(reference)
+                if (
+                    kind == "classes"
+                    and isinstance(cells[0].value, str)
+                    and re.fullmatch(r"N[1-9][0-9]*", cells[0].value)
+                    and all(c.value in (None, "") for c in cells[1:])
+                ):
+                    continue
+                if all(
+                    cell.value is None
+                    or (isinstance(cell.value, str) and not cell.value.strip())
+                    or (
+                        kind == "students"
+                        and index in (6, 7)
+                        and _is_class_lookup(cell.value, number, index - 4)
+                    )
+                    for index, cell in enumerate(cells)
+                ):
+                    continue
+                used_rows += 1
+                if used_rows > MAX_ROWS:
+                    raise AppException("Maksimal 10.000 baris data per file.", 413)
+                values, row_errors = {}, []
+                for (_, field), cell in zip(columns, cells):
+                    try:
+                        if kind == "students" and field in {"grade", "class_name"}:
+                            if cell.value not in (None, "") and not _is_class_lookup(
+                                cell.value, number, 2 if field == "grade" else 3
+                            ):
+                                raise ValueError(
+                                    "Kolom ini hanya boleh berisi rumus bawaan. Ubah jenjang/nama kelas pada sheet classes, bukan students."
+                                )
+                            values[field] = None
+                            continue
+                        if cell.data_type in {"f", "e"}:
+                            raise ValueError(
+                                "Gunakan nilai langsung, bukan rumus atau nilai kesalahan Excel."
+                            )
+                        values[field] = _value(field, cell.value)
+                    except ValueError as exc:
+                        row_errors.append(
+                            _error(kind, number, field, str(exc), sheet_name)
+                        )
+                # Validate independent fields even when another cell failed parsing.
                 try:
-                    values = schema.model_validate(values).model_dump()
-                    # StudentBase omits an unspecified optional guardian phone.
+                    validated = schema.model_validate(values).model_dump()
                     if kind == "students":
-                        values.setdefault("guardian_phone", None)
+                        validated.setdefault("guardian_phone", None)
+                    values = validated
                 except ValidationError as exc:
                     row_errors.extend(
                         _error(
@@ -171,18 +259,27 @@ def _read_rows(content: bytes, kind: str | None = None):
                             number,
                             str(e["loc"][0]),
                             FIELD_ERRORS[str(e["loc"][0])],
+                            sheet_name,
                         )
                         for e in exc.errors()
                     )
-            errors.extend(row_errors)
-            if not row_errors:
-                parsed.append({"row": number, "values": values})
-        if not used_rows:
+                errors.extend(row_errors)
+                if not row_errors:
+                    parsed.append(
+                        {
+                            "row": number,
+                            "kind": kind,
+                            "sheet": sheet_name,
+                            "sheet_offset": sheet_offset,
+                            "values": values,
+                        }
+                    )
+        if not used_rows and not errors:
             raise AppException(
                 "File tidak berisi data. Isi baris di bawah judul kolom terlebih dahulu.",
                 422,
             )
-        return kind, parsed, errors, used_rows
+        return parsed, errors, used_rows, max(1, len(student_sheet_names) + 1)
     except AppException:
         raise
     except Exception as exc:
@@ -193,114 +290,155 @@ def _read_rows(content: bytes, kind: str | None = None):
         workbook.close()
 
 
-def _review_rows(db: Session, kind: str, rows: list[dict]):
-    id_field = "id" if kind == "students" else "class_id"
-    model = Student if kind == "students" else Class
-    fields = [field for _, field in COLUMNS[kind] if field != id_field]
-    ids = [
-        row["values"][id_field] for row in rows if row["values"][id_field] is not None
-    ]
-    existing = {
-        getattr(item, id_field): item
-        for item in db.scalars(select(model).where(getattr(model, id_field).in_(ids)))
-    }
+STUDENT_FIELDS = ("name", "class_id", "nisn", "current", "guardian_phone")
+
+
+def _reference_key(row, value):
+    # Temporary references are local to each workbook in an archive.
+    return (row.get("file", ""), value) if isinstance(value, str) else value
+
+
+def _review_workbook(db: Session, rows: list[dict]):
+    """Plan against the final class and student state without mutating ORM objects."""
     classes = {item.class_id: item for item in db.scalars(select(Class))}
-    if kind == "students":
-        keys = {
-            item.nisn: item.id
-            for item in db.scalars(
-                select(Student).where(
-                    Student.nisn.in_([r["values"]["nisn"] for r in rows])
-                )
-            )
-        }
-    else:
-        keys = {
-            (item.grade, item.class_name): item.class_id for item in classes.values()
-        }
-    key_for = lambda values: (
-        values["nisn"]
-        if kind == "students"
-        else (values["grade"], values["class_name"])
-    )
-    key_counts = Counter(key_for(row["values"]) for row in rows)
-    id_counts = Counter(ids)
-    valid, errors = [], []
-    for row in rows:
-        values, number = row["values"], row["row"]
-        item_id = values[id_field]
-        key = key_for(values)
-        row_errors = []
-        if item_id is not None and item_id not in existing:
-            row_errors.append(
-                _error(
-                    kind,
-                    number,
+    students = {item.id: item for item in db.scalars(select(Student))}
+    final_classes = {
+        key: (item.grade, item.class_name) for key, item in classes.items()
+    }
+    class_rows = [r for r in rows if r["kind"] == "classes"]
+    student_rows = [r for r in rows if r["kind"] == "students"]
+    errors, invalid = [], set()
+
+    def error(row, field, message):
+        errors.append(
+            {
+                **_error(
+                    row["kind"], row["row"], field, message, row.get("sheet")
+                ),
+                "file": row.get("file", ""),
+            }
+        )
+        invalid.add(id(row))
+
+    for group, existing, id_field in (
+        (class_rows, classes, "class_id"),
+        (student_rows, students, "id"),
+    ):
+        counts = Counter(_reference_key(r, r["values"][id_field]) for r in group)
+        for row in group:
+            value = row["values"][id_field]
+            if isinstance(value, int) and value not in existing:
+                error(
+                    row,
                     id_field,
-                    "ID tidak ditemukan. Untuk membuat data baru, kosongkan ID.",
+                    f"ID {value} tidak ditemukan. Jangan mengubah ID yang sudah ada; kosongkan ID untuk data baru.",
                 )
-            )
-        if item_id is not None and id_counts[item_id] > 1:
-            row_errors.append(
-                _error(
-                    kind, number, id_field, "ID muncul lebih dari sekali dalam file."
+            if value is not None and counts[_reference_key(row, value)] > 1:
+                error(
+                    row,
+                    id_field,
+                    "ID muncul lebih dari sekali dalam workbook/unggahan.",
                 )
+
+    for index, row in enumerate(class_rows):
+        values = row["values"]
+        key = (
+            _reference_key(row, values["class_id"])
+            if values["class_id"] is not None
+            else f"new:{index}"
+        )
+        final_classes[key] = (values["grade"], values["class_name"])
+    declared_classes = {
+        (row.get("file", ""), row["values"]["class_id"])
+        if row["values"]["class_id"] is not None
+        else f"new:{index}": (row["values"]["grade"], row["values"]["class_name"])
+        for index, row in enumerate(class_rows)
+    }
+    pair_counts = Counter(final_classes.values())
+    for row in class_rows:
+        values = row["values"]
+        pair = (values["grade"], values["class_name"])
+        if pair_counts[pair] > 1:
+            error(
+                row,
+                "class_name",
+                f'Kelas "{pair[1]}" pada jenjang {pair[0]} sudah terdaftar atau berulang dalam workbook.',
             )
-        if key_counts[key] > 1 or (key in keys and keys[key] != item_id):
-            row_errors.append(
-                _error(
-                    kind,
-                    number,
-                    "nisn" if kind == "students" else "class_name",
-                    "NISN sudah digunakan atau berulang dalam file."
-                    if kind == "students"
-                    else "Kombinasi jenjang dan nama kelas sudah digunakan atau berulang dalam file.",
-                )
-            )
-        if (
-            kind == "students"
-            and values["class_id"] is not None
-            and values["class_id"] not in classes
-        ):
-            row_errors.append(
-                _error(
-                    kind,
-                    number,
-                    "class_id",
-                    "Kelas tidak ditemukan. Gunakan ID kelas yang sudah terdaftar.",
-                )
-            )
-        errors.extend({**error, "file": row.get("file", "")} for error in row_errors)
-        if row_errors:
-            continue
-        before = (
-            {field: getattr(existing[item_id], field) for field in fields}
-            if item_id
+
+    final_nisns = {key: item.nisn for key, item in students.items()}
+    for index, row in enumerate(student_rows):
+        values = row["values"]
+        final_nisns[values["id"] if values["id"] is not None else f"new:{index}"] = (
+            values["nisn"]
+        )
+    nisn_counts = Counter(final_nisns.values())
+    for row in student_rows:
+        values = row["values"]
+        if nisn_counts[values["nisn"]] > 1:
+            error(row, "nisn", "NISN sudah digunakan atau berulang dalam workbook.")
+        reference = values["class_id"]
+        pair = (
+            declared_classes.get((row.get("file", ""), reference))
+            if reference is not None
             else None
         )
+        if reference is not None and (
+            pair is None or (isinstance(reference, int) and reference not in classes)
+        ):
+            error(
+                row,
+                "class_id",
+                f"ID kelas {reference} tidak ditemukan atau belum lengkap pada sheet classes. Isi kelas tersebut terlebih dahulu.",
+            )
+        if reference is None and values["id"] is None:
+            error(
+                row,
+                "class_id",
+                "ID KELAS wajib diisi untuk siswa baru. Gunakan ID dari sheet classes.",
+            )
+        row["class_key"] = list(pair) if pair is not None else None
+        row["resolved_class_id"] = reference if isinstance(reference, int) else None
+        row["class_name"] = pair[1] if pair is not None else "—"
+
+    valid = []
+    for row in rows:
+        if id(row) in invalid:
+            continue
+        kind, values = row["kind"], row["values"]
+        id_field, existing, fields = (
+            ("id", students, STUDENT_FIELDS)
+            if kind == "students"
+            else ("class_id", classes, ("grade", "class_name"))
+        )
+        item = existing.get(values[id_field])
+        before = {field: getattr(item, field) for field in fields} if item else None
         changed = [
             field
             for field in fields
             if before is None or values[field] != before[field]
         ]
-        row = {
+        if kind == "students" and before is not None:
+            changed = [field for field in changed if field != "class_id"]
+            if row["resolved_class_id"] != before["class_id"] or (
+                row["class_key"] is not None and row["resolved_class_id"] is None
+            ):
+                changed.append("class_id")
+        reviewed = {
             **row,
             "before": before,
             "changed": changed,
-            "action": "create" if item_id is None else "update",
+            "action": "update" if item else "create",
         }
         if kind == "students":
-            class_ = classes.get(values["class_id"])
-            row["class_name"] = class_.class_name if class_ else "—"
-            row["photo_path"] = existing[item_id].photo_path if item_id else None
-        valid.append(row)
+            reviewed["photo_path"] = item.photo_path if item else None
+        valid.append(reviewed)
     return valid, errors
 
 
 def create_preview(
     db: Session, admin_id: int, kind: str | None, filename: str, source: BinaryIO
 ) -> ImportBatch:
-    if kind is not None and kind not in COLUMNS:
+    if kind not in (None, "students"):
         raise AppException("Jenis impor tidak ditemukan.", 404)
     archive = import_archive_service.is_archive(filename)
     if not archive and Path(filename).suffix.lower() != ".xlsx":
@@ -319,7 +457,7 @@ def create_preview(
         if archive
         else ([(filename, content)], {})
     )
-    grouped = {name: [] for name in COLUMNS}
+    all_rows = []
     errors, files = [], []
     total = offset = expanded = 0
     for name, workbook_content in workbooks:
@@ -330,41 +468,39 @@ def create_preview(
                     expanded += sum(
                         entry.file_size for entry in workbook_zip.infolist()
                     )
-            except Exception:
+            except BadZipFile as exc:
                 raise AppException(
                     "File Excel rusak atau bukan file .xlsx yang valid.", 422
-                )
+                ) from exc
             if expanded > import_archive_service.MAX_EXPANDED_BYTES:
                 raise AppException(
                     "Total isi workbook terlalu besar setelah dibuka (maksimal 200 MB).",
                     413,
                 )
-            detected, parsed, file_errors, used = _read_rows(
-                workbook_content, None if archive else kind
-            )
+            parsed, file_errors, used, sheet_slots = _read_rows(workbook_content)
             total += used
             if total > MAX_ROWS:
                 raise AppException(
                     "Maksimal 10.000 baris data untuk seluruh unggahan.", 413
                 )
             for row in parsed:
-                row.update(file=name, kind=detected, key=offset + row["row"])
-            grouped[detected].extend(parsed)
+                row.update(
+                    file=name,
+                    key=offset + row["sheet_offset"] + row["row"],
+                )
+            all_rows.extend(parsed)
             errors.extend({**error, "file": name} for error in file_errors)
-            files.append({"name": name, "kind": detected, "rows": used})
+            files.append({"name": name, "kind": "mixed", "rows": used})
             # Each sheet is bounded at 100,000 rows, so keys cannot collide.
-            offset += 100001
+            offset += sheet_slots * 100001
         except AppException as exc:
             if not archive or exc.status_code == 413:
                 raise
             errors.append(
                 {"file": name, "cell": None, "sheet": None, "message": exc.detail}
             )
-    valid = []
-    for detected, parsed in grouped.items():
-        reviewed, review_errors = _review_rows(db, detected, parsed)
-        valid.extend(reviewed)
-        errors.extend(review_errors)
+    valid, review_errors = _review_workbook(db, all_rows)
+    errors.extend(review_errors)
     staged_photos = {}
     students = {
         row["values"]["nisn"]: row for row in valid if row["kind"] == "students"
@@ -481,12 +617,22 @@ def edit_preview_row(
         )
     kind = original.get("kind", batch.kind)
     id_field = "id" if kind == "students" else "class_id"
-    fields = [field for _, field in COLUMNS[kind] if field != id_field]
+    fields = [
+        field
+        for _, field in COLUMNS[kind]
+        if field != id_field
+        and not (kind == "students" and field in {"grade", "class_name"})
+    ]
     try:
         parsed = {field: _value(field, values.get(field)) for field in fields}
         parsed[id_field] = original["values"][id_field]
+        if kind == "students":
+            parsed["grade"] = None
+            parsed["class_name"] = None
         schema = StudentImportRow if kind == "students" else ClassImportRow
         parsed = schema.model_validate(parsed).model_dump()
+        if kind == "students":
+            parsed.setdefault("guardian_phone", None)
     except ValidationError as exc:
         raise AppException(
             " ".join(FIELD_ERRORS[str(error["loc"][0])] for error in exc.errors()), 422
@@ -498,19 +644,31 @@ def edit_preview_row(
         row for row in payload["rows"] if row.get("key", row["row"]) == key
     )
     candidate["values"] = parsed
-    group = [row for row in payload["rows"] if row.get("kind", batch.kind) == kind]
-    reviewed, errors = _review_rows(db, kind, group)
+    reviewed, errors = _review_workbook(db, payload["rows"])
     if errors:
         raise AppException(errors[0]["message"], 422)
-    updated = next(row for row in reviewed if row.get("key", row["row"]) == key)
     # Do not refresh 'before': editing a draft must never bypass stale-write checks.
     candidate["changed"] = [
         field
         for field in fields
-        if original["before"] is None or parsed[field] != original["before"][field]
+        if field in (STUDENT_FIELDS if kind == "students" else ("grade", "class_name"))
+        and (original["before"] is None or parsed[field] != original["before"][field])
     ]
-    if kind == "students":
-        candidate["class_name"] = updated["class_name"]
+    for draft, refreshed in zip(payload["rows"], reviewed):
+        if draft["kind"] == "students":
+            draft["class_name"] = refreshed["class_name"]
+            draft["class_key"] = refreshed["class_key"]
+            draft["resolved_class_id"] = refreshed["resolved_class_id"]
+            draft["changed"] = [f for f in draft["changed"] if f != "class_id"]
+            if (
+                draft["before"] is None
+                or draft["resolved_class_id"] != draft["before"]["class_id"]
+                or (
+                    draft["class_key"] is not None
+                    and draft["resolved_class_id"] is None
+                )
+            ):
+                draft["changed"].append("class_id")
     if original.get("incoming_photo"):
         candidate["photo_nisn"] = original.get("photo_nisn", original["values"]["nisn"])
         candidate["changed"].append("photo_path")
@@ -528,13 +686,18 @@ def apply_preview(
         return batch  # A retry never creates duplicate records.
     if batch.state != "pending":
         raise AppException("Impor ini sudah dibatalkan. Unggah file kembali.", 409)
+    if batch.payload["errors"]:
+        raise AppException(
+            "Impor ditolak: perbaiki seluruh kesalahan lalu unggah kembali. Tidak ada siswa atau kelas yang disimpan.",
+            422,
+        )
     rows = batch.payload["rows"]
-    selected_ids = set(selected)
-    if not selected_ids or not selected_ids.issubset(
-        {row.get("key", row["row"]) for row in rows}
-    ):
-        raise AppException("Pilih setidaknya satu baris valid dari pratinjau.", 422)
-    chosen = [row for row in rows if row.get("key", row["row"]) in selected_ids]
+    if not rows or set(selected) != {row["key"] for row in rows}:
+        raise AppException(
+            "Impor harus mencakup seluruh baris workbook. Tidak ada perubahan disimpan.",
+            422,
+        )
+    chosen = deepcopy(rows)
     groups = {
         kind: [row for row in chosen if row.get("kind", batch.kind) == kind]
         for kind in ("classes", "students")
@@ -549,6 +712,15 @@ def apply_preview(
             ids = sorted(
                 row["values"][id_field] for row in group if row["before"] is not None
             )
+            if kind == "classes":
+                ids = sorted(
+                    set(ids)
+                    | {
+                        r["values"]["class_id"]
+                        for r in groups["students"]
+                        if isinstance(r["values"]["class_id"], int)
+                    }
+                )
             locked = {
                 getattr(item, id_field): item
                 for item in db.scalars(
@@ -570,47 +742,55 @@ def apply_preview(
                             "Data berubah sejak pratinjau dibuat. Batalkan lalu unggah kembali untuk meninjau perubahan terbaru.",
                             409,
                         )
-            _, errors = _review_rows(db, kind, group)
-            if errors:
-                raise AppException(
-                    "Data tidak lagi valid: "
-                    + errors[0]["message"]
-                    + " Unggah file kembali.",
-                    409,
+        _, errors = _review_workbook(db, chosen)
+        if errors:
+            raise AppException(
+                "Data tidak lagi valid: "
+                + " | ".join(
+                    f"{e['sheet']} > {e['cell']} > {e['message']}" for e in errors
                 )
-        for kind, group in groups.items():
-            id_field = "id" if kind == "students" else "class_id"
-            for row in group:
-                values = dict(row["values"])
-                item_id = values.pop(id_field)
-                if kind == "students":
-                    if item_id is None:
-                        student = student_service.post_student(
-                            db, **values, commit=False
-                        )
-                    else:
-                        student = student_service.edit_student(
-                            db, item_id, **values, commit=False
-                        )
-                    if row.get("incoming_photo"):
-                        photo = db.get(
-                            ImportPhoto, (token, row.get("photo_nisn", values["nisn"]))
-                        )
-                        if photo is None:
-                            raise AppException(
-                                "Foto pratinjau tidak tersedia. Unggah arsip kembali.",
-                                409,
-                            )
-                        path = student_photo_service.store_normalized_photo(
-                            photo.content
-                        )
-                        new_photos.append(path)
-                        old_photos.append(student.photo_path)
-                        student.photo_path = path
-                elif item_id is None:
-                    class_service.post_class(db, **values, commit=False)
-                else:
-                    class_service.update_class(db, item_id, **values, commit=False)
+                + " Unggah file kembali.",
+                409,
+            )
+        # Both unique constraints describe the final state, including swaps.
+        db.execute(
+            text("SET CONSTRAINTS uq_grade_class_name, students_nisn_key DEFERRED")
+        )
+        for row in groups["classes"]:
+            values = row["values"]
+            item = (
+                db.get(Class, values["class_id"])
+                if isinstance(values["class_id"], int)
+                else Class()
+            )
+            item.grade, item.class_name = values["grade"], values["class_name"]
+            db.add(item)
+        db.flush()
+        class_ids = {
+            (item.grade, item.class_name): item.class_id
+            for item in db.scalars(select(Class))
+        }
+        for row in groups["students"]:
+            pair = tuple(row["class_key"]) if row["class_key"] is not None else None
+            values = {field: row["values"][field] for field in STUDENT_FIELDS}
+            values["class_id"] = class_ids[pair] if pair is not None else None
+            student = _apply_student(db, row["values"]["id"], values)
+            if row.get("incoming_photo"):
+                photo = db.get(
+                    ImportPhoto, (token, row.get("photo_nisn", values["nisn"]))
+                )
+                if photo is None:
+                    raise AppException(
+                        "Foto pratinjau tidak tersedia. Unggah arsip kembali.", 409
+                    )
+                path = student_photo_service.store_normalized_photo(photo.content)
+                new_photos.append(path)
+                old_photos.append(student.photo_path)
+                student.photo_path = path
+        db.flush()
+        db.execute(
+            text("SET CONSTRAINTS uq_grade_class_name, students_nisn_key IMMEDIATE")
+        )
         batch.state = "applied"
         batch.payload = {
             "created": sum(row["action"] == "create" for row in chosen),
@@ -634,7 +814,22 @@ def apply_preview(
                 "Foto gagal disimpan. Tidak ada perubahan diterapkan. Silakan coba lagi.",
                 503,
             ) from exc
+        if isinstance(exc, SQLAlchemyError):
+            raise AppException(
+                "Penyimpanan gagal. Tidak ada perubahan siswa atau kelas yang disimpan. Silakan coba lagi.",
+                503,
+            ) from exc
         raise
     for path in old_photos:
         student_photo_service.remove_photo(path)
     return batch
+
+
+def _apply_student(db: Session, student_id: int | None, values: dict) -> Student:
+    """Apply already validated values without per-row commits or uniqueness checks."""
+    student = db.get(Student, student_id) if student_id else Student()
+    for field, value in values.items():
+        setattr(student, field, value)
+    db.add(student)
+    db.flush()
+    return student

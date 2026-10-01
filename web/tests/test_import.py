@@ -9,9 +9,10 @@ from app.models.admin import Admin
 from app.models.class_ import Class
 from app.models.import_batch import ImportBatch
 from app.models.student import Student
-from app.services import export_service, import_service, student_service
+from app.services import export_service, import_service
 from app.services.admin_auth_service import create_admin_session
 from app.services.exceptions import AppException
+from app.services.export_service import class_lookup_formula
 from openpyxl import load_workbook
 from sqlalchemy import func, select
 
@@ -26,25 +27,50 @@ def importer(client, db_session):
     return admin
 
 
-def workbook_bytes(kind, rows):
-    builder = (
-        export_service.build_students_workbook
-        if kind == "students"
-        else export_service.build_classes_workbook
+def workbook_bytes(kind, rows, *, class_name="10A"):
+    """Build a declared dictionary for the legacy six-field student fixtures."""
+    workbook = load_workbook(
+        BytesIO(export_service.build_students_workbook([], "test", []))
     )
-    workbook = load_workbook(BytesIO(builder([], "test")))
     sheet = workbook[kind]
+    class_rows = {"N1": (10, class_name)} if kind == "students" and rows else {}
     for number, row in enumerate(rows, 2):
+        if kind == "students" and len(row) == 6 and any(v is not None for v in row):
+            student_id, name, metadata_id, nisn, status, phone = row
+            grade, label = (11, "11B") if metadata_id else (10, class_name)
+            if metadata_id is not None:
+                class_rows[metadata_id] = (grade, label)
+            row = [
+                student_id,
+                name,
+                nisn,
+                status,
+                phone,
+                class_lookup_formula(number, 2),
+                class_lookup_formula(number, 3),
+                metadata_id or "N1",
+            ]
         for column, value in enumerate(row, 1):
-            sheet.cell(number, column, value)
+            sheet.cell(number, column).value = value
+    for number, (class_id, (grade, label)) in enumerate(class_rows.items(), 2):
+        for column, value in enumerate((class_id, grade, label), 1):
+            workbook["classes"].cell(number, column).value = value
     output = BytesIO()
     workbook.save(output)
     return output.getvalue()
 
 
+def selection(batch):
+    return [row["key"] for row in batch.payload.get("rows", [])]
+
+
+def student_rows(batch):
+    return [row for row in batch.payload["rows"] if row["kind"] == "students"]
+
+
 def preview(client, kind="students", rows=None, content=None, filename="data.xlsx"):
     return client.post(
-        f"/admin/import/preview/{kind}",
+        "/admin/import/preview",
         files={
             "file": (
                 filename,
@@ -83,15 +109,15 @@ def test_import_page_and_template_downloads(client, importer):
     assert page.status_code == 200
     assert "Impor data" in page.text
     assert "multiple" not in page.text
-    for kind in ("students", "classes"):
+    for kind in ("students",):
         response = client.get(f"/admin/import/template/{kind}")
         assert response.status_code == 200
         workbook = load_workbook(BytesIO(response.content))
-        assert kind in workbook.sheetnames
+        assert workbook.sheetnames == ["instructions", "students", "classes"]
         assert workbook[kind]["A2"].value is None
 
 
-def test_preview_then_selected_create_update_and_retry(
+def test_preview_then_atomic_create_update_and_retry(
     client, importer, db_session, existing_student
 ):
     student = existing_student
@@ -113,11 +139,11 @@ def test_preview_then_selected_create_update_and_retry(
     batch, page = batch_for(response, client, db_session)
     assert student.name != "Nama Baru"
     assert db_session.scalar(select(func.count()).select_from(Student)) == 1
-    assert "Konfirmasi perubahan data Siswa" in page.text
+    assert "Konfirmasi perubahan data Siswa &amp; Kelas" in page.text
     assert "import-changed" in page.text
     response = client.post(
         f"/admin/import/{batch.token}/confirm",
-        data={"selected": [2, 3]},
+        data={"selected": selection(batch)},
         follow_redirects=False,
     )
     assert response.status_code == 303
@@ -128,15 +154,15 @@ def test_preview_then_selected_create_update_and_retry(
         db_session.scalar(select(Student).where(Student.nisn == "0012345678"))
         is not None
     )
-    assert db_session.scalar(select(func.count()).select_from(Student)) == 2
+    assert db_session.scalar(select(func.count()).select_from(Student)) == 3
     assert "Impor berhasil" in client.get(response.headers["location"]).text
     assert (
         client.post(
-            f"/admin/import/{batch.token}/confirm", data={"selected": [2, 3]}
+            f"/admin/import/{batch.token}/confirm", data={"selected": selection(batch)}
         ).status_code
         == 200
     )
-    assert db_session.scalar(select(func.count()).select_from(Student)) == 2
+    assert db_session.scalar(select(func.count()).select_from(Student)) == 3
 
 
 def test_class_import_create_and_update(client, importer, db_session, existing_class):
@@ -144,10 +170,10 @@ def test_class_import_create_and_update(client, importer, db_session, existing_c
         client, "classes", [[existing_class.class_id, 12, "12Z"], [None, 10, "10X"]]
     )
     batch, page = batch_for(response, client, db_session)
-    assert "Konfirmasi perubahan data Kelas" in page.text
+    assert "Konfirmasi perubahan data Siswa &amp; Kelas" in page.text
     assert (
         client.post(
-            f"/admin/import/{batch.token}/confirm", data={"selected": [2, 3]}
+            f"/admin/import/{batch.token}/confirm", data={"selected": [100003, 100004]}
         ).status_code
         == 200
     )
@@ -156,7 +182,7 @@ def test_class_import_create_and_update(client, importer, db_session, existing_c
     assert db_session.scalar(select(func.count()).select_from(Class)) == 2
 
 
-def test_cell_errors_and_valid_rows_can_be_confirmed(client, importer, db_session):
+def test_cell_errors_block_even_valid_rows(client, importer, db_session):
     response = preview(
         client,
         rows=[
@@ -166,32 +192,31 @@ def test_cell_errors_and_valid_rows_can_be_confirmed(client, importer, db_sessio
         ],
     )
     batch, page = batch_for(response, client, db_session)
-    assert len(batch.payload["rows"]) == 1
-    assert "Sel E3; Sheet students" in page.text
-    assert "Sel B4; Sheet students" in page.text
+    assert len(student_rows(batch)) == 1
+    assert "students &gt; 3:D &gt;" in page.text
+    assert "students &gt; 4:B &gt;" in page.text
     assert (
         client.post(
-            f"/admin/import/{batch.token}/confirm", data={"selected": [2]}
+            f"/admin/import/{batch.token}/confirm", data={"selected": selection(batch)}
         ).status_code
-        == 200
+        == 422
     )
-    assert db_session.scalar(select(func.count()).select_from(Student)) == 1
+    assert db_session.scalar(select(func.count()).select_from(Student)) == 0
 
 
 @pytest.mark.parametrize(
     "row,cell",
     [
-        ([None, "N", None, "123", "Aktif", None], "D2"),
-        ([None, "N", 2147483647, "0012345678", "Aktif", None], "C2"),
-        ([2147483647, "N", None, "0012345678", "Aktif", None], "A2"),
-        ([None, "N", None, "0012345678", "Aktif", "+62812345"], "F2"),
+        ([None, "N", None, "123", "Aktif", None], "2:C"),
+        ([None, "N", 2147483647, "0012345678", "Aktif", None], "2:H"),
+        ([2147483647, "N", None, "0012345678", "Aktif", None], "2:A"),
+        ([None, "N", None, "0012345678", "Aktif", "+62812345"], "2:E"),
     ],
 )
 def test_invalid_rows_report_cells(client, importer, db_session, row, cell):
     batch, page = batch_for(preview(client, rows=[row]), client, db_session)
-    assert batch.payload["rows"] == []
-    assert f"Sel {cell}" in page.text
-    assert "File tidak dapat diproses" in page.text
+    assert student_rows(batch) == []
+    assert f"students &gt; {cell} &gt;" in page.text
     assert "data-confirm-import" not in page.text
 
 
@@ -200,9 +225,9 @@ def test_duplicates_and_empty_rows(client, importer, db_session):
     batch, _ = batch_for(
         preview(client, rows=[row, [None] * 6, row]), client, db_session
     )
-    assert batch.payload["rows"] == []
-    assert batch.payload["total"] == 2
-    assert {e["cell"] for e in batch.payload["errors"]} == {"D2", "D4"}
+    assert student_rows(batch) == []
+    assert batch.payload["total"] == 3
+    assert {e["cell"] for e in batch.payload["errors"]} == {"2:C", "4:C"}
 
 
 @pytest.mark.parametrize(
@@ -223,7 +248,7 @@ def test_empty_wrong_template_and_multiple_files(client, importer):
         preview(
             client, content=workbook_bytes("classes", [[None, 10, "10A"]])
         ).status_code
-        == 422
+        == 303
     )
     response = client.post(
         "/admin/import/preview/students",
@@ -241,7 +266,7 @@ def test_cancel_ownership_and_expiry(client, importer, db_session):
     assert client.post(f"/admin/import/{batch.token}/cancel").status_code == 200
     assert (
         client.post(
-            f"/admin/import/{batch.token}/confirm", data={"selected": [2]}
+            f"/admin/import/{batch.token}/confirm", data={"selected": selection(batch)}
         ).status_code
         == 409
     )
@@ -275,7 +300,7 @@ def test_stale_preview_does_not_overwrite_changes(
     db_session.commit()
     assert (
         client.post(
-            f"/admin/import/{batch.token}/confirm", data={"selected": [2]}
+            f"/admin/import/{batch.token}/confirm", data={"selected": selection(batch)}
         ).status_code
         == 409
     )
@@ -297,7 +322,7 @@ def test_atomic_rollback_on_later_write_failure(
         client,
         db_session,
     )
-    original = student_service.post_student
+    original = import_service._apply_student
     calls = 0
 
     def fail_second(*args, **kwargs):
@@ -307,10 +332,10 @@ def test_atomic_rollback_on_later_write_failure(
             raise AppException("simulated failure", 409)
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(student_service, "post_student", fail_second)
+    monkeypatch.setattr(import_service, "_apply_student", fail_second)
     assert (
         client.post(
-            f"/admin/import/{batch.token}/confirm", data={"selected": [2, 3]}
+            f"/admin/import/{batch.token}/confirm", data={"selected": selection(batch)}
         ).status_code
         == 409
     )

@@ -18,7 +18,7 @@ from starlette.exceptions import HTTPException
 
 router = APIRouter(prefix="/admin/import", dependencies=[Depends(require_admin)])
 Db = Annotated[Session, Depends(get_db)]
-Kind = Literal["students", "classes"]
+Kind = Literal["students"]
 
 
 def render_import(
@@ -75,9 +75,6 @@ def render_row_editor(
             "error": error,
             "revision": row.get("revision", 0) if revision is None else revision,
             "kind": row.get("kind", batch.kind),
-            "classes": list(
-                db.scalars(select(Class).order_by(Class.grade, Class.class_name))
-            ),
         },
         status_code=status_code,
     )
@@ -159,18 +156,16 @@ def import_page(
 
 
 @router.get("/template/{kind}", name="admin_import_template")
-def import_template(kind: Kind):
-    builder = (
-        export_service.build_students_workbook
-        if kind == "students"
-        else export_service.build_classes_workbook
-    )
-    label = "siswa" if kind == "students" else "kelas"
+def import_template(kind: Kind, db: Db):
     return Response(
-        builder([], "Template kosong untuk impor"),
+        export_service.build_students_workbook(
+            [],
+            "Template kosong untuk impor",
+            db.scalars(select(Class).order_by(Class.grade, Class.class_name)),
+        ),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
-            "Content-Disposition": f'attachment; filename="template-{label}.xlsx"',
+            "Content-Disposition": 'attachment; filename="template-siswa-kelas.xlsx"',
             "Cache-Control": "no-store",
         },
     )

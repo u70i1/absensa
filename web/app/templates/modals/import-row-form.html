@@ -17,13 +17,8 @@
       <label for="import-row-nisn">NISN</label>
       <input id="import-row-nisn" name="nisn" value="{{ values.nisn or '' }}" required pattern="[0-9]{10}" maxlength="10" inputmode="numeric" title="NISN harus berisi tepat 10 digit.">
     </div>
-    <div class="form-field">
-      <label for="import-row-class">Kelas</label>
-      <select id="import-row-class" name="class_id">
-        <option value="">Tidak memiliki kelas</option>
-        {% for class in classes %}<option value="{{ class.class_id }}" {% if values.class_id|string == class.class_id|string %}selected{% endif %}>{{ class.class_name }} · Jenjang {{ class.grade }}</option>{% endfor %}
-      </select>
-    </div>
+    <div class="form-field"><label for="import-row-class-id">ID kelas</label><input id="import-row-class-id" name="class_id" value="{{ values.class_id or '' }}" autocomplete="off"><p class="field-help">Ketik ID dari sheet classes, misalnya 17 atau N1. Jenjang dan nama kelas hanya dapat diubah pada sheet classes.</p></div>
+    <div class="form-field"><label>Kelas dari sheet classes</label><output>{{ row.class_name }}</output></div>
     <div class="form-field">
       <label for="import-row-current">Status siswa</label>
       <select id="import-row-current" name="current">

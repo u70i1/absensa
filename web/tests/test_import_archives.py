@@ -11,13 +11,13 @@ import libarchive
 import pytest
 from app.core.config import settings
 from app.models.class_ import Class
-from app.models.import_batch import ImportBatch, ImportPhoto
+from app.models.import_batch import ImportPhoto
 from app.models.student import Student
 from app.services import (
+    export_service,
     import_archive_service,
     import_service,
     student_photo_service,
-    student_service,
 )
 from app.services.exceptions import AppException
 from PIL import Image
@@ -39,8 +39,8 @@ def photo_bytes():
     return stream.getvalue()
 
 
-def student_row(nisn="0012345678", student_id=None):
-    return [student_id, "Imported student", None, nisn, "Aktif", None]
+def student_row(nisn="0012345678", student_id=None, class_id=None):
+    return [student_id, "Imported student", class_id, nisn, "Aktif", None]
 
 
 def zip_bytes(files):
@@ -108,7 +108,7 @@ def test_xlsx_detected_without_kind_or_filename_hint(
     batch, _ = batch_for(
         upload(client, workbook_bytes(kind, rows), "anything.xlsx"), client, db_session
     )
-    assert batch.kind == kind
+    assert batch.kind == "mixed"
     assert not batch.payload["errors"]
     assert confirm(client, batch).status_code == 303
 
@@ -156,15 +156,17 @@ def test_mixed_workbooks_unique_row_keys_and_optional_photos(
     client, importer, db_session, photo_directory
 ):
     files = {
-        "kelas.xlsx": workbook_bytes("classes", [[None, 10, "10A"]]),
+        "kelas.xlsx": workbook_bytes("classes", [[None, 10, "10C"]]),
         "siswa-a.xlsx": workbook_bytes("students", [student_row()]),
-        "siswa-b.xlsx": workbook_bytes("students", [student_row("0012345679")]),
+        "siswa-b.xlsx": workbook_bytes(
+            "students", [student_row("0012345679")], class_name="10B"
+        ),
         "photos/0012345678.png": photo_bytes(),
     }
     batch, page = batch_for(upload(client, zip_bytes(files)), client, db_session)
     assert batch.kind == "mixed"
     assert not batch.payload["errors"]  # A missing photo is expected and not an error.
-    assert len({row["key"] for row in batch.payload["rows"]}) == 3
+    assert len({row["key"] for row in batch.payload["rows"]}) == 5
     assert "siswa-a.xlsx" in page.text and "siswa-b.xlsx" in page.text
     assert db_session.scalar(select(func.count()).select_from(Student)) == 0
     assert not photo_directory.exists()
@@ -172,7 +174,7 @@ def test_mixed_workbooks_unique_row_keys_and_optional_photos(
     assert photo.status_code == 200 and photo.headers["content-type"] == "image/jpeg"
     assert confirm(client, batch).status_code == 303
     assert db_session.scalar(select(func.count()).select_from(Student)) == 2
-    assert db_session.scalar(select(func.count()).select_from(Class)) == 1
+    assert db_session.scalar(select(func.count()).select_from(Class)) == 3
     missing_photo_student = db_session.scalar(
         select(Student).where(Student.nisn == "0012345679")
     )
@@ -242,7 +244,7 @@ def test_present_invalid_and_unmatched_photos_are_reported(
         client,
         db_session,
     )
-    assert len(batch.payload["rows"]) == 1
+    assert len(batch.payload["rows"]) == 2
     assert len(batch.payload["errors"]) == 2
     assert "photos/0012345678.png" in page.text and "photos/9999999999.png" in page.text
     assert batch.payload["photo_count"] == 0
@@ -270,7 +272,7 @@ def test_duplicates_across_workbooks_and_duplicate_photos(client, importer, db_s
     assert response.status_code == 422
 
 
-def test_exclusion_and_cancel_never_write_photos(
+def test_partial_selection_rejected_and_cancel_never_writes_photos(
     client, importer, db_session, photo_directory
 ):
     content = zip_bytes(
@@ -283,9 +285,12 @@ def test_exclusion_and_cancel_never_write_photos(
     )
     batch, _ = batch_for(upload(client, content), client, db_session)
     selected = [
-        r["key"] for r in batch.payload["rows"] if r["values"]["nisn"] == "0012345679"
+        r["key"]
+        for r in batch.payload["rows"]
+        if r["kind"] == "students" and r["values"]["nisn"] == "0012345679"
     ]
-    assert confirm(client, batch, selected).status_code == 303
+    assert confirm(client, batch, selected).status_code == 422
+    assert client.post(f"/admin/import/{batch.token}/cancel").status_code == 200
     assert not photo_directory.exists()
     assert db_session.scalar(select(func.count()).select_from(ImportPhoto)) == 0
     batch, _ = batch_for(
@@ -318,7 +323,13 @@ def test_existing_photo_preserved_without_replacement(
                 {
                     "data.xlsx": workbook_bytes(
                         "students",
-                        [student_row(existing_student.nisn, existing_student.id)],
+                        [
+                            student_row(
+                                existing_student.nisn,
+                                existing_student.id,
+                                existing_student.class_id,
+                            )
+                        ],
                     )
                 }
             ),
@@ -341,7 +352,14 @@ def test_replacement_cleanup_and_stale_photo_protection(
     content = zip_bytes(
         {
             "data.xlsx": workbook_bytes(
-                "students", [student_row(existing_student.nisn, existing_student.id)]
+                "students",
+                [
+                    student_row(
+                        existing_student.nisn,
+                        existing_student.id,
+                        existing_student.class_id,
+                    )
+                ],
             ),
             f"photos/{existing_student.nisn}.png": photo_bytes(),
         }
@@ -352,7 +370,16 @@ def test_replacement_cleanup_and_stale_photo_protection(
     db_session.refresh(existing_student)
     assert existing_student.photo_path != original
     assert not student_photo_service.photo_file(original).exists()
+    content = zip_bytes(
+        {
+            "data.xlsx": export_service.build_students_workbook(
+                [existing_student], "test", db_session.scalars(select(Class))
+            ),
+            f"photos/{existing_student.nisn}.png": photo_bytes(),
+        }
+    )
     batch, _ = batch_for(upload(client, content), client, db_session)
+    assert not batch.payload["errors"]
     latest = student_photo_service.update_student_photo(
         db_session, existing_student.id, BytesIO(photo_bytes())
     )
@@ -378,14 +405,14 @@ def test_photo_rollback_if_later_data_write_fails(
         client,
         db_session,
     )
-    original = student_service.post_student
+    original = import_service._apply_student
 
     def fail_second(*args, **kwargs):
-        if kwargs["nisn"] == "0012345679":
+        if args[2]["nisn"] == "0012345679":
             raise AppException("simulated failure", 409)
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(student_service, "post_student", fail_second)
+    monkeypatch.setattr(import_service, "_apply_student", fail_second)
     assert confirm(client, batch).status_code == 409
     assert db_session.scalar(select(func.count()).select_from(Student)) == 0
     assert not list(photo_directory.glob("*.jpg"))

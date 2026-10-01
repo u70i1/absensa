@@ -13,16 +13,25 @@ from app.services.exceptions import AppException
 from PIL import Image
 from sqlalchemy import select
 
-from tests.test_import import batch_for, importer, preview, workbook_bytes  # noqa: F401
+from tests.test_import import (
+    batch_for,
+    importer,  # noqa: F401
+    preview,
+    selection,
+    student_rows,
+    workbook_bytes,
+)  # noqa: F401
 
 
 def student_values():
     return {
         "name": "Edited draft",
         "nisn": "0012345678",
-        "class_id": "",
+        "class_id": "N1",
         "current": "Tidak aktif",
         "guardian_phone": "081234567890",
+        "grade": "10",
+        "class_name": "10A",
     }
 
 
@@ -48,7 +57,7 @@ def test_edit_student_draft_then_confirm(
         client,
         db_session,
     )
-    before = deepcopy(batch.payload["rows"][0]["before"])
+    before = deepcopy(student_rows(batch)[0]["before"])
     url = f"/admin/import/{batch.token}/rows/2/edit"
     assert url in page.text
     assert "Simpan ke Pratinjau" in client.get(url).text
@@ -61,7 +70,7 @@ def test_edit_student_draft_then_confirm(
     db_session.refresh(student)
     assert student.name != "Edited draft"
     db_session.refresh(batch)
-    row = batch.payload["rows"][0]
+    row = student_rows(batch)[0]
     assert row["before"] == before and row["values"]["id"] == student.id
     assert row["values"]["current"] is False and row["revision"] == 1
     assert set(row["changed"]) == {
@@ -73,15 +82,16 @@ def test_edit_student_draft_then_confirm(
     }
     assert (
         client.post(
-            f"/admin/import/{batch.token}/confirm", data={"selected": [2]}
+            f"/admin/import/{batch.token}/confirm", data={"selected": selection(batch)}
         ).status_code
         == 200
     )
     db_session.refresh(student)
     assert student.name == "Edited draft" and student.nisn == "0012345678"
-    assert student.class_id is None and student.current is False
+    assert student.class_id is not None and student.current is False
     assert (
-        db_session.scalar(select(Student).where(Student.nisn == "0012345679")) is None
+        db_session.scalar(select(Student).where(Student.nisn == "0012345679"))
+        is not None
     )
 
 
@@ -92,7 +102,7 @@ def test_edit_student_draft_then_confirm(
         {"name": " "},
         {"guardian_phone": "bad"},
         {"current": "true"},
-        {"class_id": "2147483647"},
+        {"class_id": "N999"},
         {"nisn": "0012345679"},
     ],
 )
@@ -127,15 +137,17 @@ def test_class_edit_and_revision_conflict(client, importer, db_session, existing
         client,
         db_session,
     )
-    url = f"/admin/import/{batch.token}/rows/2/edit"
-    data = dict(grade="12", class_name="12Z", revision=0, selected=[2], class_id="999")
+    url = f"/admin/import/{batch.token}/rows/100003/edit"
+    data = dict(
+        grade="12", class_name="12Z", revision=0, selected=[100003], class_id="999"
+    )
     assert client.post(url, data=data).status_code == 200
     assert client.post(url, data={**data, "class_name": "Stale"}).status_code == 409
     db_session.refresh(existing_class)
     assert existing_class.class_name != "12Z"
     assert (
         client.post(
-            f"/admin/import/{batch.token}/confirm", data={"selected": [2]}
+            f"/admin/import/{batch.token}/confirm", data={"selected": [100003]}
         ).status_code
         == 200
     )
@@ -154,7 +166,7 @@ def test_edit_does_not_refresh_stale_snapshot(
                 [
                     existing_student.id,
                     "Draft",
-                    None,
+                    existing_student.class_id,
                     existing_student.nisn,
                     "Aktif",
                     None,
@@ -175,7 +187,7 @@ def test_edit_does_not_refresh_stale_snapshot(
     )
     assert (
         client.post(
-            f"/admin/import/{batch.token}/confirm", data={"selected": [2]}
+            f"/admin/import/{batch.token}/confirm", data={"selected": selection(batch)}
         ).status_code
         == 409
     )
@@ -252,7 +264,7 @@ def test_nisn_edit_retains_staged_photo(client, importer, db_session, monkeypatc
     )
     assert (
         client.post(
-            f"/admin/import/{batch.token}/confirm", data={"selected": [2]}
+            f"/admin/import/{batch.token}/confirm", data={"selected": selection(batch)}
         ).status_code
         == 200
     )

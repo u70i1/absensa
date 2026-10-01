@@ -19,8 +19,7 @@
       <td class="{% if action == 'update' and 'grade' in row.changed %}import-changed{% endif %}">{{ values.grade }}</td>
       <td class="{% if action == 'update' and 'class_name' in row.changed %}import-changed{% endif %}"><strong>{{ values.class_name }}</strong></td>
     {% endif %}
-      {% set checked = selected_rows is none or row_key in selected_rows %}
-      <td data-import-actions><label class="import-row-toggle"><input class="sr-only" type="checkbox" name="selected" value="{{ row_key }}" {% if checked %}checked{% endif %} aria-label="Impor baris {{ row.row }}{% if row.file %} dari {{ row.file }}{% endif %}"><span class="import-cancel-icon" aria-hidden="true"><img src="{{ url_for('static', path='icons/import-error.svg') }}" alt="" width="14" height="14"></span><span data-row-toggle>{{ 'Batalkan' if checked else 'Dibatalkan' }}</span></label></td>
+      <td data-import-actions><input type="hidden" name="selected" value="{{ row_key }}"><button type="button" class="button secondary" data-import-edit>Edit</button></td>
     </tr>
   {% else %}<tr><td colspan="{{ 5 if row_kind == 'students' else 4 }}" class="import-empty">Tidak ada data untuk {{ 'ditambahkan' if action == 'create' else 'diperbarui' }}.</td></tr>{% endfor %}
   </tbody>

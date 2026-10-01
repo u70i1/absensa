@@ -202,7 +202,7 @@ def test_export_all_filtered_rows_and_not_importable(
     assert sheet["A1"].fill.fgColor.rgb == source["students"]["A1"].fill.fgColor.rgb
     assert (
         workbook["Tentang Ekspor"]["B2"].fill.fgColor.rgb
-        == source["Tentang Ekspor"]["B2"].fill.fgColor.rgb
+        == source["instructions"]["B2"].fill.fgColor.rgb
     )
     assert (
         "tidak dapat digunakan untuk impor" in workbook["Tentang Ekspor"]["B18"].value

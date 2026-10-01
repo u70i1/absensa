@@ -68,20 +68,20 @@ allows two simultaneous bulk generations and asks further callers to retry.
 
 ## Spreadsheet imports
 
-Open **Impor** in the admin navigation (`/admin/import`). Download the student
-or class template, or edit an existing export from `app/spreadsheet_templates/`.
+Open **Impor** in the admin navigation (`/admin/import`). Download the combined Students & Classes template, or edit a student export.
+Both contain `instructions`, `students`, and `classes`. All classes are included,
+even when student exports are filtered.
 Upload one `.xlsx` file (up to 10 MiB) or one archive (up to 100 MiB).
 ZIP, RAR, 7z, TAR, TAR.GZ/TGZ, TAR.BZ2/TBZ2, and TAR.XZ/TXZ are supported.
 Each workbook is detected automatically from its sheet name and columns.
-Archives can mix student and class workbooks, with up to 100 workbooks and
+Archives can contain combined workbooks, with up to 100 workbooks and
 10,000 data rows in total. The combined expanded archive and workbook contents
 are bounded to 200 MiB each. Encrypted archives and links are rejected.
 
 Archive layout (one enclosing folder is also accepted):
 
 ```text
-students-2026.xlsx
-classes-2026.xlsx
+students-and-classes-2026.xlsx
 photos/                 # optional
   0012345678.jpg
   0012345679.png
@@ -92,24 +92,44 @@ NISN as the filename and match student rows in the uploaded workbooks. Missing
 photos are normal and never block importing; existing photos are retained.
 Files with invalid names, unmatched NISNs, duplicate NISNs, or invalid image
 contents produce explicit errors. Photos are validated during preview and
-only applied for selected student rows. Photo limits match the profile upload
+applied together with the entire valid import. Photo limits match the profile upload
 service (5 MiB and 20 megapixels per image; 50 MiB of normalized photos total).
 
-The `students` and `classes` sheets use the export columns unchanged. A blank
-ID creates a record; an existing ID updates that record. Empty rows and the
-“Tentang Ekspor” sheet are ignored. Formulas are rejected; NISN and guardian
-phone values should be stored as text to preserve leading zeros.
+Keep sheet names, column names, student IDs and existing class IDs unchanged.
+In `students`, enter `ID KELAS` manually (there is no dropdown). Excel validation
+checks that it exists in `classes`. `JENJANG` and `NAMA KELAS` are protected,
+visually subdued VLOOKUP formula columns: change class descriptions in `classes`
+and the student cells recalculate automatically. Import resolves IDs directly and
+never depends on formula caches or accepts independent student class descriptions.
+New students require a class ID; existing students may clear it to become unassigned.
 
-Uploads produce a preview with separate create/update tables, highlighted
-changes, source filenames, staged photos, and cell-specific errors. Exclude
-individual rows before confirming. Only selected valid rows are saved in one
-transaction; failed saves remove new photo files and retain original photos.
-Canceling leaves student/class data unchanged. Previews expire after one hour,
-belong to the uploading admin, detect stale edits, and cannot be applied twice.
-Expired previews and their staged photos are cleaned up when another file is
-uploaded. Canceling or completing a preview also discards its staged photos.
-Student `ID KELAS` values must already exist. Import new classes first to obtain
-their generated IDs before assigning students to them.
+The generator reserves 100 new-class rows with literal, protected IDs `N1` through
+`N100`. These are allocated before editing, not by a row-number formula: moving,
+inserting, deleting or editing other rows never renumbers them. Fill both class
+fields to use a reserved ID; unused slots are ignored. An incomplete/unknown ID
+cannot be assigned to a student. Macro-free XLSX cannot safely assign persistent
+IDs on edit, so Absensa finalizes them to numeric database IDs during import.
+Temporary IDs are scoped to their workbook, including when importing archives.
+For additional classes, import and download a fresh workbook with more reserved
+slots. Blank-ID class rows are also finalized during import but cannot be referenced
+by students until exported again with their database IDs.
+
+Create classes only in `classes`. Class names and jenjang may change without changing
+the ID, and students retain the same class relationship. Duplicate class pairs/IDs
+and undeclared student references reject the entire upload. Removing class rows never
+deletes database records; use the Classes dashboard for explicit deletion. NISN and
+guardian phone numbers should be text to retain leading zeros.
+
+Uploads produce previews with create/update tables, highlighted changes, source
+filenames, staged photos, editable drafts, and errors formatted as
+`sheet > row:column > message` in Indonesian. Imports are all-or-nothing: any error
+rejects the entire upload, including valid rows and class changes. Confirmation
+applies all rows in one transaction. Runtime failures roll back every database
+change, remove new photo files and retain original photos. Canceling changes no
+student/class data. Previews expire after one hour, belong to their uploading admin,
+detect stale edits, and cannot be applied twice. Expired, cancelled and completed
+previews discard staged photos. Standalone class XLSX downloads are retired;
+the Classes dashboard still supports normal CRUD.
 
 Install `web/requirements.txt` and run `.venv/bin/alembic upgrade head`
 from `web/` before using this page; the migrations add `import_batches` and
