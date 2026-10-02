@@ -3,6 +3,7 @@ __pycache__/
 *.env
 *complexipy*
 /web/photos/
+/web/backups/
 node_modules/
 dist/
 

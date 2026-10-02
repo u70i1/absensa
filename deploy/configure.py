@@ -4,6 +4,7 @@ Uses only Python's standard library; also runnable inside a Python container.
 """
 
 import argparse
+import base64
 import os
 import secrets
 from pathlib import Path
@@ -25,6 +26,7 @@ def write_config(destination: Path, port: int, timezone: str = "Asia/Jakarta") -
         "COOKIE_SECURE=false\n"
         f"POSTGRES_PASSWORD={secrets.token_hex(32)}\n"
         f"WHATSAPP_BRIDGE_TOKEN={secrets.token_hex(32)}\n"
+        f"BACKUP_ENCRYPTION_KEY={base64.b64encode(secrets.token_bytes(32)).decode('ascii')}\n"
     )
     # O_EXCL prevents accidental password rotation against an existing database.
     fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)

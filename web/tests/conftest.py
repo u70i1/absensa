@@ -265,3 +265,25 @@ def card_admin(client, authenticated_data_api, tmp_path, monkeypatch):
     """Admin card tests keep uploaded logos outside the real photo store."""
     monkeypatch.setattr(settings, "photos_dir", str(tmp_path / "photos"))
     return client
+
+
+@pytest.fixture
+def backup_storage(tmp_path, monkeypatch):
+    """Keep backup archives, photos and encryption keys isolated from real data."""
+    import base64
+
+    from app.services.backup_storage_service import LocalBackupStorage
+    from pydantic import SecretStr
+
+    monkeypatch.setattr(settings, "backups_dir", str(tmp_path / "backups"))
+    monkeypatch.setattr(settings, "photos_dir", str(tmp_path / "photos"))
+    monkeypatch.setattr(
+        settings,
+        "backup_encryption_key",
+        SecretStr(base64.b64encode(b"k" * 32).decode()),
+    )
+    monkeypatch.setattr(settings, "timezone", "Asia/Jakarta")
+    (tmp_path / "photos").mkdir()
+    storage = LocalBackupStorage()
+    storage.prepare()
+    return storage

@@ -1,3 +1,4 @@
+import base64
 import tempfile
 import unittest
 from pathlib import Path
@@ -21,6 +22,7 @@ class ConfigureTests(unittest.TestCase):
             self.assertRegex(password, r"^[0-9a-f]{64}$")
             self.assertRegex(token, r"^[0-9a-f]{64}$")
             self.assertNotEqual(password, token)
+            self.assertEqual(len(base64.b64decode(values["BACKUP_ENCRYPTION_KEY"])), 32)
             with self.assertRaises(FileExistsError):
                 write_config(path, 8090)
             self.assertEqual(path.read_text(), original)

@@ -355,3 +355,5 @@ to assign that one number to five new students. The dashboard's Test action
 uses an entered recipient number and real data from a randomly selected
 active student; it does not require a stored guardian number.
 Replace the example number with a number you control before sending messages.
+
+Automated encrypted database/photo backups: see [deployment and offline recovery](deploy/BACKUPS.md).

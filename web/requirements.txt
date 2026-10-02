@@ -1,4 +1,5 @@
 alembic==1.18.5
+cryptography==46.0.5
 annotated-doc==0.0.4
 annotated-types==0.8.0
 argon2-cffi==25.1.0

@@ -2,7 +2,7 @@
 
 Run: python3 deploy/install.py
 Requires Docker Engine and the Docker Compose plugin. Uses only the Python
-standard library and the same four services as the manual installation path.
+standard library and the same services as the manual installation path.
 """
 
 import argparse

@@ -8,7 +8,8 @@ Absensa does not use their databases, folders, runtimes or ports.
 
 An optional terminal setup wizard handles first-time configuration and startup.
 Manual commands remain available below. Published release images, automated
-backups/restores, and unattended upgrades are future work. Keep the same project
+restoration and unattended upgrades are future work. Automated encrypted backups
+are available; see [backup configuration and recovery](BACKUPS.md). Keep the same project
 folder/configuration for subsequent starts.
 
 Validation here uses Linux Docker. The Windows Desktop/WSL2 and Hyper-V paths
@@ -38,9 +39,9 @@ python3 deploy/install.py
 
 The wizard asks for a free web port (default 8088), Indonesian time zone, and
 administrator username/password. It generates random PostgreSQL and WhatsApp
-bridge passwords privately, builds the two application images, starts the four
+bridge passwords privately, builds the application and backup images, starts the
 services, applies migrations, checks web/database readiness, and creates the
-admin account. No extra containers are added. It does not ask for a school name
+admin account. The dedicated backup worker is included. It does not ask for a school name
 because the application does not have a school-name setting yet.
 
 If setup stops after creating data, correct the reported problem and run
@@ -175,7 +176,7 @@ has a published host port.
 
 ```text
 docker compose --env-file deploy/production.env -f compose.production.yml ps -a
-docker compose --env-file deploy/production.env -f compose.production.yml logs --tail 100 web scheduler whatsapp migrate
+docker compose --env-file deploy/production.env -f compose.production.yml logs --tail 100 web scheduler backup whatsapp migrate
 ```
 
 On first startup, PostgreSQL becomes ready, `migrate` applies Alembic migrations
@@ -200,6 +201,7 @@ full configuration or `docker inspect` output, which contains secrets.
 | --- | --- |
 | `absensa_pgdata` | PostgreSQL 18 data, including admin/device sessions and import previews |
 | `absensa_photos` | Student profile photos |
+| `absensa_backups` | Encrypted database and file backups |
 | `absensa_whatsapp_auth` | Sensitive WhatsApp linked-device credentials |
 
 Keep the Compose project name unchanged: changing it selects different volumes.
@@ -217,36 +219,32 @@ hardening this into a public release.
 
 ## Backup before changing versions
 
-Use a fresh backup directory, stop writers so photos and database correspond,
-dump PostgreSQL and copy files out. These commands work in PowerShell and bash
-from the project root. They avoid binary shell redirection, which can corrupt
-archives in older PowerShell versions.
+Use the encrypted backup worker, which stores the database and photos together.
+These commands work in PowerShell and bash from the project root:
 
 ```text
-mkdir backup-2026-09-29
-docker compose --env-file deploy/production.env -f compose.production.yml stop web scheduler
-docker compose --env-file deploy/production.env -f compose.production.yml exec -T db pg_dump -U absensa -d absensa -Fc -f /tmp/absensa-backup.dump
-docker compose --env-file deploy/production.env -f compose.production.yml cp db:/tmp/absensa-backup.dump backup-2026-09-29/database.dump
-docker compose --env-file deploy/production.env -f compose.production.yml cp web:/app/photos backup-2026-09-29/photos
+docker compose --env-file deploy/production.env -f compose.production.yml stop web scheduler backup
+docker compose --env-file deploy/production.env -f compose.production.yml run --rm --no-deps backup python -m app.jobs.backups --once --manual
 ```
 
-Check each command succeeds before proceeding. Copy `deploy/production.env`,
-`compose.production.yml` and the matching source/release archive into the protected
-backup and record the date and application version. Copy the backup to a different
-physical disk and restrict access: it contains personal data, credentials and
-database sessions. Keep backups outside the source repository. Delete the temporary
-dump in the database container after verifying the external copy. If you are only
-backing up, resume with `docker compose ... start web scheduler` (replace `...`
+Require exit code zero and record the ID in `Backup completed: <id>`. Copy that
+`<id>.absbackup` from the archive volume to a separate physical disk and authenticate
+the external copy using [the backup checks](BACKUPS.md#checks). Keep backups outside
+the source repository. Save `deploy/production.env`, `compose.production.yml` and
+the matching release in a separate private recovery record; it includes the key
+and must be protected separately from the archive disk. If you are only
+backing up, resume with `docker compose ... start web scheduler backup` (replace `...`
 with the same `--env-file` and `-f` options above).
 
 Do **not** include `whatsapp_auth` in a normal portable backup. Relink WhatsApp on
 disaster recovery. A recovery requires a fresh isolated deployment using the saved
 configuration/version, restoring `database.dump` with PostgreSQL 18 `pg_restore`
 into an empty database, and copying photos back with ownership UID/GID 10001.
-Keep web/scheduler stopped until both are restored, verify admin login and sample
+Keep web/scheduler/backup stopped until both are restored, verify admin login and sample
 photos, then relink WhatsApp. Restored database sessions can revive old logins;
 invalidate them when recovery follows a compromise. Rehearse this with a separate
-test deployment before entrusting real data; automated restore tooling is deferred.
+test deployment before entrusting real data. Follow the complete
+[offline recovery procedure](BACKUPS.md#manual-recovery-isolated-deployment-first).
 
 ## Updating this early distribution
 
@@ -258,7 +256,7 @@ a promise that a matching image has been published to a registry.
 1. Use the new source with the same private configuration and Compose project name.
 2. Run `docker compose --env-file deploy/production.env -f compose.production.yml build`.
    A build failure leaves the existing containers running.
-3. Back up the current deployment as above. Keep web/scheduler stopped.
+3. Back up the current deployment as above. Keep web/scheduler/backup stopped.
 4. Run `docker compose --env-file deploy/production.env -f compose.production.yml down`
    **without `-v`**, then `docker compose --env-file deploy/production.env -f compose.production.yml up -d --wait`.
 5. Verify health, login, photos and scheduler logs before resuming school use.

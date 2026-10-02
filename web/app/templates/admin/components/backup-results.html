@@ -1,0 +1,38 @@
+<div id="backup-results" class="backup-results" hx-get="{{ url_for('admin_backups_status') }}?page={{ page }}" hx-trigger="{{ 'every 5s' if active else 'every 30s' }}" hx-swap="outerHTML" hx-sync="this:replace">
+  {% if ready_error %}<p class="form-errors" role="alert">{{ ready_error }} Hubungi petugas teknis sekolah untuk menyiapkan kunci enkripsi.</p>{% endif %}
+  {% if worker_stale %}<p class="backup-warning" role="status">Layanan cadangan belum melaporkan aktivitas terbaru. Hubungi petugas teknis sekolah; permintaan tetap menunggu di antrean.</p>{% endif %}
+  {% if recovery_stale %}<p class="backup-warning" role="alert">Cadangan yang tersedia lebih dari 24 jam lalu. Buat cadangan baru dan periksa jadwal serta penyimpanan.</p>{% endif %}
+  <div class="backup-summary">
+    <section class="surface-card backup-summary-card" aria-labelledby="backup-latest-title">
+      <h2 id="backup-latest-title">Cadangan terakhir</h2>
+      {% if latest %}
+      <span class="backup-badge backup-{{ latest.status }}">{{ status_labels.get(latest.status, latest.status) }}</span>
+      <p><strong>{{ local_time(latest.created_at) }}</strong><small>{{ timezone }} · {{ 'Manual' if latest.kind == 'manual' else 'Otomatis' }}</small></p>
+      {% if latest.error %}<p class="backup-error">{{ latest.error }}</p>{% endif %}
+      {% if latest.status == 'success' and not local_available(latest) %}<p class="backup-error">Arsip lokal tidak tersedia. Periksa volume penyimpanan.</p>{% endif %}
+      {% else %}<p>Belum ada cadangan.<small>Buat cadangan pertama untuk menyediakan titik pemulihan.</small></p>{% endif %}
+    </section>
+    <section class="surface-card backup-summary-card" aria-labelledby="backup-schedule-title">
+      <h2 id="backup-schedule-title">Jadwal otomatis</h2>
+      <span class="backup-badge {{ 'backup-success' if config.enabled else '' }}">{{ 'Aktif' if config.enabled else 'Nonaktif' }}</span>
+      <p><strong>{{ config.times.replace(',', ' & ') }}</strong><small>Setiap hari · {{ timezone }}</small></p>
+      <p class="field-help">{{ config.daily }} harian · {{ config.weekly }} mingguan · {{ config.monthly }} bulanan</p>
+    </section>
+    <section class="surface-card backup-summary-card" aria-labelledby="backup-recovery-title">
+      <h2 id="backup-recovery-title">Cadangan siap diunduh</h2>
+      {% if usable %}<span class="backup-badge backup-success">Tersedia · {{ file_size(usable.size) }}</span><p><strong>{{ local_time(usable.created_at) }}</strong><small>{{ timezone }} · Database &amp; berkas</small></p>
+      <a class="text-action" href="{{ url_for('admin_backups_download', backup_id=usable.id) }}">Unduh cadangan</a>
+      {% else %}<p>Belum tersedia.<small>Cadangan yang gagal tidak menghapus titik pemulihan sebelumnya.</small></p>{% endif %}
+    </section>
+  </div>
+  <section class="surface-card backup-execution" aria-labelledby="backup-execution-title">
+    <div class="backup-execution-copy"><h2 id="backup-execution-title">{{ 'Cadangan sedang diproses' if active else 'Buat cadangan manual' }}</h2>
+      {% if active %}<p role="status">{{ phase_labels.get(active.phase, active.phase) }} · {{ local_time(active.created_at) }}</p><p class="field-help">Halaman dapat ditutup. Pekerjaan tetap berjalan dan status diperbarui otomatis.</p>
+      {% else %}<p>Database dan berkas disimpan bersama dalam satu arsip terenkripsi.</p>{% endif %}
+      {% if config.worker_seen_at %}<p class="field-help">Aktivitas layanan: {{ local_time(config.worker_seen_at) }} {{ timezone }}</p>{% endif %}
+    </div>
+    {% if active or ready_error %}<button class="button primary" type="button" disabled>{{ 'Menunggu antrean…' if active and active.status == 'queued' else ('Sedang diproses…' if active else 'Kunci belum siap') }}</button>
+    {% else %}<a class="button primary" href="{{ url_for('admin_backups_confirmation') }}" hx-get="{{ url_for('admin_backups_confirmation') }}" hx-target="#modal-content" aria-haspopup="dialog">Buat cadangan</a>{% endif %}
+  </section>
+  {% include 'tables/backup-results.html' %}
+</div>
