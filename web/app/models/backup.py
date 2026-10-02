@@ -49,6 +49,7 @@ class Backup(Base):
     size: Mapped[int | None] = mapped_column(BigInteger)
     error: Mapped[str | None] = mapped_column(String(255))
     retention_error: Mapped[str | None] = mapped_column(String(255))
+    integrity_error: Mapped[str | None] = mapped_column(String(255))
 
     __table_args__ = (
         CheckConstraint(

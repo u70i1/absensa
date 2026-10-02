@@ -6,7 +6,8 @@ cadangan yang disimpan dapat diubah oleh admin pada menu **Cadangan**.
 
 ## Simpan salinan di flashdisk
 
-Lakukan secara rutin, misalnya setiap akhir minggu:
+Lakukan setiap hari sekolah setelah cadangan terakhir selesai. Tetapkan petugas
+yang bertanggung jawab memeriksa hasil dan menyimpan salinannya:
 
 1. Masuk sebagai admin dan buka menu **Cadangan**.
 2. Pilih cadangan berstatus **Berhasil**, lalu klik **Unduh**. Jika belum tersedia,
@@ -20,6 +21,9 @@ Cadangan otomatis di komputer tidak melindungi data jika disk komputer rusak.
 Salinan di perangkat yang sudah dicabut membantu menghadapi kerusakan tersebut.
 Cadangan di flashdisk tidak ikut dihapus saat Absensa menghapus cadangan lama.
 Gunakan dua perangkat secara bergantian bila tersedia.
+Salinan mingguan berarti perubahan hingga satu minggu dapat hilang jika disk
+komputer rusak. Periksa tanggal cadangan yang disalin; salinan harian mengurangi
+risiko kehilangan tersebut. Petugas teknis perlu memeriksa keutuhan file salinan.
 
 ## Kunci keamanan
 
@@ -31,6 +35,7 @@ Jangan mengirim file cadangan atau kunci melalui grup percakapan.
 Jika kunci hilang, data dalam file cadangan tidak dapat dibuka. Mintalah petugas
 teknis melakukan uji pemulihan agar sekolah yakin file dan kunci yang disimpan
 benar-benar dapat digunakan.
+Ulangi uji pemulihan setidaknya setiap tiga bulan dan sebelum pembaruan aplikasi.
 
 ## Jika cadangan gagal atau komputer rusak
 

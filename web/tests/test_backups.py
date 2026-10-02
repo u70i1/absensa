@@ -1,9 +1,13 @@
 """Backup service behavior uses a disposable database and mocked external tools."""
 
 import base64
+import json
+import os
+import shutil
 import subprocess
 import tarfile
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -15,11 +19,13 @@ from app.services.backup_crypto_service import (
     EncryptedWriter,
     decrypt_archive,
     encryption_key,
+    verify_archive,
 )
 from app.services.exceptions import AppException
 from cryptography.exceptions import InvalidTag
 from pydantic import SecretStr
-from sqlalchemy import select, text
+from sqlalchemy import create_engine, select, text
+from sqlalchemy.orm import Session
 
 
 def make_backup(db, storage, *, when=None, status="success"):
@@ -33,13 +39,16 @@ def make_backup(db, storage, *, when=None, status="success"):
     db.add(backup)
     db.commit()
     if status == "success":
-        storage.path(backup.id).write_bytes(b"usable archive")
+        fake_archive(backup, storage, None)
     return backup
 
 
 def fake_archive(backup, storage, bind):
     path = storage.path(backup.id)
-    path.write_bytes(b"encrypted archive")
+    with path.open("wb") as output:
+        writer = EncryptedWriter(output, encryption_key())
+        writer.write(b"mock database/photo tar")
+        writer.finish()
     return path
 
 
@@ -54,6 +63,7 @@ def test_encryption_roundtrip_and_authentication(backup_storage, tmp_path):
     assert b"private data" not in source.read_bytes()
     decoded = tmp_path / "decoded"
     decrypt_archive(source, decoded, encryption_key())
+    verify_archive(source, encryption_key())
     assert decoded.read_bytes() == plaintext
     assert decoded.stat().st_mode & 0o777 == 0o600
     with pytest.raises(FileExistsError):
@@ -61,6 +71,8 @@ def test_encryption_roundtrip_and_authentication(backup_storage, tmp_path):
     damaged = bytearray(source.read_bytes())
     damaged[100] ^= 1
     source.write_bytes(damaged)
+    with pytest.raises(InvalidTag):
+        verify_archive(source, encryption_key())
     failed = tmp_path / "failed"
     with pytest.raises(InvalidTag):
         decrypt_archive(source, failed, encryption_key())
@@ -286,7 +298,7 @@ def test_admin_queue_status_and_encrypted_download(
     assert inventory[0]["local_available"]
     download = client.get(f"/admin/backups/{queued.id}/download")
     assert download.status_code == 200
-    assert download.content == b"encrypted archive"
+    assert download.content == backup_storage.path(queued.id).read_bytes()
     assert "attachment" in download.headers["content-disposition"]
     assert client.get("/admin/backups/not-a-uuid/download").status_code == 422
 
@@ -370,3 +382,268 @@ def test_successful_local_creation_and_retention_error(
     assert backup_storage.available(previous)
     assert previous.retention_error
     assert "SECRET" not in previous.retention_error + caplog.text
+
+
+def test_daily_retention_counts_school_dates_instead_of_runs(backup_storage):
+    config = SimpleNamespace(daily=2, weekly=0, monthly=0)
+    dates = [
+        datetime(2026, 10, 2, 10, tzinfo=UTC),
+        datetime(2026, 10, 2, 3, tzinfo=UTC),
+        datetime(2026, 10, 1, 18, tzinfo=UTC),  # Also October 2 in Jakarta.
+        datetime(2026, 10, 1, 10, tzinfo=UTC),
+        datetime(2026, 9, 30, 10, tzinfo=UTC),
+    ]
+    entries = [
+        SimpleNamespace(id=str(i), created_at=d, status="success")
+        for i, d in enumerate(dates)
+    ]
+    assert backups.retention_ids(entries, config) == {"0", "3"}
+
+
+def test_damaged_archive_cannot_displace_healthy_recovery_point(
+    db_session, backup_storage
+):
+    config = backups.get_settings(db_session)
+    config.daily, config.weekly, config.monthly = 1, 0, 0
+    healthy = make_backup(
+        db_session, backup_storage, when=datetime(2025, 1, 1, tzinfo=UTC)
+    )
+    damaged = make_backup(db_session, backup_storage)
+    path = backup_storage.path(damaged.id)
+    data = bytearray(path.read_bytes())
+    data[-1] ^= 1
+    path.write_bytes(data)
+    backups.apply_retention(db_session, backup_storage, config)
+    assert backup_storage.available(healthy)
+    assert path.exists() and damaged.integrity_error
+    assert not backup_storage.available(damaged)
+    assert healthy.retention_error is None
+
+
+def test_unencrypted_factory_result_is_never_a_success(db_session, backup_storage):
+    config = backups.get_settings(db_session)
+    previous = make_backup(db_session, backup_storage)
+    queued = backups.enqueue(db_session)
+
+    def damaged(backup, storage, bind):
+        path = storage.path(backup.id)
+        path.write_bytes(b"incomplete archive")
+        return path
+
+    backups.execute_backup(
+        db_session, queued, backup_storage, config, archive_factory=damaged
+    )
+    assert queued.status == "failed"
+    assert backup_storage.available(previous)
+
+
+@pytest.mark.parametrize("reference", ["photo", "logo"])
+def test_missing_referenced_file_fails_creation(
+    engine, backup_storage, monkeypatch, reference
+):
+    from app.models.student import Student
+    from app.models.student_card import StudentCardSettings
+
+    monkeypatch.setattr(
+        backups, "dump_database", lambda path, snapshot: path.write_bytes(b"PGDMP mock")
+    )
+    with Session(engine) as db:
+        if reference == "photo":
+            record = Student(
+                name="Missing backup photo", nisn="9999999999", photo_path="missing.jpg"
+            )
+            db.add(record)
+            previous = None
+        else:
+            record = db.get(StudentCardSettings, 1)
+            previous = record.logo_path
+            record.logo_path = "missing.jpg"
+        db.commit()
+        try:
+            backup = SimpleNamespace(id=uuid4().hex, created_at=datetime.now(UTC))
+            with pytest.raises(ValueError, match="Referenced photo"):
+                backups.create_archive(backup, backup_storage, engine)
+            assert not backup_storage.path(backup.id).exists()
+            assert not list(backup_storage.root.glob(".*"))
+        finally:
+            if reference == "photo":
+                db.delete(record)
+            else:
+                record.logo_path = previous
+            db.commit()
+
+
+def test_worker_recovers_archive_published_before_success_commit(
+    engine, backup_storage
+):
+    from sqlalchemy import delete
+
+    try:
+        with Session(engine) as db:
+            config = backups.get_settings(db)
+            config.enabled = False
+            record = make_backup(db, backup_storage, status="running")
+            fake_archive(record, backup_storage, None)
+            identifier = record.id
+            db.commit()
+        assert backups.process_tick(engine) == "idle"
+        with Session(engine) as db:
+            record = db.get(Backup, identifier)
+            assert record.status == "success" and record.error is None
+            assert record.size == backup_storage.path(identifier).stat().st_size
+    finally:
+        with Session(engine) as db:
+            db.execute(delete(Backup))
+            db.execute(delete(BackupSettings))
+            db.commit()
+
+
+@pytest.mark.parametrize("state", ["failed", "busy"])
+def test_one_shot_worker_exits_unsuccessfully(monkeypatch, state):
+    import sys
+
+    from app.jobs import backups as worker
+
+    monkeypatch.setattr(sys, "argv", ["backups", "--once", "--manual"])
+    monkeypatch.setattr(worker.os, "umask", lambda mask: None)
+    monkeypatch.setattr(worker, "process_tick", lambda *args, **kwargs: state)
+    with pytest.raises(SystemExit) as exc:
+        worker.main()
+    assert exc.value.code == 1
+
+
+def test_manual_tick_bypasses_disabled_schedule(engine, backup_storage, monkeypatch):
+    from sqlalchemy import delete
+
+    monkeypatch.setattr(backups, "create_archive", fake_archive)
+    try:
+        with Session(engine) as db:
+            config = backups.get_settings(db)
+            config.enabled = False
+            db.commit()
+        assert backups.process_tick(engine, manual=True) == "success"
+        with Session(engine) as db:
+            record = db.scalar(select(Backup))
+            assert record.kind == "manual" and record.slot is None
+            assert backup_storage.available(record)
+        assert backups.process_tick(engine) == "idle"
+    finally:
+        with Session(engine) as db:
+            db.execute(delete(Backup))
+            db.execute(delete(BackupSettings))
+            db.commit()
+
+
+@pytest.mark.skipif(
+    os.environ.get("ABSENSA_TEST_REAL_BACKUP") != "1",
+    reason="Opt in to a real PostgreSQL dump/restore drill; requires database creation privileges and PG18 clients.",
+)
+def test_real_encrypted_backup_restores_database_and_photos(
+    engine, backup_storage, monkeypatch, tmp_path
+):
+    """Create a temporary destination database on the explicitly opted-in test server."""
+    from app.models.scan_log import ScanLog
+    from app.models.student import Student
+    from app.models.student_card import StudentCardSettings
+
+    assert shutil.which("pg_dump") and shutil.which("pg_restore")
+    monkeypatch.setattr(
+        settings, "database_url", engine.url.render_as_string(hide_password=False)
+    )
+    recovery_name = f"absensa_restore_{uuid4().hex}"
+    recovery_url = engine.url.set(database=recovery_name)
+    admin = engine.execution_options(isolation_level="AUTOCOMMIT")
+    recovered = create_engine(recovery_url)
+    photo_bytes, logo_bytes = b"recovery photo bytes", b"recovery logo bytes"
+    Path(settings.photos_dir, "student.jpg").write_bytes(photo_bytes)
+    Path(settings.photos_dir, "logo.jpg").write_bytes(logo_bytes)
+    with Session(engine) as db:
+        student = Student(
+            name="Restore drill student", nisn="9999999998", photo_path="student.jpg"
+        )
+        db.add(student)
+        db.flush()
+        scan = ScanLog(
+            student_id=student.id, name=student.name, timestamp=datetime.now(UTC)
+        )
+        db.add(scan)
+        card = db.get(StudentCardSettings, 1)
+        previous_logo = card.logo_path
+        card.logo_path = "logo.jpg"
+        db.commit()
+        try:
+            backup = SimpleNamespace(id=uuid4().hex, created_at=datetime.now(UTC))
+            archive_path = backups.create_archive(backup, backup_storage, engine)
+            verify_archive(archive_path, encryption_key())
+            plaintext = tmp_path / "recovery.tar"
+            decrypt_archive(archive_path, plaintext, encryption_key())
+            extracted = tmp_path / "extracted"
+            with tarfile.open(plaintext) as archive:
+                archive.extractall(extracted, filter="data")
+            manifest = json.loads((extracted / "manifest.json").read_text())
+            assert manifest["id"] == backup.id
+            assert manifest["schema_revision"]
+            assert manifest["postgres_version"].startswith("18.")
+            assert (extracted / "photos/student.jpg").read_bytes() == photo_bytes
+            assert (extracted / "photos/logo.jpg").read_bytes() == logo_bytes
+            with admin.connect() as connection:
+                connection.execute(text(f'CREATE DATABASE "{recovery_name}"'))
+            env = os.environ.copy()
+            env.update(
+                PGHOST=recovery_url.host,
+                PGPORT=str(recovery_url.port),
+                PGUSER=recovery_url.username,
+                PGPASSWORD=recovery_url.password,
+            )
+            subprocess.run(
+                [
+                    "pg_restore",
+                    "--no-password",
+                    "--no-owner",
+                    "--no-privileges",
+                    "--single-transaction",
+                    "--exit-on-error",
+                    "-d",
+                    recovery_name,
+                    str(extracted / "database.dump"),
+                ],
+                env=env,
+                check=True,
+                capture_output=True,
+                timeout=120,
+            )
+            with recovered.connect() as connection:
+                assert (
+                    connection.scalar(
+                        text(
+                            "SELECT photo_path FROM students WHERE nisn = '9999999998'"
+                        )
+                    )
+                    == "student.jpg"
+                )
+                assert (
+                    connection.scalar(
+                        text(
+                            "SELECT count(*) FROM scan_logs WHERE name = 'Restore drill student'"
+                        )
+                    )
+                    == 1
+                )
+                assert (
+                    connection.scalar(
+                        text("SELECT logo_path FROM student_card_settings WHERE id = 1")
+                    )
+                    == "logo.jpg"
+                )
+                assert (
+                    connection.scalar(text("SELECT version_num FROM alembic_version"))
+                    == manifest["schema_revision"]
+                )
+        finally:
+            recovered.dispose()
+            with admin.connect() as connection:
+                connection.execute(text(f'DROP DATABASE IF EXISTS "{recovery_name}"'))
+            db.delete(scan)
+            db.delete(student)
+            card.logo_path = previous_logo
+            db.commit()

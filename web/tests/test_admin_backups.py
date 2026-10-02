@@ -112,7 +112,7 @@ def test_manual_confirmation_queue_poll_and_download(
     assert 'hx-trigger="every 30s"' in complete.text
     assert (
         backup_admin.get(f"/admin/backups/{record.id}/download").content
-        == b"encrypted archive"
+        == backup_storage.path(record.id).read_bytes()
     )
 
 
@@ -261,3 +261,22 @@ def test_local_backup_page_does_not_expose_encryption_key(backup_admin):
     assert settings.backup_encryption_key.get_secret_value() not in page.text
     assert "BACKUP_S3" not in page.text
     assert "Simpan salinan di flashdisk" in page.text
+
+
+def test_damaged_backup_is_excluded_from_recovery_summary_and_download(
+    backup_admin, db_session, backup_storage
+):
+    healthy = make_backup(
+        db_session, backup_storage, when=datetime.now(UTC) - timedelta(days=2)
+    )
+    damaged = make_backup(db_session, backup_storage)
+    backup_storage.path(damaged.id).write_bytes(b"damaged archive")
+    backups.apply_retention(
+        db_session, backup_storage, backups.get_settings(db_session)
+    )
+    page = backup_admin.get("/admin/backups")
+    assert "Arsip tidak dapat diverifikasi" in page.text
+    assert "lebih dari 24 jam" in page.text
+    assert f"/{healthy.id}/download" in page.text
+    assert f"/{damaged.id}/download" not in page.text
+    assert backup_admin.get(f"/admin/backups/{damaged.id}/download").status_code == 404

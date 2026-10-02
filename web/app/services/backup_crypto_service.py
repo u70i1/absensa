@@ -51,6 +51,37 @@ class EncryptedWriter:
         os.fsync(self.output.fileno())
 
 
+def _decrypt_stream(src, key: bytes, output=None) -> None:
+    header = src.read(len(MAGIC) + 12)
+    if not header.startswith(MAGIC) or len(header) != len(MAGIC) + 12:
+        raise ValueError("Invalid archive")
+    size = os.fstat(src.fileno()).st_size - len(header) - 16
+    if size < 0 or size > MAX_BYTES:
+        raise ValueError("Invalid archive size")
+    src.seek(-16, os.SEEK_END)
+    tag = src.read(16)
+    src.seek(len(header))
+    cipher = Cipher(algorithms.AES(key), modes.GCM(header[-12:], tag)).decryptor()
+    cipher.authenticate_additional_data(header)
+    while size:
+        data = src.read(min(CHUNK, size))
+        if not data:
+            raise ValueError("Truncated archive")
+        plaintext = cipher.update(data)
+        if output is not None:
+            output.write(plaintext)
+        size -= len(data)
+    plaintext = cipher.finalize()
+    if output is not None:
+        output.write(plaintext)
+
+
+def verify_archive(source: Path, key: bytes) -> None:
+    """Authenticate every byte without creating plaintext recovery files."""
+    with source.open("rb") as src:
+        _decrypt_stream(src, key)
+
+
 def decrypt_archive(source: Path, destination: Path, key: bytes) -> None:
     """Publish plaintext only after authentication; destination must be new."""
     staging = destination.with_name(destination.name + ".partial")
@@ -60,26 +91,7 @@ def decrypt_archive(source: Path, destination: Path, key: bytes) -> None:
             fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             created = True
             with os.fdopen(fd, "wb") as dst:
-                header = src.read(len(MAGIC) + 12)
-                if not header.startswith(MAGIC) or len(header) != len(MAGIC) + 12:
-                    raise ValueError("Invalid archive")
-                size = source.stat().st_size - len(header) - 16
-                if size < 0 or size > MAX_BYTES:
-                    raise ValueError("Invalid archive size")
-                src.seek(-16, os.SEEK_END)
-                tag = src.read(16)
-                src.seek(len(header))
-                cipher = Cipher(
-                    algorithms.AES(key), modes.GCM(header[-12:], tag)
-                ).decryptor()
-                cipher.authenticate_additional_data(header)
-                while size:
-                    data = src.read(min(CHUNK, size))
-                    if not data:
-                        raise ValueError("Truncated archive")
-                    dst.write(cipher.update(data))
-                    size -= len(data)
-                dst.write(cipher.finalize())
+                _decrypt_stream(src, key, dst)
                 dst.flush()
                 os.fsync(dst.fileno())
         # Link is atomic and refuses to overwrite an existing destination.

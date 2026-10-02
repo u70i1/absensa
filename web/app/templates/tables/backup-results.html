@@ -11,6 +11,7 @@
           {% if backup.status in ('queued', 'running') %}<small>{{ phase_labels.get(backup.phase, backup.phase) }}</small>{% endif %}
           {% if backup.error %}<small class="backup-error">{{ backup.error }}</small>{% endif %}
           {% if backup.retention_error %}<small class="backup-error">{{ backup.retention_error }}</small>{% endif %}
+          {% if backup.integrity_error %}<small class="backup-error">{{ backup.integrity_error }}</small>{% endif %}
         </td>
         <td>{{ 'Komputer sekolah' if local_available(backup) else ('Sudah dihapus' if backup.status == 'expired' else 'Belum tersedia') }}</td>
         <td>{% if local_available(backup) %}<a class="text-action" href="{{ url_for('admin_backups_download', backup_id=backup.id) }}">Unduh</a>{% else %}<span class="field-help">Tidak tersedia</span>{% endif %}</td>

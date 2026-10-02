@@ -1,6 +1,7 @@
 <div id="backup-results" class="backup-results" hx-get="{{ url_for('admin_backups_status') }}?page={{ page }}" hx-trigger="{{ 'every 5s' if active else 'every 30s' }}" hx-swap="outerHTML" hx-sync="this:replace">
   {% if ready_error %}<p class="form-errors" role="alert">{{ ready_error }} Hubungi petugas teknis sekolah untuk menyiapkan kunci enkripsi.</p>{% endif %}
   {% if worker_stale %}<p class="backup-warning" role="status">Layanan cadangan belum melaporkan aktivitas terbaru. Hubungi petugas teknis sekolah; permintaan tetap menunggu di antrean.</p>{% endif %}
+  {% if recovery_stale %}<p class="backup-warning" role="alert">Cadangan yang tersedia lebih dari 24 jam lalu. Buat cadangan baru dan periksa jadwal serta penyimpanan.</p>{% endif %}
   <div class="backup-summary">
     <section class="surface-card backup-summary-card" aria-labelledby="backup-latest-title">
       <h2 id="backup-latest-title">Cadangan terakhir</h2>

@@ -116,6 +116,8 @@ def page_context(db: Session, page: int) -> dict:
         "timezone": settings.timezone,
         "ready_error": ready_error,
         "worker_stale": stale,
+        "recovery_stale": usable is not None
+        and (datetime.now(UTC) - usable.created_at).total_seconds() > 86400,
     }
 
 
@@ -251,6 +253,7 @@ def backup_json(backup: Backup) -> dict:
         "error": backup.error,
         "local_available": LocalBackupStorage().available(backup),
         "retention_error": backup.retention_error,
+        "integrity_error": backup.integrity_error,
     }
 
 

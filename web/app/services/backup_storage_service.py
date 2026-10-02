@@ -24,5 +24,15 @@ class LocalBackupStorage:
             raise AppException("Arsip cadangan tidak tersedia.", 404)
         return path
 
+    def present(self, backup) -> bool:
+        try:
+            return self.path(backup.id).is_file()
+        except (OSError, AppException):
+            return False
+
     def available(self, backup) -> bool:
-        return backup.status == "success" and self.path(backup.id).is_file()
+        return (
+            backup.status == "success"
+            and not backup.integrity_error
+            and self.present(backup)
+        )

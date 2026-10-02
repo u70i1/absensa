@@ -219,25 +219,20 @@ hardening this into a public release.
 
 ## Backup before changing versions
 
-Use a fresh backup directory, stop writers so photos and database correspond,
-dump PostgreSQL and copy files out. These commands work in PowerShell and bash
-from the project root. They avoid binary shell redirection, which can corrupt
-archives in older PowerShell versions.
+Use the encrypted backup worker, which stores the database and photos together.
+These commands work in PowerShell and bash from the project root:
 
 ```text
-mkdir backup-2026-09-29
 docker compose --env-file deploy/production.env -f compose.production.yml stop web scheduler backup
-docker compose --env-file deploy/production.env -f compose.production.yml exec -T db pg_dump -U absensa -d absensa -Fc -f /tmp/absensa-backup.dump
-docker compose --env-file deploy/production.env -f compose.production.yml cp db:/tmp/absensa-backup.dump backup-2026-09-29/database.dump
-docker compose --env-file deploy/production.env -f compose.production.yml cp web:/app/photos backup-2026-09-29/photos
+docker compose --env-file deploy/production.env -f compose.production.yml run --rm --no-deps backup python -m app.jobs.backups --once --manual
 ```
 
-Check each command succeeds before proceeding. Copy `deploy/production.env`,
-`compose.production.yml` and the matching source/release archive into the protected
-backup and record the date and application version. Copy the backup to a different
-physical disk and restrict access: it contains personal data, credentials and
-database sessions. Keep backups outside the source repository. Delete the temporary
-dump in the database container after verifying the external copy. If you are only
+Require exit code zero and record the ID in `Backup completed: <id>`. Copy that
+`<id>.absbackup` from the archive volume to a separate physical disk and authenticate
+the external copy using [the backup checks](BACKUPS.md#checks). Keep backups outside
+the source repository. Save `deploy/production.env`, `compose.production.yml` and
+the matching release in a separate private recovery record; it includes the key
+and must be protected separately from the archive disk. If you are only
 backing up, resume with `docker compose ... start web scheduler backup` (replace `...`
 with the same `--env-file` and `-f` options above).
 
@@ -248,7 +243,8 @@ into an empty database, and copying photos back with ownership UID/GID 10001.
 Keep web/scheduler/backup stopped until both are restored, verify admin login and sample
 photos, then relink WhatsApp. Restored database sessions can revive old logins;
 invalidate them when recovery follows a compromise. Rehearse this with a separate
-test deployment before entrusting real data; automated restore tooling is deferred.
+test deployment before entrusting real data. Follow the complete
+[offline recovery procedure](BACKUPS.md#manual-recovery-isolated-deployment-first).
 
 ## Updating this early distribution
 

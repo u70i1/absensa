@@ -95,7 +95,7 @@ def test_backup_confirmation_queue_progress_download_and_settings(
     assert download.suggested_filename.endswith(".absbackup")
     destination = tmp_path / "download.absbackup"
     download.save_as(destination)
-    assert destination.read_bytes() == b"encrypted archive"
+    assert destination.read_bytes() == backup_storage.path(record.id).read_bytes()
 
     page.locator("#backup-time-one").fill("08:30")
     page.locator("#backup-time-two").fill("16:45")

@@ -14,7 +14,11 @@ from zoneinfo import ZoneInfo
 
 from app.core.config import settings
 from app.models.backup import Backup, BackupSettings
-from app.services.backup_crypto_service import EncryptedWriter, encryption_key
+from app.services.backup_crypto_service import (
+    EncryptedWriter,
+    encryption_key,
+    verify_archive,
+)
 from app.services.backup_storage_service import LocalBackupStorage
 from app.services.exceptions import AppException
 from sqlalchemy import select, text
@@ -117,18 +121,22 @@ def due_slot(config: BackupSettings, now: datetime) -> str | None:
 
 
 def retention_ids(backups: list[Backup], config: BackupSettings) -> set[str]:
-    """Union of newest archives and newest representative per week/month."""
+    """Union of newest representatives per school-local date, week and month."""
     successful = sorted(
         (b for b in backups if b.status == "success"),
         key=lambda b: b.created_at,
         reverse=True,
     )
-    keep = {b.id for b in successful[: config.daily]}
-    weeks, months = set(), set()
+    keep = set()
+    days, weeks, months = set(), set(), set()
     for backup in successful:
         local = backup.created_at.astimezone(ZoneInfo(settings.timezone))
         week = local.isocalendar()[:2]
         month = (local.year, local.month)
+        day = local.date()
+        if day not in days and len(days) < config.daily:
+            days.add(day)
+            keep.add(backup.id)
         if week not in weeks and len(weeks) < config.weekly:
             weeks.add(week)
             keep.add(backup.id)
@@ -142,10 +150,23 @@ def apply_retention(
     db: Session, storage: LocalBackupStorage, config: BackupSettings
 ) -> None:
     backups = list(db.scalars(select(Backup).where(Backup.status == "success")))
-    # Only extant, completed local archives qualify as recovery points.
-    usable = [b for b in backups if storage.available(b)]
+    # Damaged archives must never displace a healthy recovery point. Keep them
+    # for investigation (including archives encrypted with a previous key).
+    key = encryption_key()
+    usable = []
+    for backup in backups:
+        try:
+            if not storage.present(backup):
+                raise ValueError("Archive unavailable")
+            verify_archive(storage.path(backup.id), key)
+            usable.append(backup)
+            backup.integrity_error = None
+            backup.retention_error = None
+        except Exception:  # noqa: BLE001 - sanitized integrity/storage error
+            backup.integrity_error = "Arsip tidak dapat diverifikasi. Periksa media penyimpanan dan kunci pemulihan; arsip dipertahankan."
     keep = retention_ids(usable, config)
     if not keep:
+        db.commit()
         return
     for backup in usable:
         if backup.id in keep:
@@ -213,7 +234,20 @@ def create_archive(backup: Backup, storage: LocalBackupStorage, bind) -> Path:
                 text("LOCK TABLE students, student_card_settings IN SHARE MODE")
             )
             snapshot = connection.scalar(text("SELECT pg_export_snapshot()"))
+            # The locked tables cannot change between snapshot export and this
+            # inventory. A missing referenced file must fail the entire job.
+            required_photos = set(
+                connection.scalars(
+                    text(
+                        "SELECT photo_path FROM students WHERE photo_path IS NOT NULL "
+                        "UNION SELECT logo_path FROM student_card_settings WHERE logo_path IS NOT NULL"
+                    )
+                )
+            )
             dump_database(staging / "database.dump", snapshot)
+            with (staging / "database.dump").open("rb") as dump:
+                if dump.read(5) != b"PGDMP":
+                    raise ValueError("Invalid database dump")
             with partial.open("xb") as output:
                 os.chmod(partial, 0o600)
                 encrypted = EncryptedWriter(output, key)
@@ -223,10 +257,18 @@ def create_archive(backup: Backup, storage: LocalBackupStorage, bind) -> Path:
                         arcname="database.dump",
                         recursive=False,
                     )
-                    photos = Path(settings.photos_dir).resolve()
-                    if not photos.is_dir():
+                    photos = Path(settings.photos_dir).absolute()
+                    if photos.is_symlink() or not photos.is_dir():
                         raise ValueError("Photo volume missing")
+                    for filename in required_photos:
+                        if (
+                            Path(filename).name != filename
+                            or (photos / filename).is_symlink()
+                            or not (photos / filename).is_file()
+                        ):
+                            raise ValueError("Referenced photo missing or unsafe")
                     archive.add(photos, arcname="photos", recursive=False)
+                    copied_photos = set()
                     for path in sorted(photos.rglob("*")):
                         if path.is_symlink() or not (path.is_file() or path.is_dir()):
                             raise ValueError("Unsupported photo entry")
@@ -235,6 +277,10 @@ def create_archive(backup: Backup, storage: LocalBackupStorage, bind) -> Path:
                             arcname=str(Path("photos") / path.relative_to(photos)),
                             recursive=False,
                         )
+                        if path.is_file():
+                            copied_photos.add(str(path.relative_to(photos)))
+                    if not required_photos <= copied_photos:
+                        raise ValueError("Referenced photo disappeared")
                     manifest = staging / "manifest.json"
                     manifest.write_text(
                         json.dumps(
@@ -244,6 +290,12 @@ def create_archive(backup: Backup, storage: LocalBackupStorage, bind) -> Path:
                                 "created_at": backup.created_at.isoformat(),
                                 "format": "pg_dump -Fc",
                                 "files": "photos",
+                                "schema_revision": connection.scalar(
+                                    text("SELECT version_num FROM alembic_version")
+                                ),
+                                "postgres_version": connection.scalar(
+                                    text("SHOW server_version")
+                                ),
                             }
                         )
                     )
@@ -274,10 +326,13 @@ def execute_backup(
     db.commit()
     try:
         path = archive_factory(backup, storage, db.get_bind())
+        # Read back the encrypted file from storage before advertising success.
+        verify_archive(path, encryption_key())
         backup.size = path.stat().st_size
         backup.status, backup.phase = "success", "complete"
         backup.finished_at = datetime.now(UTC)
         db.commit()
+        logger.info("Backup completed: %s", backup.id)
     except Exception:  # noqa: BLE001 - sanitize arbitrary tool failures
         db.rollback()
         backup.status, backup.phase = "failed", "failed"
@@ -289,7 +344,7 @@ def execute_backup(
     apply_retention(db, storage, config)
 
 
-def process_tick(bind, *, now: datetime | None = None) -> str:
+def process_tick(bind, *, now: datetime | None = None, manual: bool = False) -> str:
     """Hold a cross-process PostgreSQL session lock for recovery and execution."""
     now = now or datetime.now(UTC)
     with bind.connect() as lock_connection:
@@ -303,18 +358,28 @@ def process_tick(bind, *, now: datetime | None = None) -> str:
             with Session(bind=lock_connection) as db:
                 config = get_settings(db)
                 config.worker_seen_at = now
+                storage = LocalBackupStorage()
+                storage.prepare()
                 # Owning this lock proves any earlier execution no longer owns it.
                 for interrupted in db.scalars(
                     select(Backup).where(Backup.status == "running")
                 ):
-                    interrupted.status, interrupted.phase = "failed", "failed"
-                    interrupted.error = (
-                        "Pekerja cadangan terhenti. Jalankan cadangan baru."
-                    )
+                    try:
+                        path = storage.path(interrupted.id)
+                        verify_archive(path, encryption_key())
+                    except Exception:  # noqa: BLE001 - sanitized recovery error
+                        interrupted.status, interrupted.phase = "failed", "failed"
+                        interrupted.error = (
+                            "Pekerja cadangan terhenti. Jalankan cadangan baru."
+                        )
+                    else:
+                        # Publication can finish just before a crash prevents the
+                        # success transaction. Recover that complete local copy.
+                        interrupted.size = path.stat().st_size
+                        interrupted.status, interrupted.phase = "success", "complete"
+                        interrupted.error = None
                     interrupted.finished_at = now
                 db.commit()
-                storage = LocalBackupStorage()
-                storage.prepare()
                 # Only clean this service's UUID-shaped temporary files under lock.
                 for path in storage.root.iterdir():
                     if re.fullmatch(r"\.[0-9a-f]{32}\.(work|partial)", path.name):
@@ -324,9 +389,10 @@ def process_tick(bind, *, now: datetime | None = None) -> str:
                             path.unlink()
                 backup = active_backup(db)
                 if backup is None:
-                    slot = due_slot(config, now)
-                    if slot and not db.scalar(
-                        select(Backup.id).where(Backup.slot == slot)
+                    slot = None if manual else due_slot(config, now)
+                    if manual or (
+                        slot
+                        and not db.scalar(select(Backup.id).where(Backup.slot == slot))
                     ):
                         backup = enqueue(db, slot=slot, now=now)
                 if backup is None:

@@ -4,6 +4,27 @@ Absensa's dedicated `backup` service polls a durable PostgreSQL job queue every
 10 seconds. HTTP requests only enqueue work. PostgreSQL advisory locks and a
 unique active-job index serialize manual and scheduled work across processes.
 Keep one worker enabled. Backups run locally and require no internet connection.
+See the [backup audit](BACKUP-AUDIT.md) for findings, fixes and validation limits.
+
+## Recovery targets and responsibilities
+
+With healthy backups at 10:00 and 17:00, a server failure can lose up to **17 hours**
+of changes (the overnight gap), plus backup execution time. This is a snapshot
+strategy without point-in-time/WAL recovery. Disk loss recovery depends on the
+date of the latest external copy.
+
+Assign a staff owner to check the latest successful backup each school day and
+copy it to disconnected media after the last daily run. Rotate two external disks
+and keep one in a separate secure location. A weekly copy permits up to a week
+of data loss after disk failure; daily copies reduce that window. Keep the key,
+private deployment configuration and matching release in a separate protected
+recovery record. Archive encryption does not protect plaintext secrets stored
+beside it.
+
+The technical administrator should authenticate each external copy, rehearse
+recovery before version changes and at least quarterly, and record archive ID,
+backup date, recovered counts/photos, elapsed recovery time and result. There is
+no guaranteed recovery time until the school has measured this drill.
 
 ## Deployment
 
@@ -33,7 +54,7 @@ Windows permissions.
 | `BACKUP_ENCRYPTION_KEY` | Required base64 32-byte AES key |
 | `TIMEZONE` | School timezone, default `Asia/Jakarta` |
 | `BACKUP_TIMES` | `10:00,17:00`, one/two daily HH:MM times |
-| `BACKUP_KEEP_DAILY` | 14 newest successful archives |
+| `BACKUP_KEEP_DAILY` | Newest archive from each of 14 distinct school-local dates |
 | `BACKUP_KEEP_WEEKLY` | 8 distinct ISO weeks |
 | `BACKUP_KEEP_MONTHLY` | 3 distinct calendar months |
 | `BACKUP_TIMEOUT_SECONDS` | 3600, maximum `pg_dump` execution time |
@@ -66,27 +87,38 @@ The worker exports a consistent database snapshot and passes it to `pg_dump`.
 SHARE locks on `students` and `student_card_settings` block photo-related writes
 while dumping/copying, to align associated files with the snapshot. Reads and
 attendance scans can continue. Large databases can delay student/card edits;
-choose appropriate backup times. A missing photo volume or symlink fails creation.
+choose appropriate backup times. A missing photo volume, symlink, or missing
+referenced student photo/logo fails creation. The manifest also records the schema
+revision and PostgreSQL version.
 The worker must read all tables and own these application tables (the existing
 application database role satisfies this). Temporary work directories are private;
-only complete, fsynced encrypted archives are atomically published. Failed or
+only complete, fsynced encrypted archives are atomically published. The worker
+reads back and authenticates the entire archive before recording success. Failed or
 interrupted creations never become downloadable successes.
 
 Times use the school timezone. On restart, the latest due slot **today** is caught
 up; older days and earlier missed slots are not replayed. A unique slot prevents
 retry storms even if that attempt failed. A manual job can retry a failure at any
-time. A stopped worker leaves jobs queued until it restarts. A restart marks
-abandoned jobs failed, preserving already completed local copies.
+time. A stopped worker leaves jobs queued until it restarts. A restart recovers a
+fully published, authenticated archive if the worker crashed before saving its
+success record; other abandoned jobs are marked failed.
 
 Retention runs only after a new local success. It keeps the **union** of the newest
-14 archives, the newest archive in each of 8 distinct weeks, and the newest archive
-in each of 3 distinct months. These are independent sets, not three copies of every
+archive in each of 14 distinct school-local dates, the newest archive in each of
+8 distinct weeks, and the newest archive in each of 3 distinct months. These are
+independent sets, not three copies of every
 archive; gaps in school operation do not invent recovery points. Weekly/monthly
-points survive daily rotation. Only existing local successes count toward rotation,
-and the newest usable copy is always kept. Failures never initiate deletion.
+points survive daily rotation. Only existing local successes that authenticate
+with the configured key count toward rotation, and the newest usable copy is
+always kept. Failures never initiate deletion.
 Expired records remain in the audit inventory. A failed deletion keeps the file
-and reports an error for the next successful rotation. Physical copies downloaded
-to another device are independent of automatic rotation. Staff must check that the
+and reports an error for the next successful rotation. Unavailable, corrupt or
+old-key archives are preserved, flagged and excluded from recovery/download choices;
+they cannot displace healthy archives. Checks run again on the next successful
+rotation. Old-key archives need their original key; a technician can copy those
+files directly from storage for recovery. Integrity checks read retained files
+and can take time on slow disks. Physical copies downloaded to another device are
+independent of automatic rotation. Staff must check that the
 copy finished, safely eject the drive, and store it away from the server.
 
 There is no database restoration endpoint. Recovery remains an offline maintenance
@@ -126,7 +158,7 @@ restore into a live database. In commands below, replace `...` with
 
    ```text
    docker compose ... cp /absolute/recovery/extracted/database.dump db:/tmp/database.dump
-   docker compose ... exec -T db pg_restore -U absensa -d absensa --no-owner --no-privileges --exit-on-error /tmp/database.dump
+   docker compose ... exec -T db pg_restore -U absensa -d absensa --no-owner --no-privileges --single-transaction --exit-on-error /tmp/database.dump
    ```
 
    Check the exit code. Do not continue after a partial restore; recreate an empty
@@ -159,11 +191,52 @@ restore into a live database. In commands below, replace `...` with
 
 ## Checks
 
+In commands below, replace `...` with
+`--env-file deploy/production.env -f compose.production.yml`.
+Authenticate a downloaded/external copy without producing plaintext. Mount the
+copy read-only; the directory must be readable by UID/GID 10001:
+
+```text
+docker compose ... run --rm --no-deps -v /absolute/external-copy:/recovery:ro backup python -m app.jobs.verify_backup /recovery/archive.absbackup
+```
+
+A nonzero exit means the archive/key cannot be verified. Successful authentication
+proves file integrity; a database/photo restore drill proves recovery works.
+
+Before maintenance, stop web, scheduler and backup, then run a fresh manual backup
+even when automatic backups are disabled or today's slots have already run:
+
+```text
+docker compose ... stop web scheduler backup
+docker compose ... run --rm --no-deps backup python -m app.jobs.backups --once --manual
+```
+
+Require exit code zero and the `Backup completed: <id>` log. A busy/failed worker or
+configuration failure exits nonzero. Preserve `<id>.absbackup` from the archive
+volume on external media and authenticate it before upgrading. Do not copy the
+database volume itself while PostgreSQL is running.
+
+For a named archive volume, create a private external directory writable by
+UID/GID 10001, replace `<id>` with the completed ID and copy through the worker
+mount (use a new filename):
+
+```text
+docker compose ... run --rm --no-deps -v /absolute/external-copy:/external backup python -c "import os,shutil; os.umask(0o077); shutil.copyfile('/app/backups/<id>.absbackup', '/external/<id>.absbackup')"
+```
+
+Then run the authentication command above against the external `<id>.absbackup`.
+When only taking a backup, resume with `docker compose ... start web scheduler backup`.
+
 Ordinary service tests mock `pg_dump` and run against a disposable PostgreSQL
 instance using the existing fixtures. They exercise encryption/tampering, snapshot
 arguments, archives/files, schedules, queue locks, retention, failures and protected
-downloads. An operational recovery drill with a real `pg_dump`/`pg_restore` is still
-required for each site's actual disks. See PostgreSQL's
+downloads. The opt-in `ABSENSA_TEST_REAL_BACKUP=1` test also runs real
+`pg_dump`/`pg_restore`, decrypts and extracts an archive, restores it to a temporary
+database, and checks schema revision, student/attendance data and photo/logo bytes.
+It requires PostgreSQL 18 clients and database-creation privileges on the disposable
+test server. Use the normal separate `TEST_DATABASE_URL` and
+`ABSENSA_ALLOW_TEST_DATABASE_RESET=1`; never point the suite at school data.
+An operational recovery drill is still required for each site's actual disks. See PostgreSQL's
 [pg_dump documentation](https://www.postgresql.org/docs/18/app-pgdump.html),
 [cryptography's GCM guidance](https://cryptography.io/en/latest/hazmat/primitives/symmetric-encryption/).
 
@@ -187,5 +260,7 @@ successful retention pass. Failed attempts never trigger deletion.
 **Unduh** serves complete encrypted archives. Copy the downloaded file onto a USB
 drive or external disk, check the copy finished, eject the device and store it safely.
 The interface explains these steps in Indonesian and never displays the encryption
-key. Missing/expired archives cannot be downloaded. Errors provide suggested checks
-without exposing raw database exceptions. Restoration remains offline.
+key. Missing/expired archives and those with a recorded integrity failure cannot
+be downloaded. The page warns when the available recovery point is over 24 hours
+old. Errors provide suggested checks without exposing raw database exceptions.
+Restoration remains offline.
