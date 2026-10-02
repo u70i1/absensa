@@ -9,8 +9,10 @@ from app.schemas.class_ import (
 )
 from app.services.exceptions import AppException, ClassNameTooLong, DuplicateClass
 from sqlalchemy import delete, select, text, tuple_, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from .class_service import _save_class
 from .helpers import bulk_response_or_422, check_missing_fields, fail
 
 CLASS_NAME_MAX_LENGTH = 20
@@ -36,9 +38,13 @@ def validate_new_class(
         raise AppException(
             detail=f"missing fields: {', '.join(missing)}", status_code=422
         )
+    if class_.class_name is None or class_.grade is None:
+        raise AppException("missing class fields", 422)
 
     if len(class_.class_name) > CLASS_NAME_MAX_LENGTH:  # type: ignore
         raise ClassNameTooLong()
+    if not class_.class_name.strip() or not 1 <= class_.grade <= 20:
+        raise AppException("invalid class fields", 422)
 
     key = (class_.grade, class_.class_name)
 
@@ -87,7 +93,7 @@ def create_classes_bulk(
         new_classes_meta.append((index, new_class))
 
     db.add_all(new_classes)
-    db.flush()
+    _save_class(db, commit=False)
 
     succeeded = []
     for index, new_class in new_classes_meta:
@@ -101,7 +107,7 @@ def create_classes_bulk(
     if dry_run:
         db.rollback()
     else:
-        db.commit()
+        _save_class(db, commit=True)
 
     return bulk_response_or_422(succeeded, failed)
 
@@ -124,18 +130,19 @@ def validate_updated_class(
         raise AppException(
             detail=f"missing fields: {', '.join(missing)}", status_code=422
         )
+    if class_.class_name is None:
+        raise AppException("missing class_name", 422)
 
     if len(class_.class_name) > CLASS_NAME_MAX_LENGTH:  # type: ignore
         raise ClassNameTooLong()
 
     if class_.class_id not in class_ids_db:
         raise AppException(detail="cannot find class_id", status_code=422)
+    if not class_.class_name.strip() or not 1 <= effective_key[0] <= 20:
+        raise AppException("invalid class fields", 422)
 
     if class_key_batch_counts[effective_key] > 1:
         raise DuplicateClass(detail="duplicate class_name in batch")
-
-    if class_key_counts_after_transaction[effective_key] > 1:
-        raise DuplicateClass()
 
 
 def update_classes_bulk(
@@ -155,6 +162,7 @@ def update_classes_bulk(
         ).all()
     }
     class_ids_db = set(before_transaction)
+    id_counts = Counter(class_.class_id for class_ in payload)
 
     # Each row's (grade, class_name) after its own update -- a row that
     # omits "grade" keeps the class's current grade.
@@ -173,11 +181,13 @@ def update_classes_bulk(
     class_key_counts_after_transaction = Counter(after_transaction.values())
 
     failed = []
-    succeeded = []
+    succeeded: list[dict] = []
     updating_classes = []
 
     for index, class_ in enumerate(payload):
         try:
+            if id_counts[class_.class_id] > 1:
+                raise AppException("duplicate class_id in batch", 422)
             validate_updated_class(
                 class_,
                 class_ids_db,
@@ -198,13 +208,44 @@ def update_classes_bulk(
         updating_classes.append(updating_class)
         succeeded.append({"index": index, "item": updating_class})
 
-    db.execute(text("SET CONSTRAINTS uq_grade_class_name DEFERRED"))
-    db.execute(update(Class), updating_classes)
-
-    if dry_run:
+    while succeeded:
+        final = before_transaction | {
+            entry["item"]["class_id"]: (
+                entry["item"]["grade"],
+                entry["item"]["class_name"],
+            )
+            for entry in succeeded
+        }
+        counts = Counter(final.values())
+        rejected = [
+            entry
+            for entry in succeeded
+            if counts[(entry["item"]["grade"], entry["item"]["class_name"])] > 1
+        ]
+        if not rejected:
+            break
+        rejected_indexes = {entry["index"] for entry in rejected}
+        for entry in rejected:
+            failed.append(
+                fail(entry["index"], "duplicate_class", payload[entry["index"]])
+            )
+        succeeded = [
+            entry for entry in succeeded if entry["index"] not in rejected_indexes
+        ]
+    updating_classes = [entry["item"] for entry in succeeded]
+    try:
+        db.execute(text("SET CONSTRAINTS uq_grade_class_name DEFERRED"))
+        if updating_classes:
+            db.execute(update(Class), updating_classes)
+        db.execute(text("SET CONSTRAINTS uq_grade_class_name IMMEDIATE"))
+        db.rollback() if dry_run else db.commit()
+    except IntegrityError as exc:
         db.rollback()
-    else:
-        db.commit()
+        raise AppException(
+            "Data berubah atau bertabrakan. Muat ulang dan coba lagi.", 409
+        ) from exc
+
+    failed.sort(key=lambda entry: entry["index"])
 
     return bulk_response_or_422(succeeded, failed)
 
@@ -231,4 +272,5 @@ def delete_classes_bulk(
         db.rollback()
     else:
         db.execute(delete(Class).where(Class.class_id.in_(payload_ids)))
+        db.commit()
     return None

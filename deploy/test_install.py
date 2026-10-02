@@ -22,9 +22,9 @@ class InstallerSafetyTests(unittest.TestCase):
                 patch.object(install, "any_existing_data", return_value=True),
                 patch.object(install, "run_step") as run_step,
                 patch("sys.argv", ["install.py"]),
+                self.assertRaisesRegex(install.SetupError, "--resume"),
             ):
-                with self.assertRaisesRegex(install.SetupError, "--resume"):
-                    install.main()
+                install.main()
             self.assertEqual(config.read_bytes(), original)
             run_step.assert_not_called()
 

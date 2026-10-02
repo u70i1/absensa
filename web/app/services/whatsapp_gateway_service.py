@@ -2,7 +2,7 @@
 
 import re
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 import httpx
 
@@ -20,9 +20,7 @@ QR_IMAGE = re.compile(r"data:image/png;base64,[A-Za-z0-9+/=]+\Z")
 
 
 class GatewayProblem(Exception):
-    def __init__(
-        self, detail: str, status_code: int = 502, *, code: str | None = None
-    ):
+    def __init__(self, detail: str, status_code: int = 502, *, code: str | None = None):
         super().__init__(detail)
         self.detail = detail
         self.status_code = status_code
@@ -83,7 +81,7 @@ class WhatsAppGateway:
             raise GatewayProblem("Respons layanan WhatsApp tidak valid.") from exc
         if not isinstance(payload, dict):
             raise GatewayProblem("Respons layanan WhatsApp tidak valid.")
-        if response.is_error:
+        if not 200 <= response.status_code < 300:
             code = payload.get("error")
             if code == "not_connected":
                 raise GatewayProblem("WhatsApp belum terhubung.", 409)
@@ -113,12 +111,12 @@ class WhatsAppGateway:
         try:
             payload = self._request("GET", "api/status")
             state = payload.get("state")
-            if state not in STATES:
+            if not isinstance(state, str) or state not in STATES:
                 raise GatewayProblem("Status layanan WhatsApp tidak valid.")
             if state == "qr" and payload.get("qr_available"):
                 payload = self._request("GET", "api/qr")
                 state = payload.get("state")
-                if state not in STATES:
+                if not isinstance(state, str) or state not in STATES:
                     raise GatewayProblem("Status layanan WhatsApp tidak valid.")
             qr_data_url = payload.get("qr_data_url")
             if (
@@ -130,7 +128,9 @@ class WhatsAppGateway:
             phone = payload.get("phone")
             if not isinstance(phone, str) or not re.fullmatch(r"[0-9]{8,15}", phone):
                 phone = None
-            return GatewayStatus(state=state, phone=phone, qr_data_url=qr_data_url)
+            return GatewayStatus(
+                state=cast(GatewayState, state), phone=phone, qr_data_url=qr_data_url
+            )
         except GatewayProblem as exc:
             return GatewayStatus(state="unavailable", detail=exc.detail)
 
@@ -143,8 +143,12 @@ class WhatsAppGateway:
     def send_message(self, phone: str, message: str) -> None:
         if not message.strip() or len(message) > 4000:
             raise GatewayProblem("Pesan WhatsApp tidak valid.", 422)
-        self._request(
+        result = self._request(
             "POST",
             "api/messages",
             json={"phone": normalize_phone(phone), "message": message},
         )
+        if result.get("sent") is not True:
+            raise GatewayProblem(
+                "Respons pengiriman WhatsApp tidak valid; hasil pengiriman belum pasti."
+            )

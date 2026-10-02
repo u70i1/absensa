@@ -2,6 +2,7 @@
 
 from datetime import date, datetime, timedelta
 from math import ceil
+from typing import Any
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
@@ -25,7 +26,7 @@ LOCAL_TZ = ZoneInfo(settings.timezone)
 
 
 def scan_query(request: Request) -> AdminScanQuery:
-    values = dict(request.query_params)
+    values: dict[str, Any] = dict(request.query_params)
     if not values.get("day"):
         values["day"] = datetime.now(LOCAL_TZ).date().isoformat()
     values["q"] = values.get("q", "").strip()

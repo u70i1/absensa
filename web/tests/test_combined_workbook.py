@@ -10,7 +10,9 @@ from app.services.exceptions import AppException
 from openpyxl import load_workbook
 from sqlalchemy import event, select, text
 
-from tests.test_import import importer  # noqa: F401
+from tests import test_import
+
+importer = test_import.importer
 
 
 def save(book):
@@ -41,9 +43,9 @@ def student_row(
             nisn,
             "Aktif",
             None,
+            class_id,
             export_service.class_lookup_formula(row, 2),
             export_service.class_lookup_formula(row, 3),
-            class_id,
         ),
         1,
     ):
@@ -103,15 +105,15 @@ def test_existing_student_resolution(
         if mode == "rename_grade":
             book["classes"]["B2"] = 9
     elif mode == "reassign":
-        book["students"]["H2"] = other.class_id
+        book["students"]["F2"] = other.class_id
         expected_id = other.class_id
     elif mode == "temporary":
         assert book["classes"]["A4"].value == "N1"
         book["classes"]["B4"], book["classes"]["C4"] = 6, "New"
-        book["students"]["H2"] = "N1"
+        book["students"]["F2"] = "N1"
         expected_id = None
     elif mode == "unassign":
-        book["students"]["H2"] = None
+        book["students"]["F2"] = None
         expected_id = None
     batch = preview(db, importer, book)
     assert not batch.payload["errors"]
@@ -126,8 +128,8 @@ def test_existing_student_resolution(
     if mode.startswith("rename"):
         assert db.get(Class, original_id).class_name == "Renamed"
     fresh = workbook(db, [student])
-    assert fresh["students"]["H2"].value == student.class_id
-    assert fresh["students"]["G2"].data_type == "f"
+    assert fresh["students"]["F2"].value == student.class_id
+    assert fresh["students"]["H2"].data_type == "f"
     assert len(list(db.scalars(select(Class)))) == (3 if mode == "temporary" else 2)
 
 
@@ -149,12 +151,12 @@ def test_temporary_class_created_once(db_session, importer, count):
 @pytest.mark.parametrize(
     "failure,cell",
     [
-        ("unknown_numeric", "2:H"),
-        ("unknown_temporary", "2:H"),
-        ("unused_slot", "2:H"),
+        ("unknown_numeric", "2:F"),
+        ("unknown_temporary", "2:F"),
+        ("unused_slot", "2:F"),
         ("incomplete_class", "3:C"),
-        ("bad_temp_format", "2:H"),
-        ("missing_new_reference", "3:H"),
+        ("bad_temp_format", "2:F"),
+        ("missing_new_reference", "3:F"),
         ("duplicate_class_id", "3:A"),
         ("duplicate_temp_id", "4:A"),
         ("unknown_class_id", "2:A"),
@@ -163,11 +165,11 @@ def test_temporary_class_created_once(db_session, importer, count):
         ("unknown_student", "2:A"),
         ("duplicate_student", "3:A"),
         ("missing_sheet", "1:A"),
-        ("renamed_header", "1:G"),
-        ("missing_header", "1:H"),
-        ("manual_grade", "2:F"),
-        ("manual_name", "2:G"),
-        ("foreign_formula", "2:F"),
+        ("renamed_header", "1:H"),
+        ("missing_header", "1:F"),
+        ("manual_grade", "2:G"),
+        ("manual_name", "2:H"),
+        ("foreign_formula", "2:G"),
     ],
 )
 def test_invalid_workbook_has_zero_effect(
@@ -181,15 +183,15 @@ def test_invalid_workbook_has_zero_effect(
     c["C2"] = "Valid rename"
     c["B3"], c["C3"] = 5, "Valid new class"
     if failure == "unknown_numeric":
-        s["H2"] = 2147483647
+        s["F2"] = 2147483647
     elif failure == "unknown_temporary":
-        s["H2"] = "N999"
+        s["F2"] = "N999"
     elif failure == "unused_slot":
-        s["H2"] = "N2"
+        s["F2"] = "N2"
     elif failure == "incomplete_class":
         c["C3"] = None
     elif failure == "bad_temp_format":
-        s["H2"] = "N01"
+        s["F2"] = "N01"
     elif failure == "missing_new_reference":
         student_row(s, 3, class_id=None)
     elif failure == "duplicate_class_id":
@@ -215,15 +217,15 @@ def test_invalid_workbook_has_zero_effect(
     elif failure == "missing_sheet":
         del book["classes"]
     elif failure == "renamed_header":
-        s["G1"] = "Other"
+        s["H1"] = "Other"
     elif failure == "missing_header":
-        s["H1"] = None
+        s["F1"] = None
     elif failure == "manual_grade":
-        s["F2"] = 11
+        s["G2"] = 11
     elif failure == "manual_name":
-        s["G2"] = "11B"
+        s["H2"] = "11B"
     elif failure == "foreign_formula":
-        s["F2"] = "=11"
+        s["G2"] = "=11"
     batch = preview(db, importer, book)
     assert cell in {e["cell"] for e in batch.payload["errors"]}
     assert snapshot(db) == before
@@ -304,11 +306,11 @@ def test_workbook_formulas_validation_and_protection(
     s, c = book["students"], book["classes"]
     assert book.sheetnames == ["instructions", "students", "classes"]
     assert s["A2"].value == existing_student.id and s["A3"].value is None
-    assert s["H2"].value == existing_student.class_id
-    assert not s.column_dimensions["H"].hidden and not s["H2"].protection.locked
+    assert s["F2"].value == existing_student.class_id
+    assert not s.column_dimensions["F"].hidden and s["F2"].protection.locked
     assert s.protection.sheet and c.protection.sheet and c["A2"].protection.locked
     for row in (2, 3, 100):
-        for col, lookupcol in ((6, 2), (7, 3)):
+        for col, lookupcol in ((7, 2), (8, 3)):
             assert s.cell(row, col).value == export_service.class_lookup_formula(
                 row, lookupcol
             )
@@ -316,8 +318,8 @@ def test_workbook_formulas_validation_and_protection(
             assert s.cell(row, col).font.italic
     assert any(
         v.type == "custom"
-        and "H2" in v.sqref
-        and "COUNTIF(class_ids,H2)" in v.formula1
+        and "F2" in v.sqref
+        and "COUNTIF(class_ids,F2)" in v.formula1
         and v.showErrorMessage
         for v in s.data_validations.dataValidation
     )
@@ -330,7 +332,7 @@ def test_workbook_formulas_validation_and_protection(
     assert {existing_student.class_id, other.class_id} <= {c["A2"].value, c["A3"].value}
     assert c["A4"].value == "N1" and c["A103"].value == "N100"
     assert c["A4"].protection.locked and not c["B4"].protection.locked
-    assert s["F2"].fill.fgColor.rgb != s["H2"].fill.fgColor.rgb
+    assert s["G2"].fill.fgColor.rgb != s["F2"].fill.fgColor.rgb
 
 
 def test_deleted_class_row_never_deletes_database_class(
@@ -368,7 +370,7 @@ def test_preview_editor_assigns_temporary_id(
     book["classes"]["B3"], book["classes"]["C3"] = 12, "New"
     batch = preview(db_session, importer, book)
     response = client.post(
-        f"/admin/import/{batch.token}/rows/2/edit",
+        f"/admin/import/{batch.token}/rows/{next(row['key'] for row in batch.payload['rows'] if row['kind'] == 'students')}/edit",
         data={
             "name": existing_student.name,
             "nisn": existing_student.nisn,

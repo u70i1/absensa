@@ -46,9 +46,9 @@ def workbook_bytes(kind, rows, *, class_name="10A"):
                 nisn,
                 status,
                 phone,
+                metadata_id or "N1",
                 class_lookup_formula(number, 2),
                 class_lookup_formula(number, 3),
-                metadata_id or "N1",
             ]
         for column, value in enumerate(row, 1):
             sheet.cell(number, column).value = value
@@ -173,7 +173,7 @@ def test_class_import_create_and_update(client, importer, db_session, existing_c
     assert "Konfirmasi perubahan data Siswa &amp; Kelas" in page.text
     assert (
         client.post(
-            f"/admin/import/{batch.token}/confirm", data={"selected": [100003, 100004]}
+            f"/admin/import/{batch.token}/confirm", data={"selected": selection(batch)}
         ).status_code
         == 200
     )
@@ -208,7 +208,7 @@ def test_cell_errors_block_even_valid_rows(client, importer, db_session):
     "row,cell",
     [
         ([None, "N", None, "123", "Aktif", None], "2:C"),
-        ([None, "N", 2147483647, "0012345678", "Aktif", None], "2:H"),
+        ([None, "N", 2147483647, "0012345678", "Aktif", None], "2:F"),
         ([2147483647, "N", None, "0012345678", "Aktif", None], "2:A"),
         ([None, "N", None, "0012345678", "Aktif", "+62812345"], "2:E"),
     ],

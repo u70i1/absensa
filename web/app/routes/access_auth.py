@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.models.access import Operator, TrustedDevice
 from app.services import access_auth_service as auth
 from app.services.exceptions import AppException
+from app.services.login_throttle_service import LoginThrottled, reserve_attempt
 from app.templating import templates
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
@@ -113,12 +114,19 @@ async def device_login(
         return redirect
     username, password = str(data.get("username", "")), str(data.get("password", ""))
     try:
+        await run_in_threadpool(
+            reserve_attempt,
+            db,
+            "device",
+            username[:100],
+            request.client.host if request.client else "unknown",
+        )
         if not 1 <= len(username) <= 100 or not 1 <= len(password) <= 1024:
             raise AppException("Nama pengguna atau kata sandi tidak valid.", 401)
         token = await run_in_threadpool(auth.bind_device, db, username, password)
     except AppException as exc:
         db.rollback()
-        return login_response(
+        response = login_response(
             request,
             db,
             "device",
@@ -127,6 +135,9 @@ async def device_login(
             status=exc.status_code,
             username=username[:100],
         )
+        if isinstance(exc, LoginThrottled):
+            response.headers["Retry-After"] = str(exc.retry_after)
+        return response
     response = RedirectResponse(
         "/operator/login?" + urlencode({"next": destination}), status_code=303
     )
@@ -166,7 +177,7 @@ async def operator_login(
         token = await run_in_threadpool(
             auth.login_operator,
             db,
-            request.cookies.get(DEVICE_COOKIE),
+            request.cookies.get(DEVICE_COOKIE, ""),
             operator_id,
             pin,
         )

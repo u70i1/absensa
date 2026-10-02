@@ -8,11 +8,13 @@ from app.db.session import get_db
 from app.models.admin import Admin
 from app.schemas.admin import AdminLoginRequest
 from app.services import admin_auth_service
+from app.services.login_throttle_service import LoginThrottled, reserve_attempt
 from app.templating import templates
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 router = APIRouter(prefix="/admin", default_response_class=HTMLResponse)
 Db = Annotated[Session, Depends(get_db)]
@@ -43,20 +45,40 @@ def admin_login_page(request: Request, admin: OptionalAdmin):
 
 @router.post("", name="admin_login_submit")
 async def admin_login(request: Request, db: Db):
-    data = dict(await request.form())
+    async with request.form(max_files=0, max_fields=2) as form:
+        data = dict(form)
+    try:
+        await run_in_threadpool(
+            reserve_attempt,
+            db,
+            "admin",
+            str(data.get("username", ""))[:100],
+            request.client.host if request.client else "unknown",
+        )
+    except LoginThrottled as exc:
+        response = login_page(
+            request, str(data.get("username", ""))[:100], exc.detail, 429
+        )
+        response.headers["Retry-After"] = str(exc.retry_after)
+        return response
     try:
         credentials = AdminLoginRequest.model_validate(data)
     except ValidationError:
-        return login_page(request, str(data.get("username", "")), LOGIN_ERROR, 401)
+        return login_page(
+            request, str(data.get("username", ""))[:100], LOGIN_ERROR, 401
+        )
 
-    admin = admin_auth_service.authenticate_admin(
-        db, credentials.username, credentials.password
+    admin = await run_in_threadpool(
+        admin_auth_service.authenticate_admin,
+        db,
+        credentials.username,
+        credentials.password,
     )
     if admin is None:
         return login_page(request, credentials.username, LOGIN_ERROR, 401)
 
-    token = admin_auth_service.create_admin_session(
-        db, admin, settings.admin_session_hours
+    token = await run_in_threadpool(
+        admin_auth_service.create_admin_session, db, admin, settings.admin_session_hours
     )
     response = RedirectResponse("/admin/students", status_code=303)
     response.delete_cookie(ADMIN_SESSION_COOKIE, path="/admin")

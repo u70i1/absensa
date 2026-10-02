@@ -7,6 +7,7 @@ from app.schemas.student import (
     StudentBulkDeleteRequest,
     StudentBulkUpdateRequest,
     StudentResponse,
+    StudentWriteRequest,
 )
 from app.services.exceptions import (
     AppException,
@@ -14,11 +15,13 @@ from app.services.exceptions import (
     DuplicateNisn,
     StudentNotFound,
 )
+from pydantic import ValidationError
 from sqlalchemy import delete, select, text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .helpers import bulk_response_or_422, check_missing_fields, fail
-from .student_service import _normalize_guardian_phone
+from .student_service import _normalize_guardian_phone, _save_student
 
 
 def count_nisns(students) -> Counter:
@@ -48,6 +51,16 @@ def validate_new_student(
         raise AppException(
             detail=f"missing fields: {', '.join(missing)}", status_code=422
         )
+
+    try:
+        StudentWriteRequest.model_validate(
+            {
+                **student.model_dump(),
+                "current": student.current if student.current is not None else True,
+            }
+        )
+    except ValidationError as exc:
+        raise AppException("invalid student fields", 422) from exc
 
     if nisn_batch_counts[student.nisn] > 1:
         raise DuplicateNisn(detail="duplicate nisn in batch")
@@ -94,16 +107,16 @@ def create_students_bulk(
             name=student.name,
             nisn=student.nisn,
             class_id=student.class_id,
-            current=student.current,
+            current=student.current if student.current is not None else True,
             guardian_phone=_normalize_guardian_phone(student.guardian_phone),
         )
         new_students.append(new_student)
         new_students_meta.append((index, new_student))
 
     db.add_all(new_students)
-    db.flush()
+    _save_student(db, commit=False)
 
-    succeeded = []
+    succeeded: list[dict] = []
     for index, new_student in new_students_meta:
         succeeded.append(
             {
@@ -115,7 +128,7 @@ def create_students_bulk(
     if dry_run:
         db.rollback()
     else:
-        db.commit()
+        _save_student(db, commit=True)
 
     return bulk_response_or_422(succeeded, failed)
 
@@ -147,9 +160,6 @@ def validate_updated_student(
     if nisn_batch_counts[student.nisn] > 1:
         raise DuplicateNisn(detail="duplicate nisn in batch")
 
-    if nisn_counts_after_transaction[student.nisn] > 1:
-        raise DuplicateNisn()
-
     if not class_id_is_valid(student.class_id, class_ids_db):
         raise ClassNotFound()
 
@@ -167,12 +177,16 @@ def update_students_bulk(
     after_transaction = before_transaction | nisns_payload
 
     requested_ids = {student.id for student in payload if student.id is not None}
-    photo_paths = dict(
-        db.execute(
-            select(Student.id, Student.photo_path).where(Student.id.in_(requested_ids))
-        ).all()
-    )
-    student_ids_db = set(photo_paths)
+    stored = {
+        row.id: row
+        for row in db.execute(
+            select(
+                Student.id, Student.photo_path, Student.current, Student.guardian_phone
+            ).where(Student.id.in_(requested_ids))
+        )
+    }
+    student_ids_db = set(stored)
+    id_counts = Counter(student.id for student in payload)
     requested_classes = {
         student.class_id for student in payload if student.class_id is not None
     }
@@ -183,11 +197,13 @@ def update_students_bulk(
     nisn_counts_after_transaction = Counter(after_transaction.values())
 
     failed = []
-    succeeded = []
+    succeeded: list[dict] = []
     updating_students = []
 
     for index, student in enumerate(payload):
         try:
+            if id_counts[student.id] > 1:
+                raise AppException("duplicate id in batch", 422)
             validate_updated_student(
                 student,
                 student_ids_db,
@@ -195,6 +211,23 @@ def update_students_bulk(
                 nisn_batch_counts,
                 nisn_counts_after_transaction,
             )
+            StudentWriteRequest.model_validate(
+                {
+                    **student.model_dump(),
+                    "current": student.current
+                    if student.current is not None
+                    else stored[student.id].current,
+                }
+            )
+        except ValidationError:
+            failed.append(
+                fail(
+                    index,
+                    "invalid student fields",
+                    student.model_dump(exclude_unset=True),
+                )
+            )
+            continue
         except AppException as exc:
             failed.append(
                 fail(index, exc.detail, student.model_dump(exclude_unset=True))
@@ -206,24 +239,63 @@ def update_students_bulk(
             "name": student.name,
             "nisn": student.nisn,
             "class_id": student.class_id,
-            "current": student.current,
-            "guardian_phone": _normalize_guardian_phone(student.guardian_phone),
+            "current": student.current
+            if student.current is not None
+            else stored[student.id].current,
+            "guardian_phone": _normalize_guardian_phone(student.guardian_phone)
+            if "guardian_phone" in student.model_fields_set
+            else stored[student.id].guardian_phone,
         }
         updating_students.append(updating_student)
         succeeded.append(
             {
                 "index": index,
-                "item": {**updating_student, "photo_path": photo_paths[student.id]},
+                "item": {
+                    **updating_student,
+                    "photo_path": stored[student.id].photo_path,
+                },
             }
         )
 
-    db.execute(text("SET CONSTRAINTS students_nisn_key DEFERRED"))
-    db.execute(update(Student), updating_students)
-
-    if dry_run:
+    # Rejected rows retain their old NISNs. Removing one candidate can invalidate
+    # another dependent swap, so validate the actual surviving state to a fixpoint.
+    while succeeded:
+        final = before_transaction | {
+            entry["item"]["id"]: entry["item"]["nisn"] for entry in succeeded
+        }
+        counts = Counter(final.values())
+        rejected = [entry for entry in succeeded if counts[entry["item"]["nisn"]] > 1]
+        if not rejected:
+            break
+        rejected_indexes = {entry["index"] for entry in rejected}
+        for entry in rejected:
+            failed.append(
+                fail(
+                    entry["index"],
+                    "duplicate_nisn",
+                    payload[entry["index"]].model_dump(exclude_unset=True),
+                )
+            )
+        succeeded = [
+            entry for entry in succeeded if entry["index"] not in rejected_indexes
+        ]
+    updating_students = [
+        {key: value for key, value in entry["item"].items() if key != "photo_path"}
+        for entry in succeeded
+    ]
+    try:
+        db.execute(text("SET CONSTRAINTS students_nisn_key DEFERRED"))
+        if updating_students:
+            db.execute(update(Student), updating_students)
+        db.execute(text("SET CONSTRAINTS students_nisn_key IMMEDIATE"))
+        db.rollback() if dry_run else db.commit()
+    except IntegrityError as exc:
         db.rollback()
-    else:
-        db.commit()
+        raise AppException(
+            "Data berubah atau bertabrakan. Muat ulang dan coba lagi.", 409
+        ) from exc
+
+    failed.sort(key=lambda entry: entry["index"])
 
     return bulk_response_or_422(succeeded, failed)
 
@@ -249,4 +321,5 @@ def delete_students_bulk(
         db.rollback()
     else:
         db.execute(delete(Student).where(Student.id.in_(payload_ids)))
+        db.commit()
     return None

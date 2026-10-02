@@ -202,6 +202,14 @@ this limit. A successful PIN login resets failures; an expired lock starts a fre
 window. An explicit administrator reset clears the lock too. The login page shows
 the server's retry time, and locked responses include Retry-After.
 
+Administrator and trusted-device password logins also reserve shared PostgreSQL
+attempt budgets before checking passwords: five attempts per normalized account
+and thirty per source address in a five-minute window. Successful attempts count
+toward these budgets too; blocked requests return `429` and `Retry-After`. The
+window expires without being extended by further attempts. Apply migration
+`e61c89a1d702` before starting this version. It also widens attendance class-name
+snapshots to twenty characters and adds attendance lookup indexes.
+
 `POST /operator/logout` ends only the operator session. `POST /trusteddevice/logout`
 revokes the device binding and its operator session. Tokens are invalidated in the
 database, not merely removed from cookies. A stale operator cookie cannot authorize
@@ -297,8 +305,12 @@ ports and credentials. The default Compose host port is `5433`. Keep the test
 database separate from the application database. The saved `photos/` directory
 contains profile images and should be backed up with the database.
 
-Run tests from `web/` with `.venv/bin/pytest`. The suite applies Alembic migrations
-to `TEST_DATABASE_URL`; use an empty, dedicated test database.
+Run tests from `web/` with `ABSENSA_ALLOW_TEST_DATABASE_RESET=1 .venv/bin/pytest`.
+The suite upgrades and then **drops the schema** in `TEST_DATABASE_URL`; use an
+empty, disposable test database. It rejects a missing opt-in or a test URL that
+targets the application database, including URLs with different credentials.
+
+See [the pre-launch audit](AUDIT.md) for verified fixes and remaining launch work.
 
 ## Project layout
 

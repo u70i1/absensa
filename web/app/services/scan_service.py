@@ -14,9 +14,6 @@ tz_info = ZoneInfo(settings.timezone)
 
 def post_scan(db: Session, nisn: str):
     """Record one active student's attendance for the current local day."""
-    timestamp = datetime.now(tz=tz_info)
-    start_today = timestamp.replace(hour=0, minute=0, second=0, microsecond=0)
-    start_tomorrow = start_today + timedelta(days=1)
     scanned_student = db.execute(
         select(
             Student.id,
@@ -28,10 +25,17 @@ def post_scan(db: Session, nisn: str):
         )
         .outerjoin(Class, Class.class_id == Student.class_id)
         .where(Student.current.is_(True), Student.nisn == nisn)
+        # Serialize the check and insert across API/operator requests. Limit the
+        # lock to students: PostgreSQL cannot lock the nullable outer-join side.
+        .with_for_update(of=Student)
     ).first()
     if scanned_student is None:
         raise StudentNotFound()
 
+    # Take the date after acquiring the lock, including when waiting at midnight.
+    timestamp = datetime.now(tz=tz_info)
+    start_today = timestamp.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_tomorrow = start_today + timedelta(days=1)
     existing_scan = db.scalar(
         select(ScanLog.scan_id)
         .where(
@@ -60,6 +64,7 @@ def post_scan(db: Session, nisn: str):
         "class_name": new_scan_log.class_name,
         "class_id": scanned_student.class_id,
         "student_nisn": scanned_student.nisn,
+        "nisn": scanned_student.nisn,
         "student_id": scanned_student.id,
         "photo_path": scanned_student.photo_path,
         "timestamp": timestamp,
@@ -68,10 +73,10 @@ def post_scan(db: Session, nisn: str):
 
 def get_scan(
     db: Session,
-    nisn: str,
-    student_id: int,
-    date_from: datetime,
-    date_to: datetime,
+    nisn: str | None,
+    student_id: int | None,
+    date_from: datetime | None,
+    date_to: datetime | None,
     page: int,
     limit: int,
 ):
@@ -84,11 +89,16 @@ def get_scan(
         filters.append(ScanLog.student_id == student_id)
 
     if date_from is not None:
+        date_from = (
+            date_from.replace(tzinfo=tz_info) if date_from.tzinfo is None else date_from
+        )
         filters.append(
-            ScanLog.timestamp >= date_from.replace(hour=0, minute=0, second=0)
+            ScanLog.timestamp
+            >= date_from.replace(hour=0, minute=0, second=0, microsecond=0)
         )
 
     if date_to is not None:
+        date_to = date_to.replace(tzinfo=tz_info) if date_to.tzinfo is None else date_to
         filters.append(
             ScanLog.timestamp
             < date_to.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -109,7 +119,7 @@ def get_scan(
         .where(*filters)
         .offset((page - 1) * limit)
         .limit(limit)
-        .order_by(ScanLog.timestamp.desc())
+        .order_by(ScanLog.timestamp.desc(), ScanLog.scan_id.desc())
     )
     scan_logs = db.execute(stmt).all()
 
@@ -223,9 +233,12 @@ def _admin_scan_filters(day: date, name: str):
 
 
 def count_admin_scans(db: Session, day: date, name: str) -> int:
-    return db.scalar(
-        select(func.count(ScanLog.scan_id)).where(*_admin_scan_filters(day, name))
-    ) or 0
+    return (
+        db.scalar(
+            select(func.count(ScanLog.scan_id)).where(*_admin_scan_filters(day, name))
+        )
+        or 0
+    )
 
 
 def get_admin_scans(

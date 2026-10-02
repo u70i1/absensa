@@ -88,3 +88,23 @@ completion if any deliveries remain failed or uncertain.
 
 Keep `services/whatsapp/.wwebjs_auth/` and `web/photos/` persistent if their
 contents should survive restarts.
+
+## Run tests safely
+
+Use an empty, disposable PostgreSQL database for `TEST_DATABASE_URL`, different
+from `DATABASE_URL`. The web suite upgrades and then drops the test schema, so it
+requires an explicit opt-in. From `web/`, run:
+
+```bash
+ABSENSA_ALLOW_TEST_DATABASE_RESET=1 .venv/bin/pytest -q
+```
+
+The worker's `npm test` uses mocked WhatsApp clients. Do not use the dashboard's
+real-message Test action as part of automated checks.
+
+This audited version requires `alembic upgrade head` before web and scheduler
+startup, plus installation of the updated Python requirements. The new migration
+preserves records, widens scan class-name snapshots, adds login budgets and
+attendance indexes. Back up first and schedule the migration while attendance is
+idle, since normal index creation takes database locks. Downgrading refuses to
+truncate snapshots longer than ten characters. See [AUDIT.md](AUDIT.md).

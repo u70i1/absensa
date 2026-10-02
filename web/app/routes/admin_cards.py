@@ -34,7 +34,7 @@ from fastapi.responses import (
 )
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
-from starlette.datastructures import FormData
+from starlette.datastructures import FormData, UploadFile
 
 router = APIRouter(prefix="/admin/cards", dependencies=[Depends(require_admin)])
 Db = Annotated[Session, Depends(get_db)]
@@ -179,7 +179,7 @@ def settings_preview(db: Db, data: Annotated[FormData, Depends(card_form)]):
         )
         logo = data.get("logo")
         logo_data = None
-        if getattr(logo, "filename", ""):
+        if isinstance(logo, UploadFile) and logo.filename:
             content = normalize_photo(logo.file)
             values.logo_path = "preview"
             logo_data = "data:image/jpeg;base64," + base64.b64encode(content).decode()
@@ -206,7 +206,7 @@ def save_settings(
         configuration.update_settings(
             db,
             values,
-            logo.file if getattr(logo, "filename", "") else None,
+            logo.file if isinstance(logo, UploadFile) and logo.filename else None,
             remove_logo=data.get("remove_logo") == "true",
         )
     except (ValidationError, ArithmeticError, AppException) as exc:

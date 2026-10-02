@@ -62,7 +62,7 @@ def test_day_and_name_filter_use_saved_scan_name(
     assert "Nadia" in response.text
     assert "Log Presensi" in response.text
     assert 'name="day"' in response.text
-    assert 'data-selection-toggle' in response.text
+    assert "data-selection-toggle" in response.text
     assert "/admin/scans/export?" in response.text
     navigation = unescape(response.text)
     assert "/admin/scans?day=2026-09-24&q=nad&page=1" in navigation
@@ -70,8 +70,7 @@ def test_day_and_name_filter_use_saved_scan_name(
     assert "Tanggal sebelumnya, 24/09/2026" in response.text
     assert "Tanggal berikutnya, 26/09/2026" in response.text
     assert (
-        admin_client.get("/admin/scans", params={"day": "yesterday"}).status_code
-        == 422
+        admin_client.get("/admin/scans", params={"day": "yesterday"}).status_code == 422
     )
 
 
@@ -182,8 +181,7 @@ def test_export_all_filtered_rows_and_not_importable(
     )
     assert response.status_code == 200
     assert (
-        "ekspor-log-presensi-2026-09-25.xlsx"
-        in response.headers["content-disposition"]
+        "ekspor-log-presensi-2026-09-25.xlsx" in response.headers["content-disposition"]
     )
     workbook = load_workbook(BytesIO(response.content))
     assert workbook.sheetnames == ["Tentang Ekspor", "scan_logs"]
@@ -193,8 +191,8 @@ def test_export_all_filtered_rows_and_not_importable(
         "Nadia",
         None,
         student.nisn,
-        datetime(2026, 9, 25),
-        datetime(2026, 9, 25, 9, 12, 13).time(),
+        datetime.fromisoformat("2026-09-25"),
+        datetime.fromisoformat("2026-09-25T09:12:13").time(),
     ]
     assert sheet.tables["ScansExportTable"].ref == "A1:F2"
     assert not sheet.data_validations.dataValidation

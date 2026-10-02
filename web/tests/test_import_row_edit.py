@@ -13,14 +13,16 @@ from app.services.exceptions import AppException
 from PIL import Image
 from sqlalchemy import select
 
+from tests import test_import
 from tests.test_import import (
     batch_for,
-    importer,  # noqa: F401
     preview,
     selection,
     student_rows,
     workbook_bytes,
-)  # noqa: F401
+)
+
+importer = test_import.importer
 
 
 def student_values():
@@ -58,7 +60,7 @@ def test_edit_student_draft_then_confirm(
         db_session,
     )
     before = deepcopy(student_rows(batch)[0]["before"])
-    url = f"/admin/import/{batch.token}/rows/2/edit"
+    url = f"/admin/import/{batch.token}/rows/{student_rows(batch)[0]['key']}/edit"
     assert url in page.text
     assert "Simpan ke Pratinjau" in client.get(url).text
     response = client.post(
@@ -120,7 +122,7 @@ def test_invalid_edits_keep_original_draft(client, importer, db_session, changes
     )
     original = deepcopy(batch.payload)
     response = client.post(
-        f"/admin/import/{batch.token}/rows/2/edit",
+        f"/admin/import/{batch.token}/rows/{student_rows(batch)[0]['key']}/edit",
         data={**student_values(), **changes, "revision": 0},
     )
     assert response.status_code == 422
@@ -137,17 +139,22 @@ def test_class_edit_and_revision_conflict(client, importer, db_session, existing
         client,
         db_session,
     )
-    url = f"/admin/import/{batch.token}/rows/100003/edit"
-    data = dict(
-        grade="12", class_name="12Z", revision=0, selected=[100003], class_id="999"
-    )
+    key = batch.payload["rows"][0]["key"]
+    url = f"/admin/import/{batch.token}/rows/{key}/edit"
+    data = {
+        "grade": "12",
+        "class_name": "12Z",
+        "revision": 0,
+        "selected": [key],
+        "class_id": "999",
+    }
     assert client.post(url, data=data).status_code == 200
     assert client.post(url, data={**data, "class_name": "Stale"}).status_code == 409
     db_session.refresh(existing_class)
     assert existing_class.class_name != "12Z"
     assert (
         client.post(
-            f"/admin/import/{batch.token}/confirm", data={"selected": [100003]}
+            f"/admin/import/{batch.token}/confirm", data={"selected": [key]}
         ).status_code
         == 200
     )
@@ -180,7 +187,7 @@ def test_edit_does_not_refresh_stale_snapshot(
     db_session.commit()
     assert (
         client.post(
-            f"/admin/import/{batch.token}/rows/2/edit",
+            f"/admin/import/{batch.token}/rows/{student_rows(batch)[0]['key']}/edit",
             data={**student_values(), "revision": 0},
         ).status_code
         == 200
@@ -199,29 +206,31 @@ def test_editor_ownership_state_and_expiry(client, importer, db_session):
     batch, _ = batch_for(
         preview(client, "classes", [[None, 10, "10X"]]), client, db_session
     )
+    key = batch.payload["rows"][0]["key"]
     with pytest.raises(AppException) as error:
         import_service.edit_preview_row(
-            db_session, importer.id + 1, batch.token, 2, {}, 0
+            db_session, importer.id + 1, batch.token, key, {}, 0
         )
     assert error.value.status_code == 404
     assert client.get(f"/admin/import/{batch.token}/rows/999/edit").status_code == 404
     batch.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
     db_session.commit()
-    assert client.get(f"/admin/import/{batch.token}/rows/2/edit").status_code == 404
+    assert client.get(f"/admin/import/{batch.token}/rows/{key}/edit").status_code == 404
     batch.expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
     batch.state = "cancelled"
     db_session.commit()
-    assert client.get(f"/admin/import/{batch.token}/rows/2/edit").status_code == 409
+    assert client.get(f"/admin/import/{batch.token}/rows/{key}/edit").status_code == 409
     client.cookies.clear()
     assert (
         client.get(
-            f"/admin/import/{batch.token}/rows/2/edit", follow_redirects=False
+            f"/admin/import/{batch.token}/rows/{key}/edit",
+            follow_redirects=False,
         ).status_code
         == 303
     )
     assert (
         client.post(
-            f"/admin/import/{batch.token}/rows/2/edit",
+            f"/admin/import/{batch.token}/rows/{key}/edit",
             data={"revision": 0},
             follow_redirects=False,
         ).status_code
@@ -247,7 +256,7 @@ def test_nisn_edit_retains_staged_photo(client, importer, db_session, monkeypatc
         db_session,
     )
     response = client.post(
-        f"/admin/import/{batch.token}/rows/2/edit",
+        f"/admin/import/{batch.token}/rows/{student_rows(batch)[0]['key']}/edit",
         data={**student_values(), "nisn": "0012345679", "revision": 0, "selected": [2]},
     )
     assert response.status_code == 200

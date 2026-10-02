@@ -1,6 +1,12 @@
+from typing import TYPE_CHECKING
+
 from app.db.base import Base
 from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+if TYPE_CHECKING:
+    from app.models.class_ import Class
+    from app.models.scan_log import ScanLog
 
 
 class Student(Base):
@@ -31,10 +37,10 @@ class Student(Base):
         String(32), nullable=True, comment="Phone number of the student's guardian."
     )
     photo_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    scan_logs: Mapped[list["ScanLog"]] = relationship(  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
+    scan_logs: Mapped[list["ScanLog"]] = relationship(
         back_populates="student", order_by="ScanLog.timestamp", passive_deletes=True
     )
-    class_: Mapped["Class"] = relationship(back_populates="students")  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
+    class_: Mapped["Class | None"] = relationship(back_populates="students")
 
     __table_args__ = (
         UniqueConstraint(

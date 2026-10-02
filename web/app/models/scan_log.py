@@ -1,8 +1,12 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from app.db.base import Base
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+if TYPE_CHECKING:
+    from app.models.student import Student
 
 
 class ScanLog(Base):
@@ -12,11 +16,15 @@ class ScanLog(Base):
     at the time of the scan and are not updated if the corresponding student
     record changes.
 
-    A student may only be scanned once per day. This constraint is enforced
-    at the API layer (see `../routes/scan.py`).
+    The scan service holds a student row lock while checking and recording the
+    current school day, so concurrent requests cannot create duplicate scans.
     """
 
     __tablename__ = "scan_logs"
+    __table_args__ = (
+        Index("ix_scan_logs_student_timestamp", "student_id", "timestamp"),
+        Index("ix_scan_logs_timestamp_scan_id", "timestamp", "scan_id"),
+    )
 
     scan_id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
@@ -34,7 +42,7 @@ class ScanLog(Base):
 
     class_name: Mapped[str] = mapped_column(
         "class",
-        String(10),
+        String(20),
         nullable=True,
         comment="Student's class at the time of the scan.",
     )
@@ -45,7 +53,7 @@ class ScanLog(Base):
         comment="Time when the scan was recorded, with timezone information.",
     )
 
-    student: Mapped["Student"] = relationship(back_populates="scan_logs")  # pyright: ignore[reportUndefinedVariable]  # noqa: F821
+    student: Mapped["Student | None"] = relationship(back_populates="scan_logs")
 
     def __repr__(self):
         return (

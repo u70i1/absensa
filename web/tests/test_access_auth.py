@@ -68,7 +68,7 @@ def operator_login(client, operator, pin=PIN, **changes):
 
 
 def test_binding_argon_persistence_and_single_browser(client, accounts, db_session):
-    device, operators = accounts
+    device, _operators = accounts
     response = device_login(client, username=" GATE-ONE ")
     assert response.status_code == 303
     assert response.headers["location"].startswith("/operator/login")

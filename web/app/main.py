@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from app.core.access_auth import AccessAuthenticationRequired
 from app.core.admin_auth import AdminAuthenticationRequired
 from app.core.browser_security import BrowserSecurityMiddleware, clear_access_cookies
@@ -32,7 +34,7 @@ app.add_middleware(BrowserSecurityMiddleware)
 
 
 @app.get("/health", include_in_schema=False)
-def health(db: Session = Depends(get_db)):
+def health(db: Annotated[Session, Depends(get_db)]):
     """LAN readiness: attendance needs PostgreSQL, but not WhatsApp/internet."""
     try:
         db.execute(text("SELECT 1"))

@@ -52,6 +52,10 @@ class StudentBase(BaseModel):
 class StudentWriteRequest(StudentBase):
     """Create or replace a student through POST/PUT /students."""
 
+    nisn: str = Field(pattern=r"^[0-9]{10}$")
+    name: str = Field(min_length=1, max_length=255)
+    class_id: int | None = Field(None, ge=1, le=2147483647)
+
     @field_validator("guardian_phone", mode="before")
     @classmethod
     def validate_guardian_phone(cls, value: object) -> str | None:

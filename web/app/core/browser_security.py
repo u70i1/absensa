@@ -77,6 +77,13 @@ class BrowserSecurityMiddleware(BaseHTTPMiddleware):
                     status_code=403,
                 )
         response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+        )
         if request.url.path != "/admin/static" and not request.url.path.startswith(
             "/admin/static/"
         ):

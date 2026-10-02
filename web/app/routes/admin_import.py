@@ -107,17 +107,17 @@ def update_import_row(
     guardian_phone: Annotated[str, Form()] = "",
     grade: Annotated[str, Form()] = "",
     class_name: Annotated[str, Form()] = "",
-    selected: Annotated[list[int], Form()] = [],
+    selected: Annotated[list[int] | None, Form()] = None,
 ):
-    values = dict(
-        name=name,
-        nisn=nisn,
-        class_id=class_id,
-        current=current,
-        guardian_phone=guardian_phone,
-        grade=grade,
-        class_name=class_name,
-    )
+    values = {
+        "name": name,
+        "nisn": nisn,
+        "class_id": class_id,
+        "current": current,
+        "guardian_phone": guardian_phone,
+        "grade": grade,
+        "class_name": class_name,
+    }
     try:
         batch = import_service.edit_preview_row(
             db, admin.id, token, key, values, revision
@@ -225,10 +225,10 @@ def confirm_import(
     token: str,
     db: Db,
     admin: CurrentAdmin,
-    selected: Annotated[list[int], Form()] = [],
+    selected: Annotated[list[int] | None, Form()] = None,
 ):
     try:
-        import_service.apply_preview(db, admin.id, token, selected)
+        import_service.apply_preview(db, admin.id, token, selected or [])
         return RedirectResponse(
             f"/admin/import?batch={token}#import-review", status_code=303
         )

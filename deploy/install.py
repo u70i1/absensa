@@ -59,17 +59,29 @@ def inspect_host() -> None:
             "Run this script inside Linux. On Windows Server, use its Linux VM."
         )
     if os.environ.get("COMPOSE_PROJECT_NAME") not in (None, "", "absensa"):
-        raise SetupError("Unset COMPOSE_PROJECT_NAME to keep Absensa's data volumes stable.")
+        raise SetupError(
+            "Unset COMPOSE_PROJECT_NAME to keep Absensa's data volumes stable."
+        )
     if shutil.which("docker") is None:
         raise SetupError(
             "Docker is missing. Install Docker Engine and its Compose plugin, "
             "then run this script again."
         )
     for command, expected, message in (
-        (["docker", "info", "--format", "{{.OSType}}"], "linux", "Docker must run Linux containers."),
-        (["docker", "compose", "version", "--short"], None, "Docker Compose plugin is unavailable."),
+        (
+            ["docker", "info", "--format", "{{.OSType}}"],
+            "linux",
+            "Docker must run Linux containers.",
+        ),
+        (
+            ["docker", "compose", "version", "--short"],
+            None,
+            "Docker Compose plugin is unavailable.",
+        ),
     ):
-        result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+        result = subprocess.run(
+            command, cwd=ROOT, capture_output=True, text=True, check=False
+        )
         if result.returncode or (expected and result.stdout.strip() != expected):
             if command[1] == "info" and result.returncode:
                 raise SetupError(
@@ -79,19 +91,26 @@ def inspect_host() -> None:
             raise SetupError(message)
     free_gb = shutil.disk_usage(ROOT).free / 1024**3
     if free_gb < 5:
-        print(f"  Warning: only {free_gb:.1f} GB free. Images and school data need space.")
+        print(
+            f"  Warning: only {free_gb:.1f} GB free. Images and school data need space."
+        )
 
 
 def compose(*arguments: str) -> list[str]:
     return [
-        "docker", "compose", "--env-file", str(CONFIG), "-f", str(COMPOSE),
+        "docker",
+        "compose",
+        "--env-file",
+        str(CONFIG),
+        "-f",
+        str(COMPOSE),
         *arguments,
     ]
 
 
 def any_existing_data() -> bool:
     containers = subprocess.run(
-        compose("ps", "-a", "-q"), cwd=ROOT, capture_output=True, text=True
+        compose("ps", "-a", "-q"), cwd=ROOT, capture_output=True, text=True, check=False
     )
     if containers.returncode:
         raise SetupError("Could not inspect existing Absensa containers.")
@@ -100,7 +119,10 @@ def any_existing_data() -> bool:
     for name in ("absensa_pgdata", "absensa_photos", "absensa_whatsapp_auth"):
         volume = subprocess.run(
             ["docker", "volume", "inspect", name],
-            cwd=ROOT, capture_output=True, text=True,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         if volume.returncode == 0:
             return True
@@ -118,7 +140,10 @@ def read_settings() -> tuple[int, str]:
         timezone = values["TIMEZONE"]
         if not 1024 <= port <= 65535 or timezone not in TIMEZONES:
             raise ValueError
-        if len(values["POSTGRES_PASSWORD"]) < 32 or len(values["WHATSAPP_BRIDGE_TOKEN"]) < 32:
+        if (
+            len(values["POSTGRES_PASSWORD"]) < 32
+            or len(values["WHATSAPP_BRIDGE_TOKEN"]) < 32
+        ):
             raise ValueError
     except (KeyError, ValueError) as exc:
         raise SetupError(
@@ -141,7 +166,9 @@ def choose_settings() -> tuple[int, str]:
     if CONFIG.exists():
         port, timezone = read_settings()
         print(f"  Existing settings found: port {port}, {timezone}.")
-        print("  Internal passwords will be reused; they will not be displayed or changed.")
+        print(
+            "  Internal passwords will be reused; they will not be displayed or changed."
+        )
         return port, timezone
     while True:
         answer = choice("Web port for the school LAN", "8088")
@@ -166,7 +193,9 @@ def choose_settings() -> tuple[int, str]:
     try:
         write_config(CONFIG, port, timezone)
     except FileExistsError as exc:
-        raise SetupError("Settings appeared during setup. Run the script again.") from exc
+        raise SetupError(
+            "Settings appeared during setup. Run the script again."
+        ) from exc
     print("  Private database and bridge passwords generated and saved locally.")
     return port, timezone
 
@@ -213,12 +242,26 @@ def read_admin() -> tuple[str, str]:
 def create_admin(username: str, password: str) -> None:
     # Never put the password in argv, the environment, or the Docker build log.
     result = subprocess.run(
-        compose("exec", "-T", "web", "python", "-m", "scripts.create_admin",
-                "--password-stdin", username),
-        cwd=ROOT, input=password + "\n", text=True, capture_output=True,
+        compose(
+            "exec",
+            "-T",
+            "web",
+            "python",
+            "-m",
+            "scripts.create_admin",
+            "--password-stdin",
+            username,
+        ),
+        cwd=ROOT,
+        input=password + "\n",
+        text=True,
+        capture_output=True,
+        check=False,
     )
     if result.returncode:
-        raise SetupError("Could not create the administrator. Check the web logs and retry.")
+        raise SetupError(
+            "Could not create the administrator. Check the web logs and retry."
+        )
 
 
 def check_web(port: int) -> None:
@@ -241,14 +284,17 @@ def mark_initialized(port: int, timezone: str, username: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--resume", action="store_true",
+        "--resume",
+        action="store_true",
         help="Retry an interrupted setup with the existing settings and volumes",
     )
     args = parser.parse_args()
     print("\nAbsensa server setup\n" + "=" * 20)
     inspect_host()
     if MARKER.exists():
-        print("Absensa was already initialized here. Use the update guide for new versions.")
+        print(
+            "Absensa was already initialized here. Use the update guide for new versions."
+        )
         return
     if CONFIG.exists() and any_existing_data() and not args.resume:
         raise SetupError(
@@ -299,7 +345,9 @@ if __name__ == "__main__":
     try:
         main()
     except (KeyboardInterrupt, EOFError):
-        print("\nSetup interrupted. Settings and data were kept. Retry with --resume if needed.")
+        print(
+            "\nSetup interrupted. Settings and data were kept. Retry with --resume if needed."
+        )
         raise SystemExit(130) from None
     except SetupError as exc:
         print(f"\nSetup stopped: {exc}", file=sys.stderr)

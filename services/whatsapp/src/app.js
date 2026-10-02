@@ -11,19 +11,6 @@ function normalizePhone(value) {
   return compact.replace(/^\+/, "");
 }
 
-function safeDeliveryError(error, phone, message) {
-  const cause = error.cause;
-  if (!cause) return error.code;
-  const reason = String(cause.message || cause.name || "unknown error")
-    .replaceAll(message, "[message]")
-    .replaceAll(phone, "[number]")
-    .replace(/\+?\d{8,}/g, "[number]")
-    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
-    .replace(/\s+/g, " ")
-    .slice(0, 240);
-  return `${error.code}: ${reason}`;
-}
-
 function createApp({ gateway, token }) {
   if (!token || token.length < 32 || token.startsWith("replace-with-")) {
     throw new Error("BRIDGE_API_TOKEN must be a generated secret with at least 32 characters");
@@ -35,7 +22,7 @@ function createApp({ gateway, token }) {
 
   app.get("/health", (_request, response) => response.json({ ok: true }));
   app.use("/api", (request, response, next) => {
-    const provided = request.get("authorization")?.replace(/^Bearer /, "") || "";
+    const provided = /^Bearer (.+)$/i.exec(request.get("authorization") || "")?.[1] || "";
     const providedBytes = Buffer.from(provided);
     if (providedBytes.length !== expectedBytes.length || !timingSafeEqual(providedBytes, expectedBytes)) {
       return response.status(401).json({ error: "unauthorized" });
@@ -74,7 +61,9 @@ function createApp({ gateway, token }) {
     } catch (error) {
       if (error instanceof GatewayError) {
         if (error.status >= 500) {
-          console.error("WhatsApp bridge delivery error:", safeDeliveryError(error, phone, message));
+          // Library errors can contain partial message text or student names.
+          // Log only our stable code; string replacement cannot redact fragments.
+          console.error("WhatsApp bridge delivery error:", error.code);
         }
         return response.status(error.status).json({ error: error.code });
       }
@@ -83,6 +72,9 @@ function createApp({ gateway, token }) {
     }
   });
   app.use((error, _request, response, _next) => {
+    if (error.type === "entity.too.large") {
+      return response.status(413).json({ error: "body_too_large" });
+    }
     if (error instanceof SyntaxError && "body" in error) {
       return response.status(400).json({ error: "invalid_json" });
     }

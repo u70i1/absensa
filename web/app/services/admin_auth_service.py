@@ -27,6 +27,7 @@ def authenticate_admin(db: Session, username: str, password: str) -> Admin | Non
         select(Admin).where(Admin.username == normalize_username(username))
     )
     password_hash = admin.password_hash if admin is not None else _DUMMY_PASSWORD_HASH
+    password_valid: bool
     try:
         password_valid = password_hasher.verify(password_hash, password)
     except (InvalidHashError, VerificationError, VerifyMismatchError):
@@ -60,7 +61,7 @@ def create_admin_session(db: Session, admin: Admin, lifetime_hours: int) -> str:
 
 
 def admin_for_session(db: Session, token: str | None) -> Admin | None:
-    if not token:
+    if not token or len(token) > 256:
         return None
     session = db.scalar(
         select(AdminSession)
@@ -75,7 +76,7 @@ def admin_for_session(db: Session, token: str | None) -> Admin | None:
 
 
 def delete_admin_session(db: Session, token: str | None) -> None:
-    if not token:
+    if not token or len(token) > 256:
         return
     db.execute(
         delete(AdminSession).where(AdminSession.token_hash == _token_digest(token))

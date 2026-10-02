@@ -10,6 +10,7 @@ base_number -> doubled exercise):
                 -> client  (function-scoped, FastAPI TestClient using db_session)
 """
 
+import os
 from collections.abc import Callable
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -25,16 +26,35 @@ from app.models.scan_log import ScanLog
 from app.models.student import Student
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 
 def run_migrations(url: str, direction: str = "upgrade") -> None:
+    validate_test_database(url, settings.database_url)
     alembic_cfg = Config("alembic.ini")
     alembic_cfg.set_main_option("sqlalchemy.url", url)
     if direction == "upgrade":
         command.upgrade(alembic_cfg, "head")
     else:
         command.downgrade(alembic_cfg, "base")
+
+
+def validate_test_database(test_url: str, application_url: str) -> None:
+    """The suite destroys its schema; require an explicit, separate test target."""
+    if not test_url or os.environ.get("ABSENSA_ALLOW_TEST_DATABASE_RESET") != "1":
+        raise RuntimeError(
+            "Set a dedicated TEST_DATABASE_URL and ABSENSA_ALLOW_TEST_DATABASE_RESET=1; the test schema is dropped after the run."
+        )
+
+    def target(value):
+        url = make_url(value)
+        return (url.get_backend_name(), url.host, url.port or 5432, url.database)
+
+    if target(test_url) == target(application_url):
+        raise RuntimeError(
+            "TEST_DATABASE_URL must differ from DATABASE_URL, including when credentials differ."
+        )
 
 
 @pytest.fixture(scope="session")

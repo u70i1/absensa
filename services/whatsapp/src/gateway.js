@@ -104,17 +104,21 @@ function createGateway({ createClient, encodeQr }) {
     if (state !== "connected" || !client) {
       throw new GatewayError("not_connected", 409);
     }
+    const instance = client;
     let registered;
     try {
-      registered = await client.getNumberId(recipient);
+      registered = await instance.getNumberId(recipient);
     } catch (error) {
       throw new GatewayError("recipient_lookup_failed", 502, error);
+    }
+    if (client !== instance || state !== "connected") {
+      throw new GatewayError("not_connected", 409);
     }
     if (!registered?._serialized) {
       throw new GatewayError("number_not_registered", 422);
     }
     try {
-      await client.sendMessage(registered._serialized, message);
+      await instance.sendMessage(registered._serialized, message);
     } catch (error) {
       // A failed response cannot establish whether WhatsApp accepted the send.
       throw new GatewayError("send_failed", 502, error);

@@ -9,10 +9,10 @@ def delete_scans_bulk(db: Session, payload: ScanBulkDeleteRequest, dry_run: bool
     if not payload_ids:
         return
 
-    db_ids = set(db.scalars(select(ScanLog.scan_id)).all())
-
-    db_ids = set(db.scalars(select(ScanLog.scan_id)).all())
-    missing_ids = [i for i in payload_ids if i not in db_ids]
+    db_ids = set(
+        db.scalars(select(ScanLog.scan_id).where(ScanLog.scan_id.in_(payload_ids)))
+    )
+    missing_ids = sorted(payload_ids - db_ids)
 
     if missing_ids:
         return missing_ids
@@ -21,4 +21,5 @@ def delete_scans_bulk(db: Session, payload: ScanBulkDeleteRequest, dry_run: bool
         db.rollback()
     else:
         db.execute(delete(ScanLog).where(ScanLog.scan_id.in_(payload_ids)))
+        db.commit()
     return None

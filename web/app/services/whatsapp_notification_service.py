@@ -71,7 +71,7 @@ def get_settings(db: Session, *, lock: bool = False) -> Settings:
     statement = select(Settings).where(Settings.id == 1)
     if lock:
         statement = statement.with_for_update()
-    result = db.scalar(statement)
+    result = db.scalar(statement.execution_options(populate_existing=True))
     if result is None:
         raise RuntimeError(
             "WhatsApp notification settings migration has not been applied"
@@ -118,11 +118,14 @@ def _last_skip(db: Session, day):
 
 
 def _unresolved_delivery_count(db: Session, day) -> int:
-    return db.scalar(
-        select(func.count(Log.id)).where(
-            Log.day == day, Log.kind == "delivery", Log.status != "sent"
+    return (
+        db.scalar(
+            select(func.count(Log.id)).where(
+                Log.day == day, Log.kind == "delivery", Log.status != "sent"
+            )
         )
-    ) or 0
+        or 0
+    )
 
 
 def daily_state(db: Session, at: datetime | None = None) -> dict:
@@ -247,6 +250,8 @@ def _claim(db: Session, day, student_id: int) -> Log | None:
 
 def _renew_run(db: Session, run_id: int, at: datetime) -> None:
     run = db.get(Log, run_id)
+    if run is None:
+        raise NotificationProblem("Status pengiriman tidak ditemukan.")
     run.lease_until = at.astimezone(timezone.utc) + RUN_LEASE
     db.commit()
 
@@ -260,11 +265,19 @@ def run_daily(
     sleep=time_module.sleep,
     prepare_only: bool = False,
     reserved_run_id: int | None = None,
+    clock=None,
 ) -> dict:
+    # Explicit dates support deterministic checks; live batches follow the clock.
+    clock = clock or (now_local if at is None else lambda: at)
     at = at or now_local()
     local = at.astimezone(LOCAL_TZ)
     day = local.date()
     config = get_settings(db, lock=True)
+    if reserved_run_id is not None:
+        reserved = db.get(Log, reserved_run_id)
+        if reserved is None or reserved.kind != "run" or reserved.day != day:
+            db.rollback()
+            return {"state": "reservation_expired"}
     run = db.scalar(
         select(Log).where(Log.day == day, Log.kind == "run").with_for_update()
     )
@@ -344,25 +357,12 @@ def run_daily(
             )
         ):
             continue
-        try:
-            phone = guardian_recipient(student.guardian_phone)
-            message = render_message(template, student.name, student.class_name)
-        except (GatewayProblem, NotificationProblem) as exc:
-            log = _claim(db, day, student.id)
-            if log:
-                log.status = "failed"
-                log.detail = "invalid_contact_or_template"
-                db.commit()
-                failed += 1
-            logger.warning(
-                "WhatsApp delivery validation failed for student_id=%s: %s",
-                student.id,
-                exc.detail,
-            )
-            continue
         if attempted and safe_mode:
             _renew_run(db, run_id, datetime.now(timezone.utc))
             sleep(delay)
+        if clock().astimezone(LOCAL_TZ).date() != day:
+            interrupted = True
+            break
         if not effective_manual and not get_settings(db).enabled:
             interrupted = True
             break
@@ -377,6 +377,36 @@ def run_daily(
             )
             .limit(1)
         ):
+            continue
+        # Contact, enrollment and names may change while earlier messages wait.
+        # Fetch columns rather than reusing the batch's stale recipient snapshot.
+        current = db.execute(
+            select(Student.id, Student.name, Student.guardian_phone, Class.class_name)
+            .outerjoin(Class, Class.class_id == Student.class_id)
+            .where(
+                Student.id == student.id,
+                Student.current.is_(True),
+                Student.guardian_phone.is_not(None),
+                Student.guardian_phone != "",
+            )
+        ).first()
+        if current is None:
+            continue
+        try:
+            phone = guardian_recipient(current.guardian_phone)
+            message = render_message(template, current.name, current.class_name)
+        except (GatewayProblem, NotificationProblem) as exc:
+            log = _claim(db, day, student.id)
+            if log:
+                log.status = "failed"
+                log.detail = "invalid_contact_or_template"
+                db.commit()
+                failed += 1
+            logger.warning(
+                "WhatsApp delivery validation failed for student_id=%s: %s",
+                student.id,
+                exc.detail,
+            )
             continue
         _renew_run(db, run_id, datetime.now(timezone.utc))
         log = _claim(db, day, student.id)
@@ -407,6 +437,8 @@ def run_daily(
         if interrupted:
             break
     run = db.get(Log, run_id)
+    if run is None:
+        raise NotificationProblem("Status pengiriman tidak ditemukan.")
     if needs_attention:
         run.status = "needs_attention"
     elif interrupted:

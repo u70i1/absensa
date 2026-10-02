@@ -17,10 +17,10 @@ fastar==0.11.0
 greenlet==3.5.4
 h11==0.16.0
 httpcore==1.0.9
-httpcore2==2.9.1
+httpcore2==2.12.0
 httptools==0.8.0
 httpx==0.28.1
-httpx2==2.9.1
+httpx2==2.12.0
 idna==3.18
 iniconfig==2.3.0
 Jinja2==3.1.6
@@ -30,9 +30,9 @@ markdown-it-py==4.2.0
 MarkupSafe==3.0.3
 openpyxl==3.1.5
 Pillow==12.3.0
-CairoSVG==2.8.2
+CairoSVG==2.9.0
 python-barcode==0.16.1
-fonttools[woff]==4.60.1
+fonttools[woff]==4.60.2
 mdurl==0.1.2
 packaging==26.2
 pluggy==1.6.0
@@ -57,7 +57,7 @@ truststore==0.10.4
 typer==0.27.0
 typing-inspection==0.4.2
 typing_extensions==4.16.0
-urllib3==2.7.0
+urllib3==2.8.0
 uvicorn==0.51.0
 uvloop==0.22.1
 watchfiles==1.2.0

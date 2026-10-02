@@ -5,8 +5,7 @@ from zoneinfo import ZoneInfo
 
 from app.core.access_auth import CurrentDevice, CurrentOperator, Db
 from app.core.config import settings
-from app.services import scan_service
-from app.services import student_photo_service
+from app.services import scan_service, student_photo_service
 from app.services.exceptions import AppException
 from app.templating import templates
 from fastapi import APIRouter, Form, Query, Request

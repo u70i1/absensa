@@ -18,6 +18,9 @@ const gateway = {
     if (phone === "628888888888") {
       throw new GatewayError("send_failed", 502, new Error(`${phone} ${message} Bearer secret-token`));
     }
+    if (phone === "628777777777") {
+      throw new GatewayError("send_failed", 502, new Error("Student Nicholas Angle is absent"));
+    }
     return { sent: true };
   },
 };
@@ -87,4 +90,31 @@ test("send failure exposes a stable code without exposing the message", async ()
   assert.deepEqual(await response.json(), { error: "send_failed" });
   assert.match(logged.join(" "), /send_failed/);
   assert.doesNotMatch(logged.join(" "), /628888888888|private student message|secret-token/);
+});
+
+test("partial library errors cannot leak student names", async () => {
+  const logged = [];
+  const previousLogger = console.error;
+  console.error = (...values) => logged.push(values.join(" "));
+  try {
+    const response = await request("/api/messages", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: "628777777777", message: "A different full message" }),
+    });
+    assert.equal(response.status, 502);
+  } finally {
+    console.error = previousLogger;
+  }
+  assert.match(logged.join(" "), /send_failed/);
+  assert.doesNotMatch(logged.join(" "), /Nicholas|Angle|absent/);
+});
+
+test("authentication requires the bearer scheme and oversized JSON returns 413", async () => {
+  assert.equal((await request("/api/status", { headers: { Authorization: token } })).status, 401);
+  const response = await request("/api/messages", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone: "628111111111", message: "x".repeat(10000) }),
+  });
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), { error: "body_too_large" });
 });

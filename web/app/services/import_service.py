@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
 from secrets import token_urlsafe
-from typing import BinaryIO
+from typing import Any, BinaryIO
 from zipfile import BadZipFile, ZipFile
 
 from app.models.class_ import Class
@@ -225,7 +225,8 @@ def _read_rows(content: bytes):
                 used_rows += 1
                 if used_rows > MAX_ROWS:
                     raise AppException("Maksimal 10.000 baris data per file.", 413)
-                values, row_errors = {}, []
+                values: dict[str, Any] = {}
+                row_errors = []
                 for (_, field), cell in zip(columns, cells):
                     try:
                         if kind == "students" and field in {"grade", "class_name"}:
@@ -409,7 +410,9 @@ def _review_workbook(db: Session, rows: list[dict]):
                 f'Kelas "{pair[1]}" pada jenjang {pair[0]} sudah terdaftar atau berulang dalam workbook.',
             )
 
-    final_nisns = {key: item.nisn for key, item in students.items()}
+    final_nisns: dict[int | str, str] = {
+        key: item.nisn for key, item in students.items()
+    }
     for index, row in enumerate(student_rows):
         values = row["values"]
         final_nisns[values["id"] if values["id"] is not None else f"new:{index}"] = (
@@ -421,13 +424,14 @@ def _review_workbook(db: Session, rows: list[dict]):
         if nisn_counts[values["nisn"]] > 1:
             error(row, "nisn", "NISN sudah digunakan atau berulang dalam workbook.")
         reference = values["class_id"]
-        pair = (
+        student_class_pair = (
             declared_classes.get((row.get("file", ""), reference))
             if reference is not None
             else None
         )
         if reference is not None and (
-            pair is None or (isinstance(reference, int) and reference not in classes)
+            student_class_pair is None
+            or (isinstance(reference, int) and reference not in classes)
         ):
             error(
                 row,
@@ -440,11 +444,19 @@ def _review_workbook(db: Session, rows: list[dict]):
                 "class_id",
                 "ID KELAS wajib diisi untuk siswa baru. Gunakan ID dari sheet classes.",
             )
-        row["class_key"] = list(pair) if pair is not None else None
-        row["resolved_class_id"] = (
-            reference if isinstance(reference, int) else final_class_ids.get(pair)
+        row["class_key"] = (
+            list(student_class_pair) if student_class_pair is not None else None
         )
-        row["class_name"] = pair[1] if pair is not None else "—"
+        row["resolved_class_id"] = (
+            reference
+            if isinstance(reference, int)
+            else final_class_ids.get(student_class_pair)
+            if student_class_pair is not None
+            else None
+        )
+        row["class_name"] = (
+            student_class_pair[1] if student_class_pair is not None else "—"
+        )
 
     valid, seen_classes = [], set()
     for row in rows:
@@ -458,7 +470,11 @@ def _review_workbook(db: Session, rows: list[dict]):
         )
         item = existing.get(values[id_field])
         before = {field: getattr(item, field) for field in fields} if item else None
-        if before is not None and row.get("incoming_photo"):
+        if (
+            before is not None
+            and isinstance(item, Student)
+            and row.get("incoming_photo")
+        ):
             before["photo_path"] = item.photo_path
         changed = _changed_fields(row, before)
         reviewed = {
@@ -475,7 +491,9 @@ def _review_workbook(db: Session, rows: list[dict]):
                 reviewed["changed"] = []
             seen_classes.add(class_key)
         if kind == "students":
-            reviewed["photo_path"] = item.photo_path if item else None
+            reviewed["photo_path"] = (
+                item.photo_path if isinstance(item, Student) else None
+            )
         valid.append(reviewed)
     return valid, errors
 
@@ -503,7 +521,8 @@ def create_preview(
         else ([(filename, content)], {})
     )
     all_rows = []
-    errors, files = [], []
+    errors: list[dict] = []
+    files = []
     total = offset = expanded = 0
     for name, workbook_content in workbooks:
         try:
@@ -749,7 +768,8 @@ def apply_preview(
         kind: [row for row in chosen if row.get("kind", batch.kind) == kind]
         for kind in ("classes", "students")
     }
-    new_photos, old_photos = [], []
+    new_photos: list[str] = []
+    old_photos: list[str | None] = []
     try:
         # Lock existing rows in a stable order and reject stale previews.
         for kind, group in groups.items():
@@ -816,6 +836,10 @@ def apply_preview(
                 if isinstance(values["class_id"], int)
                 else Class()
             )
+            if item is None:
+                raise AppException(
+                    "Kelas berubah sejak pratinjau dibuat. Unggah file kembali.", 409
+                )
             item.grade, item.class_name = values["grade"], values["class_name"]
             db.add(item)
         db.flush()
@@ -876,14 +900,18 @@ def apply_preview(
                 503,
             ) from exc
         raise
-    for path in old_photos:
-        student_photo_service.remove_photo(path)
+    for old_path in old_photos:
+        student_photo_service.remove_photo(old_path)
     return batch
 
 
 def _apply_student(db: Session, student_id: int | None, values: dict) -> Student:
     """Apply already validated values without per-row commits or uniqueness checks."""
     student = db.get(Student, student_id) if student_id else Student()
+    if student is None:
+        raise AppException(
+            "Siswa berubah sejak pratinjau dibuat. Unggah file kembali.", 409
+        )
     for field, value in values.items():
         setattr(student, field, value)
     db.add(student)

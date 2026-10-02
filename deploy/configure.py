@@ -45,7 +45,8 @@ def main() -> None:
     except (FileExistsError, ValueError) as exc:
         raise SystemExit(
             "Configuration already exists; it was not changed."
-            if isinstance(exc, FileExistsError) else str(exc)
+            if isinstance(exc, FileExistsError)
+            else str(exc)
         ) from exc
     print(f"Created {args.output}. Keep it private; do not commit it.")
 

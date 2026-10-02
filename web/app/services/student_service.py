@@ -1,10 +1,32 @@
+from enum import Enum
+
 from app.models.class_ import Class
 from app.models.student import Student
 from app.schemas.student import StudentListQuery
-from sqlalchemy import func, or_, select
+from sqlalchemy import ColumnElement, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .exceptions import ClassNotFound, DuplicateNisn, StudentNotFound
+
+
+class _Unchanged(Enum):
+    VALUE = 0
+
+
+def _save_student(db: Session, *, commit: bool) -> None:
+    try:
+        if commit:
+            db.commit()
+        else:
+            db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        if getattr(exc.orig, "pgcode", None) == "23505":
+            raise DuplicateNisn() from exc
+        if getattr(exc.orig, "pgcode", None) == "23503":
+            raise ClassNotFound() from exc
+        raise
 
 
 def _normalize_guardian_phone(value: str | None) -> str | None:
@@ -14,7 +36,7 @@ def _normalize_guardian_phone(value: str | None) -> str | None:
 
 def _student_filters(query: StudentListQuery):
     """Shared predicates for the JSON list, dashboard, and filtered count."""
-    filters = []
+    filters: list[ColumnElement[bool]] = []
 
     if query.name is not None:
         filters.append(Student.name.ilike(f"%{query.name}%"))
@@ -118,7 +140,7 @@ def post_student(
     if nisn_exist:
         raise DuplicateNisn
 
-    if class_id:
+    if class_id is not None:
         class_exist = db.get(Class, class_id)
         if not class_exist:
             raise ClassNotFound
@@ -132,10 +154,7 @@ def post_student(
     )
 
     db.add(new_student)
-    if commit:
-        db.commit()
-    else:
-        db.flush()
+    _save_student(db, commit=commit)
 
     return new_student
 
@@ -147,7 +166,7 @@ def edit_student(
     name: str,
     class_id: int | None,
     current: bool,
-    guardian_phone: str | None = None,
+    guardian_phone: str | None | _Unchanged = _Unchanged.VALUE,
     *,
     commit: bool = True,
 ) -> Student:
@@ -163,7 +182,7 @@ def edit_student(
     """
     to_update = get_student_by_id(db, student_id)
 
-    if class_id:
+    if class_id is not None:
         class_exist = db.get(Class, class_id)
         if not class_exist:
             raise ClassNotFound()
@@ -178,12 +197,10 @@ def edit_student(
     to_update.class_id = class_id
     to_update.nisn = nisn
     to_update.current = current
-    to_update.guardian_phone = _normalize_guardian_phone(guardian_phone)
+    if not isinstance(guardian_phone, _Unchanged):
+        to_update.guardian_phone = _normalize_guardian_phone(guardian_phone)
 
-    if commit:
-        db.commit()
-    else:
-        db.flush()
+    _save_student(db, commit=commit)
 
     return to_update
 

@@ -162,7 +162,9 @@ def test_safe_mode_skips_students_without_contacts_without_waiting(
     pauses = []
     gateway = FakeGateway()
 
-    result = service.run_daily(db_session, gateway, manual=True, at=AT, sleep=pauses.append)
+    result = service.run_daily(
+        db_session, gateway, manual=True, at=AT, sleep=pauses.append
+    )
 
     assert result == {"state": "completed", "sent": 1, "failed": 0}
     assert pauses == []
@@ -183,12 +185,17 @@ def test_safe_mode_resume_does_not_wait_for_previously_claimed_students(
     pauses = []
     gateway = FakeGateway()
 
-    result = service.run_daily(db_session, gateway, manual=True, at=AT, sleep=pauses.append)
+    result = service.run_daily(
+        db_session, gateway, manual=True, at=AT, sleep=pauses.append
+    )
 
     assert result["state"] == "completed_with_failures"
     assert gateway.messages == [("628222222222", "Halo Later dari -")]
     assert pauses == []
-    assert db_session.scalar(select(Log).where(Log.student_id == later.id)).status == "sent"
+    assert (
+        db_session.scalar(select(Log).where(Log.student_id == later.id)).status
+        == "sent"
+    )
 
 
 def test_shared_guardian_receives_a_separate_message_for_each_absent_student(

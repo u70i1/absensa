@@ -111,3 +111,22 @@ test("old QR generation cannot replace a newer QR or connected state", async () 
   client.emit("ready");
   assert.equal(gateway.qr().qr_data_url, null);
 });
+
+test("a recipient lookup cannot send through a replaced client", async () => {
+  const oldClient = new FakeClient();
+  const newClient = new FakeClient();
+  const clients = [oldClient, newClient];
+  let resolveLookup;
+  oldClient.getNumberId = () => new Promise((resolve) => { resolveLookup = resolve; });
+  const gateway = createGateway({ createClient: () => clients.shift(), encodeQr: async () => "unused" });
+  gateway.connect();
+  oldClient.emit("ready");
+  const pending = gateway.sendMessage("628111111111", "Mock message");
+  oldClient.emit("disconnected");
+  gateway.connect();
+  newClient.emit("ready");
+  resolveLookup({ _serialized: "628111111111@c.us" });
+  await assert.rejects(pending, { code: "not_connected", status: 409 });
+  assert.deepEqual(oldClient.sent, []);
+  assert.deepEqual(newClient.sent, []);
+});

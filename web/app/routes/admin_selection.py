@@ -15,6 +15,9 @@ from app.routes.admin_classes import (
 )
 from app.routes.admin_scans import LOCAL_TZ, scan_query
 from app.routes.admin_scans import mutation_response as scan_mutation_response
+from app.schemas.class_ import ClassListQuery
+from app.schemas.scan import AdminScanQuery
+from app.schemas.student import StudentListQuery
 from app.services import class_service
 from app.services import table_selection_service as service
 from app.services.exceptions import AppException
@@ -58,11 +61,13 @@ async def selection(kind: str, step: str, request: Request, db: Db):
             raise AppException("Tindakan tidak valid.", 422)
         if action == "export" and step in {"confirm", "export"}:
             records, students, scope = service.selection_export_data(db, kind, ids)
-            if kind == "students":
+            if isinstance(query, StudentListQuery):
                 query, classes = normalize_filters(db, query)
                 filters = student_filter_summary(query, classes)
-            else:
+            elif isinstance(query, ClassListQuery):
                 filters = class_filter_summary(query)
+            else:
+                raise AppException("Ekspor tidak tersedia untuk daftar ini.", 422)
             if step == "export":
                 return await run_in_threadpool(
                     students_export_response,
@@ -102,14 +107,11 @@ async def selection(kind: str, step: str, request: Request, db: Db):
             count = service.apply_selection(db, kind, action, ids)
             result = "dinonaktifkan" if action == "deactivate" else "dihapus"
             message = f"{count} data berhasil {result}."
-            render = (
-                mutation_response
-                if kind == "classes"
-                else scan_mutation_response
-                if kind == "scans"
-                else mutation_success
-            )
-            return render(request, db, query, message)
+            if isinstance(query, ClassListQuery):
+                return mutation_response(request, db, query, message)
+            if isinstance(query, AdminScanQuery):
+                return scan_mutation_response(request, db, query, message)
+            return mutation_success(request, db, query, message)
         records = service.selected_records(db, kind, action, ids)
         return render_modal(
             request,

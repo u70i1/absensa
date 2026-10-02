@@ -8,7 +8,10 @@ from app.core.config import settings
 from app.models.scan_log import ScanLog
 from app.services import scan_service
 
-from tests.test_access_auth import accounts, device_login, operator_login  # noqa: F401
+from tests import test_access_auth
+from tests.test_access_auth import device_login, operator_login
+
+accounts = test_access_auth.accounts
 
 
 def test_root_is_public_without_redirect(client):
@@ -102,7 +105,7 @@ def test_scan_refreshes_history_and_clears_input_on_error(
     )
     assert response.status_code == 200 and 'id="scan-feedback"' in response.text
     assert 'data-scan-succeeded="true"' in response.text
-    assert 'data-scan-card' in response.text
+    assert "data-scan-card" in response.text
     recent = client.get("/operator/recent", headers={"HX-Request": "true"})
     assert len(re.findall(r'data-scan-id="', recent.text)) == 1
     duplicate = client.post("/operator/scans", data={"nisn": existing_student.nisn})
@@ -177,12 +180,16 @@ def test_operator_photo_route_requires_both_layers(
     existing_student.photo_path = "portrait.jpg"
     db_session.commit()
     path = f"/operator/students/{existing_student.id}/photo"
-    assert client.get(path, follow_redirects=False).headers["location"].startswith(
-        "/trusteddevice/login"
+    assert (
+        client.get(path, follow_redirects=False)
+        .headers["location"]
+        .startswith("/trusteddevice/login")
     )
     device_login(client)
-    assert client.get(path, follow_redirects=False).headers["location"].startswith(
-        "/operator/login"
+    assert (
+        client.get(path, follow_redirects=False)
+        .headers["location"]
+        .startswith("/operator/login")
     )
     operator_login(client, accounts[1][0])
     response = client.get(path)

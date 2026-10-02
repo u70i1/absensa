@@ -2,8 +2,22 @@ from app.models.class_ import Class
 from app.models.student import Student
 from app.schemas.student import ClassStudentListQuery
 from app.services.exceptions import ClassNotFound, DuplicateClass
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
+
+def _save_class(db: Session, *, commit: bool) -> None:
+    try:
+        if commit:
+            db.commit()
+        else:
+            db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        if getattr(exc.orig, "pgcode", None) == "23505":
+            raise DuplicateClass() from exc
+        raise
 
 
 def get_student_grades(db: Session) -> list[int]:
@@ -48,7 +62,7 @@ def get_classes(
 
 
 def _class_filters(class_name: str | None, grade: int | None, empty: bool = False):
-    filters = []
+    filters: list[ColumnElement[bool]] = []
 
     if class_name is not None:
         filters.append(Class.class_name.ilike(f"%{class_name}%"))
@@ -84,14 +98,14 @@ def get_class_summary(db: Session) -> dict:
     total_students, assigned = db.execute(
         select(func.count(Student.id), func.count(Student.class_id))
     ).one()
-    return dict(
-        total_classes=total_classes,
-        occupied=occupied,
-        empty=total_classes - occupied,
-        total_students=total_students,
-        assigned=assigned,
-        unassigned=total_students - assigned,
-    )
+    return {
+        "total_classes": total_classes,
+        "occupied": occupied,
+        "empty": total_classes - occupied,
+        "total_students": total_students,
+        "assigned": assigned,
+        "unassigned": total_students - assigned,
+    }
 
 
 def get_class_grades(db: Session) -> list[int]:
@@ -107,7 +121,7 @@ def get_class_by_id(db: Session, class_id: int) -> Class:
 
 def get_classes_students(db: Session, class_id: int, query: ClassStudentListQuery):
     """_Retrieve student items from "students" table._"""
-    filters = []
+    filters: list[ColumnElement[bool]] = []
     if query.name is not None:
         filters.append(Student.name.ilike(f"%{query.name}%"))
     if query.nisn is not None:
@@ -147,10 +161,7 @@ def post_class(db: Session, class_name: str, grade: int, *, commit: bool = True)
     new_class = Class(class_name=class_name, grade=grade)
 
     db.add(new_class)
-    if commit:
-        db.commit()
-    else:
-        db.flush()
+    _save_class(db, commit=commit)
 
     return new_class
 
@@ -174,10 +185,7 @@ def update_class(
     to_update.class_name = class_name
     to_update.grade = grade
 
-    if commit:
-        db.commit()
-    else:
-        db.flush()
+    _save_class(db, commit=commit)
 
     return to_update
 

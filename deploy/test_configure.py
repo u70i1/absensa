@@ -12,7 +12,8 @@ class ConfigureTests(unittest.TestCase):
             write_config(path, 8088)
             original = path.read_text()
             values = dict(
-                line.split("=", 1) for line in original.splitlines()
+                line.split("=", 1)
+                for line in original.splitlines()
                 if line and not line.startswith("#")
             )
             password = values["POSTGRES_PASSWORD"]

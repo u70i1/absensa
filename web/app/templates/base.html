@@ -12,7 +12,7 @@
   <script defer src="{{ url_for('static', path='dashboard.js') }}"></script>
 </head>
 
-<body class="{% block body_class %}{% endblock %}">
+<body hx-history="false" class="{% block body_class %}{% endblock %}">
   {% block content %}
 
   {% endblock %}

@@ -53,7 +53,7 @@ def render_page(
             "daily": notifications.daily_state(db),
             "error": error,
             "test_number_value": test_number_value,
-            "notice": NOTICES.get(request.query_params.get("notice")),
+            "notice": NOTICES.get(request.query_params.get("notice", "")),
         },
         status_code=status_code,
     )
@@ -63,7 +63,7 @@ def _failure(
     request: Request,
     gateway: WhatsAppGateway,
     db: Session,
-    exc: Exception,
+    exc: GatewayProblem | notifications.NotificationProblem,
     *,
     test_number_value: str = "",
 ):

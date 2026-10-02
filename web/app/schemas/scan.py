@@ -1,7 +1,9 @@
 """Attendance scan request, query, and response schemas."""
 
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
+from app.core.config import settings
 from app.schemas.base import BulkDeleteRequestBase, PaginationQueryBase
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Self
@@ -32,7 +34,14 @@ class ScanListQuery(PaginationQueryBase):
 
     @model_validator(mode="after")
     def check_date(self) -> Self:
-        if self.date_from and self.date_to and self.date_from > self.date_to:
+        tz = ZoneInfo(settings.timezone)
+        bounds = [
+            value.replace(tzinfo=tz) if value and value.tzinfo is None else value
+            for value in (self.date_from, self.date_to)
+        ]
+        if any(value and value.date() > date(9999, 12, 30) for value in bounds):
+            raise ValueError("date must be before 9999-12-31")
+        if bounds[0] and bounds[1] and bounds[0] > bounds[1]:
             raise ValueError("date_to is earlier than date_from")
         return self
 

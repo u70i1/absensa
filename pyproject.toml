@@ -2,3 +2,7 @@
 # "web/app/models/*.py" = ["F821"]
 "web/alembic/*.py" = ["I001", "UP007", "UP035"]
 "web/app/routes/*.py" = ["B008"]
+
+[tool.ruff.per-file-target-version]
+# Keep setup parseable on older hosts so its Python 3.10 guard can explain the requirement.
+"deploy/*.py" = "py39"

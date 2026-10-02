@@ -11,6 +11,8 @@ class AdminLoginRequest(BaseModel):
     @classmethod
     def normalize_username(cls, value: str) -> str:
         normalized = value.strip().casefold()
-        if not normalized:
-            raise ValueError("username must not be blank")
+        if not normalized or len(normalized) > 100:
+            raise ValueError(
+                "username must contain 1–100 characters after normalization"
+            )
         return normalized

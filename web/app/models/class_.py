@@ -1,6 +1,11 @@
+from typing import TYPE_CHECKING
+
 from app.db.base import Base
 from sqlalchemy import Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+if TYPE_CHECKING:
+    from app.models.student import Student
 
 
 class Class(Base):
@@ -25,6 +30,6 @@ class Class(Base):
             deferrable=True,
         ),
     )
-    students: Mapped[list["Student"]] = relationship(  # noqa: F821 # pyright: ignore[reportUndefinedVariable]
+    students: Mapped[list["Student"]] = relationship(
         back_populates="class_", passive_deletes=True
     )

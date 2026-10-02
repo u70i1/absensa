@@ -23,7 +23,10 @@ from app.services.exceptions import AppException
 from PIL import Image
 from sqlalchemy import func, select
 
-from tests.test_import import batch_for, importer, workbook_bytes  # noqa: F401
+from tests import test_import
+from tests.test_import import batch_for, workbook_bytes
+
+importer = test_import.importer
 
 
 @pytest.fixture(autouse=True)
@@ -33,9 +36,9 @@ def photo_directory(tmp_path, monkeypatch):
     return path
 
 
-def photo_bytes():
+def photo_bytes(color="red"):
     stream = BytesIO()
-    Image.new("RGB", (24, 24), "red").save(stream, "PNG")
+    Image.new("RGB", (24, 24), color).save(stream, "PNG")
     return stream.getvalue()
 
 
@@ -348,7 +351,7 @@ def test_replacement_cleanup_and_stale_photo_protection(
     client, importer, db_session, existing_student
 ):
     original = student_photo_service.update_student_photo(
-        db_session, existing_student.id, BytesIO(photo_bytes())
+        db_session, existing_student.id, BytesIO(photo_bytes("blue"))
     )
     content = zip_bytes(
         {
@@ -362,7 +365,7 @@ def test_replacement_cleanup_and_stale_photo_protection(
                     )
                 ],
             ),
-            f"photos/{existing_student.nisn}.png": photo_bytes(),
+            f"photos/{existing_student.nisn}.png": photo_bytes("green"),
         }
     )
     batch, _ = batch_for(upload(client, content), client, db_session)
