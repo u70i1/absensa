@@ -9,13 +9,22 @@ x-logging: &logging
 
 x-python: &python
   image: absensa-web:${ABSENSA_VERSION:-local}
-  build: ./web
+  build:
+    context: ./web
+    target: runtime
   init: true
   logging: *logging
   environment: &python-env
     DATABASE_URL: postgresql+psycopg2://absensa:${POSTGRES_PASSWORD:?Run deploy/configure.py first}@db:5432/absensa?connect_timeout=5
     TIMEZONE: ${TIMEZONE:-Asia/Jakarta}
     PHOTOS_DIR: /app/photos
+    BACKUPS_DIR: /app/backups
+    BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-}
+    BACKUP_TIMES: ${BACKUP_TIMES:-10:00,17:00}
+    BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY:-14}
+    BACKUP_KEEP_WEEKLY: ${BACKUP_KEEP_WEEKLY:-8}
+    BACKUP_KEEP_MONTHLY: ${BACKUP_KEEP_MONTHLY:-3}
+    BACKUP_TIMEOUT_SECONDS: ${BACKUP_TIMEOUT_SECONDS:-3600}
     ADMIN_COOKIE_SECURE: ${COOKIE_SECURE:-false}
     ACCESS_COOKIE_SECURE: ${COOKIE_SECURE:-false}
     WHATSAPP_BRIDGE_URL: http://whatsapp:3001
@@ -57,6 +66,7 @@ services:
       - "${ABSENSA_BIND:-0.0.0.0}:${ABSENSA_PORT:-8088}:8000"
     volumes:
       - photos:/app/photos
+      - backups:/app/backups:ro
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -75,6 +85,24 @@ services:
       replicas: 1
     command: [python, -m, app.jobs.whatsapp_notifications]
     stop_grace_period: 60s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  backup:
+    <<: *python
+    image: absensa-backup:${ABSENSA_VERSION:-local}
+    build:
+      context: ./web
+      target: backup
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+    command: [python, -m, app.jobs.backups]
+    stop_grace_period: 60s
+    volumes:
+      - photos:/app/photos:ro
+      - backups:/app/backups
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -106,6 +134,7 @@ services:
 volumes:
   pgdata:
   photos:
+  backups:
   whatsapp_auth:
 
 networks:

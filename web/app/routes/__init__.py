@@ -2,6 +2,7 @@
 
 from app.routes.admin import router as admin_router
 from app.routes.admin_auth import router as admin_auth_router
+from app.routes.admin_backups import router as admin_backups_router
 from app.routes.admin_classes import router as admin_classes_router
 from app.routes.admin_import import router as admin_import_router
 from app.routes.admin_photos import router as admin_photos_router
@@ -22,6 +23,7 @@ api_router.include_router(class_router)
 api_router.include_router(student_router)
 api_router.include_router(scan_router)
 api_router.include_router(admin_auth_router)
+api_router.include_router(admin_backups_router)
 api_router.include_router(admin_router)
 api_router.include_router(admin_classes_router)
 api_router.include_router(admin_photos_router)
