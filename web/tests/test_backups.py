@@ -16,27 +16,10 @@ from app.services.backup_crypto_service import (
     decrypt_archive,
     encryption_key,
 )
-from app.services.backup_storage_service import LocalBackupStorage
 from app.services.exceptions import AppException
 from cryptography.exceptions import InvalidTag
 from pydantic import SecretStr
 from sqlalchemy import select, text
-
-
-@pytest.fixture
-def backup_storage(tmp_path, monkeypatch):
-    monkeypatch.setattr(settings, "backups_dir", str(tmp_path / "backups"))
-    monkeypatch.setattr(settings, "photos_dir", str(tmp_path / "photos"))
-    monkeypatch.setattr(
-        settings,
-        "backup_encryption_key",
-        SecretStr(base64.b64encode(b"k" * 32).decode()),
-    )
-    monkeypatch.setattr(settings, "timezone", "Asia/Jakarta")
-    (tmp_path / "photos").mkdir()
-    storage = LocalBackupStorage()
-    storage.prepare()
-    return storage
 
 
 def make_backup(db, storage, *, when=None, status="success"):

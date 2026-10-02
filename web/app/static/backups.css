@@ -1,0 +1,31 @@
+.backup-results, .backup-settings, .backup-settings-form, .backup-settings-group {
+  display: grid;
+  gap: var(--space-9);
+  min-width: 0;
+}
+.backup-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-6); }
+.backup-summary-card { display: grid; align-content: start; justify-items: start; gap: var(--space-5); }
+.backup-summary-card h2 { font-size: var(--font-size-subheading); }
+.backup-summary-card small { display: block; margin-top: var(--space-3); font-size: var(--font-size-label); font-weight: var(--font-weight-regular); }
+.backup-summary-card p { margin: 0; }
+.backup-settings-group h3 { margin: 0; font-size: var(--font-size-subheading); }
+.backup-badge { display: inline-block; border-radius: var(--radius-pill); padding: var(--space-2) var(--space-5); background: var(--color-surface-container); color: var(--color-on-surface-variant); font-size: var(--font-size-label); font-weight: var(--font-weight-semibold); white-space: nowrap; }
+.backup-success { background: var(--color-primary-fixed); color: var(--color-on-primary-fixed); }
+.backup-queued, .backup-running { background: var(--color-tertiary-fixed); color: var(--color-on-tertiary-fixed); }
+.backup-failed { background: var(--color-error-container); color: var(--color-on-error-container); }
+.backup-page .backup-error, .backup-table .backup-error { color: var(--color-error); }
+.backup-warning { margin: 0; padding: var(--space-6); border: var(--border-subtle); border-radius: var(--radius-control); background: var(--color-tertiary-fixed); }
+.backup-execution { display: flex; align-items: center; justify-content: space-between; gap: var(--space-9); }
+.backup-execution .button { flex-shrink: 0; }
+.backup-settings-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-10); }
+.backup-settings-group { gap: var(--space-6); align-content: start; }
+.backup-settings-form > .button { justify-self: start; }
+.backup-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); }
+.backup-retention-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-6); }
+.backup-checkbox { display: flex; align-items: center; gap: var(--space-3); cursor: pointer; }
+.backup-checkbox input { accent-color: var(--color-surface-tint); }
+.backup-physical-steps { margin: 0; padding-left: var(--space-9); display: grid; gap: var(--space-5); line-height: 1.5; }
+.backup-table td { vertical-align: top; }
+.backup-table td:nth-child(1), .backup-table .backup-size { white-space: nowrap; }
+.backup-table td:nth-child(3), .backup-table td:nth-child(4) { max-width: var(--auth-card-width); overflow-wrap: anywhere; }
+.backup-table .backup-empty { text-align: center; padding: var(--space-10); }

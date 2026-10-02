@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block page_title %}Cadangan Data{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', path='access.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', path='backups.css') }}">
+{% endblock %}
+{% block content %}
+{% set active_tab = 'backups' %}{% include 'navigation/admin-header.html' %}
+<main class="content-page backup-page">
+  <div class="backup-heading"><div><h1>Cadangan Data</h1><p>Lindungi database, foto siswa, dan logo sekolah dengan cadangan terenkripsi.</p></div></div>
+  {% if error %}<p class="form-errors" role="alert">{{ error }}</p>{% endif %}
+  {% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+  {% include 'admin/components/backup-results.html' %}
+  <section class="surface-card backup-settings" aria-labelledby="backup-settings-title">
+    <div><h2 id="backup-settings-title">Pengaturan cadangan</h2><p>Jadwal mengikuti zona waktu sekolah: <strong>{{ timezone }}</strong>.</p></div>
+    {% set values = form_values or config %}
+    {% set times = config.times.split(',') %}
+    <form method="post" action="{{ url_for('admin_backups_settings') }}" class="backup-settings-form">
+      <div class="backup-settings-columns">
+        <div class="backup-settings-group">
+          <h3>Jadwal &amp; jumlah cadangan</h3>
+          <label class="backup-checkbox"><input type="checkbox" name="enabled" value="true" {% if values.enabled %}checked{% endif %}><span>Aktifkan cadangan otomatis setiap hari</span></label>
+          <div class="backup-fields">
+            <div class="form-field"><label for="backup-time-one">Waktu pertama</label><input id="backup-time-one" name="time_one" type="time" value="{{ values.time_one if form_values else times[0] }}" required></div>
+            <div class="form-field"><label for="backup-time-two">Waktu kedua (opsional)</label><input id="backup-time-two" name="time_two" type="time" value="{{ values.time_two if form_values else (times[1] if times|length > 1 else '') }}"></div>
+          </div>
+          <div class="backup-retention-fields">
+            {% for field, label, maximum, minimum in [('daily', 'Harian', 365, 1), ('weekly', 'Mingguan', 104, 0), ('monthly', 'Bulanan', 120, 0)] %}
+            <div class="form-field"><label for="backup-{{ field }}">{{ label }}</label><input id="backup-{{ field }}" name="{{ field }}" type="number" min="{{ minimum }}" max="{{ maximum }}" step="1" value="{{ values|attr(field) }}" required></div>
+            {% endfor %}
+          </div>
+          <p class="field-help">Simpan cadangan harian terbaru serta salinan tiap minggu dan bulan secara terpisah. Cadangan lama baru dihapus setelah cadangan baru berhasil.</p>
+        </div>
+        <div class="backup-settings-group">
+          <h3>Simpan salinan di flashdisk</h3>
+          <p>Cadangan otomatis tersimpan di komputer sekolah. Simpan salinan di flashdisk atau hard disk eksternal agar data tetap aman jika komputer rusak.</p>
+          <ol class="backup-physical-steps">
+            <li>Pilih <strong>Unduh</strong> pada cadangan yang berhasil.</li>
+            <li>Salin file unduhan ke flashdisk atau hard disk eksternal.</li>
+            <li>Cabut perangkat dan simpan di tempat aman.</li>
+          </ol>
+          <p class="field-help">Lakukan secara rutin, misalnya setiap akhir minggu. File tetap dilindungi kunci keamanan.</p>
+        </div>
+      </div>
+      <button type="submit" class="button primary">Simpan pengaturan</button>
+    </form>
+  </section>
+  <p class="field-help">Simpan kunci keamanan di tempat aman yang berbeda dari flashdisk. Jika perlu memulihkan data, minta bantuan petugas teknis sekolah.</p>
+</main>
+{% endblock %}

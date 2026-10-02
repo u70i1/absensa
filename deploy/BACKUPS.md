@@ -90,8 +90,8 @@ to another device are independent of automatic rotation. Staff must check that t
 copy finished, safely eject the drive, and store it away from the server.
 
 There is no database restoration endpoint. Recovery remains an offline maintenance
-procedure performed by the school's technical administrator. Copy encrypted
-archives to USB or external drives for routine physical copies.
+procedure performed by the school's technical administrator. Read the short
+[Indonesian staff guide](PANDUAN-CADANGAN.md) for routine physical copies.
 
 ## Manual recovery (isolated deployment first)
 
@@ -166,3 +166,26 @@ downloads. An operational recovery drill with a real `pg_dump`/`pg_restore` is s
 required for each site's actual disks. See PostgreSQL's
 [pg_dump documentation](https://www.postgresql.org/docs/18/app-pgdump.html),
 [cryptography's GCM guidance](https://cryptography.io/en/latest/hazmat/primitives/symmetric-encryption/).
+
+## Administrator interface
+
+Open **Cadangan** in the admin navigation at `/admin/backups`. Only an authenticated,
+active administrator can use its pages, settings/actions and downloads. All mutations
+use Absensa's existing same-origin CSRF middleware.
+
+The page shows the latest attempt, newest usable recovery point, automatic schedule
+and paginated history. Dates use the school timezone and sizes use binary units.
+Select **Buat cadangan**, confirm **Mulai cadangan**, and follow the execution status.
+Closing the browser does not stop a job. HTMX polls every five seconds during work
+and every thirty seconds while idle, without replacing unsaved schedule fields.
+A stopped worker is reported; queued work resumes when the service starts.
+
+Settings enable/disable automatic backups, choose one/two daily times, and set
+separate daily/weekly/monthly counts. They apply to future work and the next
+successful retention pass. Failed attempts never trigger deletion.
+
+**Unduh** serves complete encrypted archives. Copy the downloaded file onto a USB
+drive or external disk, check the copy finished, eject the device and store it safely.
+The interface explains these steps in Indonesian and never displays the encryption
+key. Missing/expired archives cannot be downloaded. Errors provide suggested checks
+without exposing raw database exceptions. Restoration remains offline.

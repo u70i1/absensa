@@ -3,8 +3,9 @@
 These are developer instructions. For Windows deployments with all runtimes
 inside containers, use the [deployment guide](deploy/README.md).
 
-Absensa has four running parts: PostgreSQL, FastAPI, the WhatsApp bridge, and
-the notification scheduler. You need Python, Node.js 18+, Docker, and Chromium.
+Absensa has five running parts: PostgreSQL, FastAPI, the WhatsApp bridge,
+the notification scheduler, and the backup worker. You need Python, Node.js 18+,
+Docker, and Chromium.
 Run commands from the directories shown so each service reads its own `.env`
 and keeps its local files in the expected place.
 
@@ -52,18 +53,19 @@ environment requires it.
 
 ## Start the services
 
-Keep three terminals open, each in the directory shown:
+Keep four terminals open, each in the directory shown:
 
 | Terminal | Directory | Command |
 | --- | --- | --- |
 | FastAPI | `web/` | `.venv/bin/uvicorn app.main:app --reload` |
 | WhatsApp bridge | `services/whatsapp/` | `npm start` |
 | Notification scheduler | `web/` | `.venv/bin/python -m app.jobs.whatsapp_notifications` |
+| Backup worker | `web/` | `.venv/bin/python -m app.jobs.backups` |
 
 PostgreSQL stays running through Docker. The scheduler is a **separate process**;
 the FastAPI server and `/admin/whatsapp/daily` do not start it. Keep exactly
 one scheduler running. It checks the schedule every 30 seconds. For a lasting
-deployment, supervise all three processes so they restart if they exit; leave
+deployment, supervise all four processes so they restart if they exit; leave
 `--reload` off FastAPI outside development.
 
 Open `http://localhost:8000/admin` and sign in. Under **Akses & Perangkat**,
@@ -108,3 +110,14 @@ preserves records, widens scan class-name snapshots, adds login budgets and
 attendance indexes. Back up first and schedule the migration while attendance is
 idle, since normal index creation takes database locks. Downgrading refuses to
 truncate snapshots longer than ten characters. See [AUDIT.md](AUDIT.md).
+
+## Local and physical backups
+
+The backup worker needs PostgreSQL 18 `pg_dump` in its PATH and a private
+`BACKUP_ENCRYPTION_KEY` in `web/.env`. Create the photo directory before starting
+it, and keep `BACKUPS_DIR` persistent. Production Compose includes the tools and
+volumes automatically. See [technical setup and recovery](deploy/BACKUPS.md).
+
+In **Cadangan**, staff can create/download a backup and save the file to a USB
+drive or external disk. No internet account is needed. See the
+[Indonesian staff guide](deploy/PANDUAN-CADANGAN.md).
