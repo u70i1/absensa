@@ -4,19 +4,18 @@
     <h2 id="review-title">Impor berhasil</h2>
     <p role="status">{{ batch.payload.created }} data ditambahkan, {{ batch.payload.updated }} data diperbarui, {{ batch.payload.skipped }} baris dilewati.</p>
     {% if batch.payload.photos_saved %}<p>{{ batch.payload.photos_saved }} foto disimpan.</p>{% endif %}
-    {% if batch.payload.reused_classes %}<p>{{ batch.payload.reused_classes }} baris kelas otomatis menggunakan kelas yang sama.</p>{% endif %}
     <div class="review-actions">{% if batch.kind in ['students', 'mixed'] %}<a class="button primary" href="{{ url_for('admin_students') }}">Lihat data siswa</a>{% endif %}{% if batch.kind in ['classes', 'mixed'] %}<a class="button primary" href="{{ url_for('admin_classes') }}">Lihat data kelas</a>{% endif %}</div>
   {% elif batch and batch.state == 'pending' %}
     {% set rows = batch.payload.rows %}
     {% set errors = batch.payload.errors %}
     {% set label = 'Siswa' if batch.kind == 'students' else 'Kelas' if batch.kind == 'classes' else 'Siswa & Kelas' %}
     <div class="review-heading">
-      <div><h2 id="review-title">{{ 'Konfirmasi perubahan data ' ~ label if rows else 'File tidak dapat diproses' }}</h2>
-        <p>{{ 'File berhasil diperiksa. Tinjau perubahan berikut sebelum menerapkannya.' if rows else 'Tidak ada baris data yang valid. Mohon cek datanya.' }}</p>
+      <div><h2 id="review-title">{{ 'Tidak ada perubahan data' if rows and not errors and not changes else 'Konfirmasi perubahan data ' ~ label if rows else 'File tidak dapat diproses' }}</h2>
+        <p>{{ 'Semua data sudah sesuai dengan data tersimpan.' if rows and not errors and not changes else 'File berhasil diperiksa. Tinjau perubahan berikut sebelum menerapkannya.' if rows else 'Tidak ada baris data yang valid. Mohon cek datanya.' }}</p>
       </div>
       <div class="review-actions">
         <form method="post" action="{{ url_for('admin_import_cancel', token=batch.token) }}"><button class="button secondary" type="submit">Batal</button></form>
-        {% if rows and not errors %}<button class="button primary" type="submit" form="import-confirm" data-confirm-import>Simpan Perubahan</button>{% endif %}
+        {% if changes and not errors %}<button class="button primary" type="submit" form="import-confirm" data-confirm-import>Simpan Perubahan</button>{% endif %}
       </div>
     </div>
     {% if batch.payload.files %}<ul class="detected-files" aria-label="File yang terdeteksi">{% for file in batch.payload.files %}<li><strong>{{ file.name }}</strong> · Siswa & Kelas · {{ file.rows }} baris</li>{% endfor %}</ul>{% endif %}
@@ -28,6 +27,7 @@
         <div class="import-summary-error"><span>Perlu diperiksa</span><strong>{{ errors|length }} kesalahan</strong></div>
       </div>
       <form id="import-confirm" method="post" action="{{ url_for('admin_import_confirm', token=batch.token) }}">
+        {% for row in rows %}<input type="hidden" name="selected" value="{{ row.key }}">{% endfor %}
         {% for group in review_groups if group.rows %}
           {% set row_kind = group.kind %}{% set label = group.label %}{% set group_rows = group.rows %}
           <div class="import-group"><h3>{{ label }}</h3><div class="import-tables">
@@ -35,13 +35,6 @@
             <div><h3>{{ title }}</h3>{% include 'tables/import-rows.html' %}</div>
             {% endfor %}
           </div></div>
-          {% if row_kind == 'classes' and group_rows|selectattr('action', 'equalto', 'reuse')|list %}
-            {% set action = 'reuse' %}{% set title = 'Gunakan kelas yang sama' %}
-            <div class="import-group"><h3>{{ title }}</h3>
-              <p>Kelas dengan jenjang dan nama yang sama akan digunakan bersama. Siswa dari setiap workbook tetap terhubung ke kelas tersebut.</p>
-              {% include 'tables/import-rows.html' %}
-            </div>
-          {% endif %}
         {% endfor %}
       </form>
       <p class="review-note">Sel berwarna menunjukkan nilai yang akan diubah. Impor bersifat semua-atau-tidak-sama-sekali. Jika ada kesalahan, tidak ada siswa atau kelas yang disimpan. Perbaiki file lalu unggah kembali.</p>

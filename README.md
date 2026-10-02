@@ -134,9 +134,12 @@ workbook, and undeclared student references reject the entire upload. Removing c
 deletes database records; use the Classes dashboard for explicit deletion. NISN and
 guardian phone numbers should be text to retain leading zeros.
 
-Uploads produce previews with create/update/reused-class tables, highlighted changes, source
+Uploads produce previews with create/update tables, highlighted changes, source
 filenames, staged photos, editable drafts, and errors formatted as
-`sheet > row:column > message` in Indonesian. Imports are all-or-nothing: any error
+`sheet > row:column > message` in Indonesian. Only real changes appear as edits;
+unchanged students/classes and shared class declarations are skipped automatically.
+Student comparisons use the resolved database class ID, and identical normalized
+photos preserve the existing file. Imports are all-or-nothing: any error
 rejects the entire upload, including valid rows and class changes. Confirmation
 applies all rows in one transaction. Runtime failures roll back every database
 change, remove new photo files and retain original photos. Canceling changes no

@@ -82,7 +82,8 @@ def test_shared_new_class_submits_once_and_reports_reuse(
     class_rows = [r for r in batch.payload["rows"] if r["kind"] == "classes"]
     assert [r["action"] for r in class_rows] == ["create", "reuse"]
     page = client.get(f"/admin/import?batch={batch.token}")
-    assert "Gunakan kelas yang sama" in page.text
+    assert "Gunakan kelas yang sama" not in page.text
+    assert 'data-action="reuse"' not in page.text
     assert {
         int(key) for key in re.findall(r'name="selected" value="(\d+)"', page.text)
     } == set(selection(batch))
@@ -99,11 +100,10 @@ def test_shared_new_class_submits_once_and_reports_reuse(
     assert len(students) == (2 if first else 0)
     assert all(s.class_id == classes[0].class_id for s in students)
     assert batch.payload["created"] == len(students) + 1
-    assert batch.payload["reused_classes"] == 1
-    assert batch.payload["skipped"] == 0
+    assert batch.payload["skipped"] == 1
     assert (
-        "1 baris kelas otomatis menggunakan kelas yang sama"
-        in client.get(response.headers["location"]).text
+        "baris kelas otomatis menggunakan kelas yang sama"
+        not in client.get(response.headers["location"]).text
     )
     # A retry preserves both records and the receipt.
     receipt = dict(batch.payload)
@@ -158,7 +158,7 @@ def test_shared_class_reused_between_submissions(db_session, importer, already_c
     assert len(list(db_session.scalars(select(Class)))) == 1
     assert len({s.class_id for s in db_session.scalars(select(Student))}) == 1
     assert second.payload["created"] == 1
-    assert second.payload["reused_classes"] == 1
+    assert second.payload["skipped"] == 1
 
 
 @pytest.mark.parametrize("second_pair", [(11, "10A"), (10, "10B")])
@@ -208,8 +208,8 @@ def test_matching_existing_class_declarations_across_workbooks(
         existing.class_id
     }
     assert batch.payload["created"] == 2
-    assert batch.payload["updated"] == 1
-    assert batch.payload["reused_classes"] == 1
+    assert batch.payload["updated"] == int(rename)
+    assert batch.payload["skipped"] == (1 if rename else 2)
 
 
 def test_new_declaration_reuses_final_renamed_class_even_when_listed_first(

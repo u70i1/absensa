@@ -19,7 +19,7 @@
       <td class="{% if action == 'update' and 'grade' in row.changed %}import-changed{% endif %}">{{ values.grade }}</td>
       <td class="{% if action == 'update' and 'class_name' in row.changed %}import-changed{% endif %}"><strong>{{ values.class_name }}</strong></td>
     {% endif %}
-      <td data-import-actions><input type="hidden" name="selected" value="{{ row_key }}"><button type="button" class="button secondary" data-import-edit>Edit</button></td>
+      <td data-import-actions><button type="button" class="button secondary" data-import-edit>Edit</button></td>
     </tr>
   {% else %}<tr><td colspan="{{ 5 if row_kind == 'students' else 4 }}" class="import-empty">Tidak ada data untuk {{ 'ditambahkan' if action == 'create' else 'diperbarui' }}.</td></tr>{% endfor %}
   </tbody>

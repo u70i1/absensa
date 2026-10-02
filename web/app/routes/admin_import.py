@@ -31,12 +31,13 @@ def render_import(
     fragment=False,
 ):
     rows = batch.payload.get("rows", []) if batch else []
+    changes = [row for row in rows if row["action"] in {"create", "update"}]
     groups = (
         [
             {
                 "kind": kind,
                 "label": label,
-                "rows": [row for row in rows if row.get("kind", batch.kind) == kind],
+                "rows": [row for row in changes if row.get("kind", batch.kind) == kind],
             }
             for kind, label in (("students", "Siswa"), ("classes", "Kelas"))
         ]
@@ -48,6 +49,7 @@ def render_import(
         name="tables/import-review.html" if fragment else "admin/pages/import.html",
         context={
             "batch": batch,
+            "changes": changes,
             "error": error,
             "selected_rows": selected_rows,
             "review_groups": groups,

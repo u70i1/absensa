@@ -298,6 +298,35 @@ def _reference_key(row, value):
     return (row.get("file", ""), value) if isinstance(value, str) else value
 
 
+def _changed_fields(row, before):
+    fields = STUDENT_FIELDS if row["kind"] == "students" else ("grade", "class_name")
+    changed = []
+    for field in fields:
+        value = (
+            row["resolved_class_id"]
+            if row["kind"] == "students" and field == "class_id"
+            else row["values"][field]
+        )
+        if (
+            before is None
+            or value != before[field]
+            or (
+                row["kind"] == "students"
+                and field == "class_id"
+                and row["class_key"] is not None
+                and value is None
+            )
+        ):
+            changed.append(field)
+    if row.get("incoming_photo"):
+        changed.append("photo_path")
+    return changed
+
+
+def _action(before, changed):
+    return "create" if before is None else "update" if changed else "unchanged"
+
+
 def _review_workbook(db: Session, rows: list[dict]):
     """Plan against the final class and student state without mutating ORM objects."""
     classes = {item.class_id: item for item in db.scalars(select(Class))}
@@ -429,22 +458,14 @@ def _review_workbook(db: Session, rows: list[dict]):
         )
         item = existing.get(values[id_field])
         before = {field: getattr(item, field) for field in fields} if item else None
-        changed = [
-            field
-            for field in fields
-            if before is None or values[field] != before[field]
-        ]
-        if kind == "students" and before is not None:
-            changed = [field for field in changed if field != "class_id"]
-            if row["resolved_class_id"] != before["class_id"] or (
-                row["class_key"] is not None and row["resolved_class_id"] is None
-            ):
-                changed.append("class_id")
+        if before is not None and row.get("incoming_photo"):
+            before["photo_path"] = item.photo_path
+        changed = _changed_fields(row, before)
         reviewed = {
             **row,
             "before": before,
             "changed": changed,
-            "action": "update" if item else "create",
+            "action": _action(before, changed),
         }
         if kind == "classes":
             pair = (values["grade"], values["class_name"])
@@ -541,11 +562,22 @@ def create_preview(
             photo_bytes += len(normalized)
             if photo_bytes > 50 * 1024 * 1024:
                 raise AppException("Total foto setelah diproses maksimal 50 MB.", 413)
+            existing_path = students[nisn]["photo_path"]
+            if existing_path:
+                try:
+                    with student_photo_service.photo_file(existing_path).open(
+                        "rb"
+                    ) as saved:
+                        if saved.read(len(normalized) + 1) == normalized:
+                            continue
+                except (OSError, AppException):
+                    pass  # Missing photos should be restored from the upload.
             staged_photos[nisn] = normalized
             students[nisn]["incoming_photo"] = name
             students[nisn]["changed"].append("photo_path")
             if students[nisn]["before"] is not None:
                 students[nisn]["before"]["photo_path"] = students[nisn]["photo_path"]
+                students[nisn]["action"] = "update"
         except AppException as exc:
             if exc.status_code == 413 and photo_bytes > 50 * 1024 * 1024:
                 raise
@@ -672,31 +704,21 @@ def edit_preview_row(
     if errors:
         raise AppException(errors[0]["message"], 422)
     # Do not refresh 'before': editing a draft must never bypass stale-write checks.
-    candidate["changed"] = [
-        field
-        for field in fields
-        if field in (STUDENT_FIELDS if kind == "students" else ("grade", "class_name"))
-        and (original["before"] is None or parsed[field] != original["before"][field])
-    ]
     for draft, refreshed in zip(payload["rows"], reviewed):
-        draft["action"] = refreshed["action"]
         if draft["kind"] == "students":
             draft["class_name"] = refreshed["class_name"]
             draft["class_key"] = refreshed["class_key"]
             draft["resolved_class_id"] = refreshed["resolved_class_id"]
-            draft["changed"] = [f for f in draft["changed"] if f != "class_id"]
-            if (
-                draft["before"] is None
-                or draft["resolved_class_id"] != draft["before"]["class_id"]
-                or (
-                    draft["class_key"] is not None
-                    and draft["resolved_class_id"] is None
-                )
-            ):
-                draft["changed"].append("class_id")
+        draft["changed"] = _changed_fields(draft, draft["before"])
+        draft["action"] = (
+            "reuse"
+            if refreshed["action"] == "reuse"
+            else _action(draft["before"], draft["changed"])
+        )
+        if draft["action"] == "reuse":
+            draft["changed"] = []
     if original.get("incoming_photo"):
         candidate["photo_nisn"] = original.get("photo_nisn", original["values"]["nisn"])
-        candidate["changed"].append("photo_path")
     candidate["revision"] = revision + 1
     batch.payload = payload
     db.commit()
@@ -786,7 +808,7 @@ def apply_preview(
             text("SET CONSTRAINTS uq_grade_class_name, students_nisn_key DEFERRED")
         )
         for row in groups["classes"]:
-            if row["action"] == "reuse":
+            if row["action"] not in {"create", "update"}:
                 continue
             values = row["values"]
             item = (
@@ -802,6 +824,8 @@ def apply_preview(
             for item in db.scalars(select(Class))
         }
         for row in groups["students"]:
+            if row["action"] not in {"create", "update"}:
+                continue
             pair = tuple(row["class_key"]) if row["class_key"] is not None else None
             values = {field: row["values"][field] for field in STUDENT_FIELDS}
             values["class_id"] = class_ids[pair] if pair is not None else None
@@ -826,8 +850,8 @@ def apply_preview(
         batch.payload = {
             "created": sum(row["action"] == "create" for row in chosen),
             "updated": sum(row["action"] == "update" for row in chosen),
-            "reused_classes": sum(row["action"] == "reuse" for row in chosen),
-            "skipped": batch.payload["total"] - len(chosen),
+            "skipped": batch.payload["total"]
+            - sum(row["action"] in {"create", "update"} for row in chosen),
             "photos_saved": len(new_photos),
         }
         db.execute(delete(ImportPhoto).where(ImportPhoto.batch_token == token))
