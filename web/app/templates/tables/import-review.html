@@ -4,6 +4,7 @@
     <h2 id="review-title">Impor berhasil</h2>
     <p role="status">{{ batch.payload.created }} data ditambahkan, {{ batch.payload.updated }} data diperbarui, {{ batch.payload.skipped }} baris dilewati.</p>
     {% if batch.payload.photos_saved %}<p>{{ batch.payload.photos_saved }} foto disimpan.</p>{% endif %}
+    {% if batch.payload.reused_classes %}<p>{{ batch.payload.reused_classes }} baris kelas otomatis menggunakan kelas yang sama.</p>{% endif %}
     <div class="review-actions">{% if batch.kind in ['students', 'mixed'] %}<a class="button primary" href="{{ url_for('admin_students') }}">Lihat data siswa</a>{% endif %}{% if batch.kind in ['classes', 'mixed'] %}<a class="button primary" href="{{ url_for('admin_classes') }}">Lihat data kelas</a>{% endif %}</div>
   {% elif batch and batch.state == 'pending' %}
     {% set rows = batch.payload.rows %}
@@ -34,6 +35,13 @@
             <div><h3>{{ title }}</h3>{% include 'tables/import-rows.html' %}</div>
             {% endfor %}
           </div></div>
+          {% if row_kind == 'classes' and group_rows|selectattr('action', 'equalto', 'reuse')|list %}
+            {% set action = 'reuse' %}{% set title = 'Gunakan kelas yang sama' %}
+            <div class="import-group"><h3>{{ title }}</h3>
+              <p>Kelas dengan jenjang dan nama yang sama akan digunakan bersama. Siswa dari setiap workbook tetap terhubung ke kelas tersebut.</p>
+              {% include 'tables/import-rows.html' %}
+            </div>
+          {% endif %}
         {% endfor %}
       </form>
       <p class="review-note">Sel berwarna menunjukkan nilai yang akan diubah. Impor bersifat semua-atau-tidak-sama-sekali. Jika ada kesalahan, tidak ada siswa atau kelas yang disimpan. Perbaiki file lalu unggah kembali.</p>

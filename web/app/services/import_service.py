@@ -1,7 +1,7 @@
 """Review spreadsheets and archive photos, then apply entire workbooks atomically."""
 
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
@@ -312,9 +312,7 @@ def _review_workbook(db: Session, rows: list[dict]):
     def error(row, field, message):
         errors.append(
             {
-                **_error(
-                    row["kind"], row["row"], field, message, row.get("sheet")
-                ),
+                **_error(row["kind"], row["row"], field, message, row.get("sheet")),
                 "file": row.get("file", ""),
             }
         )
@@ -324,7 +322,9 @@ def _review_workbook(db: Session, rows: list[dict]):
         (class_rows, classes, "class_id"),
         (student_rows, students, "id"),
     ):
-        counts = Counter(_reference_key(r, r["values"][id_field]) for r in group)
+        references = defaultdict(list)
+        for row in group:
+            references[_reference_key(row, row["values"][id_field])].append(row)
         for row in group:
             value = row["values"][id_field]
             if isinstance(value, int) and value not in existing:
@@ -333,21 +333,36 @@ def _review_workbook(db: Session, rows: list[dict]):
                     id_field,
                     f"ID {value} tidak ditemukan. Jangan mengubah ID yang sudah ada; kosongkan ID untuk data baru.",
                 )
-            if value is not None and counts[_reference_key(row, value)] > 1:
+            declarations = references[_reference_key(row, value)]
+            shared_class = (
+                id_field == "class_id"
+                and isinstance(value, int)
+                and len({r.get("file", "") for r in declarations}) == len(declarations)
+                and len(
+                    {
+                        (r["values"]["grade"], r["values"]["class_name"])
+                        for r in declarations
+                    }
+                )
+                == 1
+            )
+            if value is not None and len(declarations) > 1 and not shared_class:
                 error(
                     row,
                     id_field,
                     "ID muncul lebih dari sekali dalam workbook/unggahan.",
                 )
 
-    for index, row in enumerate(class_rows):
+    # Existing IDs describe edits. New references describe a class pair and may
+    # share it across workbooks or reuse a class already in the final state.
+    for row in class_rows:
         values = row["values"]
-        key = (
-            _reference_key(row, values["class_id"])
-            if values["class_id"] is not None
-            else f"new:{index}"
-        )
-        final_classes[key] = (values["grade"], values["class_name"])
+        if isinstance(values["class_id"], int):
+            final_classes[values["class_id"]] = (
+                values["grade"],
+                values["class_name"],
+            )
+    final_class_ids = {pair: key for key, pair in final_classes.items()}
     declared_classes = {
         (row.get("file", ""), row["values"]["class_id"])
         if row["values"]["class_id"] is not None
@@ -397,10 +412,12 @@ def _review_workbook(db: Session, rows: list[dict]):
                 "ID KELAS wajib diisi untuk siswa baru. Gunakan ID dari sheet classes.",
             )
         row["class_key"] = list(pair) if pair is not None else None
-        row["resolved_class_id"] = reference if isinstance(reference, int) else None
+        row["resolved_class_id"] = (
+            reference if isinstance(reference, int) else final_class_ids.get(pair)
+        )
         row["class_name"] = pair[1] if pair is not None else "—"
 
-    valid = []
+    valid, seen_classes = [], set()
     for row in rows:
         if id(row) in invalid:
             continue
@@ -429,6 +446,13 @@ def _review_workbook(db: Session, rows: list[dict]):
             "changed": changed,
             "action": "update" if item else "create",
         }
+        if kind == "classes":
+            pair = (values["grade"], values["class_name"])
+            class_key = values["class_id"] if item else pair
+            if class_key in seen_classes or (item is None and pair in final_class_ids):
+                reviewed["action"] = "reuse"
+                reviewed["changed"] = []
+            seen_classes.add(class_key)
         if kind == "students":
             reviewed["photo_path"] = item.photo_path if item else None
         valid.append(reviewed)
@@ -655,6 +679,7 @@ def edit_preview_row(
         and (original["before"] is None or parsed[field] != original["before"][field])
     ]
     for draft, refreshed in zip(payload["rows"], reviewed):
+        draft["action"] = refreshed["action"]
         if draft["kind"] == "students":
             draft["class_name"] = refreshed["class_name"]
             draft["class_key"] = refreshed["class_key"]
@@ -742,7 +767,7 @@ def apply_preview(
                             "Data berubah sejak pratinjau dibuat. Batalkan lalu unggah kembali untuk meninjau perubahan terbaru.",
                             409,
                         )
-        _, errors = _review_workbook(db, chosen)
+        chosen, errors = _review_workbook(db, chosen)
         if errors:
             raise AppException(
                 "Data tidak lagi valid: "
@@ -752,11 +777,17 @@ def apply_preview(
                 + " Unggah file kembali.",
                 409,
             )
+        groups = {
+            kind: [row for row in chosen if row["kind"] == kind]
+            for kind in ("classes", "students")
+        }
         # Both unique constraints describe the final state, including swaps.
         db.execute(
             text("SET CONSTRAINTS uq_grade_class_name, students_nisn_key DEFERRED")
         )
         for row in groups["classes"]:
+            if row["action"] == "reuse":
+                continue
             values = row["values"]
             item = (
                 db.get(Class, values["class_id"])
@@ -795,6 +826,7 @@ def apply_preview(
         batch.payload = {
             "created": sum(row["action"] == "create" for row in chosen),
             "updated": sum(row["action"] == "update" for row in chosen),
+            "reused_classes": sum(row["action"] == "reuse" for row in chosen),
             "skipped": batch.payload["total"] - len(chosen),
             "photos_saved": len(new_photos),
         }

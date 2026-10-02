@@ -155,7 +155,6 @@ def test_temporary_class_created_once(db_session, importer, count):
         ("incomplete_class", "3:C"),
         ("bad_temp_format", "2:H"),
         ("missing_new_reference", "3:H"),
-        ("duplicate_pair", "3:C"),
         ("duplicate_class_id", "3:A"),
         ("duplicate_temp_id", "4:A"),
         ("unknown_class_id", "2:A"),
@@ -193,8 +192,6 @@ def test_invalid_workbook_has_zero_effect(
         s["H2"] = "N01"
     elif failure == "missing_new_reference":
         student_row(s, 3, class_id=None)
-    elif failure == "duplicate_pair":
-        c["B3"], c["C3"] = c["B2"].value, c["C2"].value
     elif failure == "duplicate_class_id":
         c["A3"] = c["A2"].value
     elif failure == "duplicate_temp_id":

@@ -125,12 +125,16 @@ slots. Blank-ID class rows are also finalized during import but cannot be refere
 by students until exported again with their database IDs.
 
 Create classes only in `classes`. Class names and jenjang may change without changing
-the ID, and students retain the same class relationship. Duplicate class pairs/IDs
-and undeclared student references reject the entire upload. Removing class rows never
+the ID, and students retain the same class relationship. New class rows with the same
+jenjang and name automatically reuse one class, including across workbooks or when
+the class already exists. Temporary IDs remain local to each workbook and resolve to
+that shared database class. Repeated existing class IDs across workbooks are accepted
+when their class values agree. Conflicting class edits, duplicate IDs within a
+workbook, and undeclared student references reject the entire upload. Removing class rows never
 deletes database records; use the Classes dashboard for explicit deletion. NISN and
 guardian phone numbers should be text to retain leading zeros.
 
-Uploads produce previews with create/update tables, highlighted changes, source
+Uploads produce previews with create/update/reused-class tables, highlighted changes, source
 filenames, staged photos, editable drafts, and errors formatted as
 `sheet > row:column > message` in Indonesian. Imports are all-or-nothing: any error
 rejects the entire upload, including valid rows and class changes. Confirmation

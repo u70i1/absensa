@@ -257,7 +257,8 @@ def test_duplicates_across_workbooks_and_duplicate_photos(client, importer, db_s
         client,
         db_session,
     )
-    assert not batch.payload["rows"]
+    assert not [r for r in batch.payload["rows"] if r["kind"] == "students"]
+    assert [r["action"] for r in batch.payload["rows"]] == ["create", "reuse"]
     assert {e["file"] for e in batch.payload["errors"]} == {"one.xlsx", "two.xlsx"}
     response = upload(
         client,
