@@ -5,6 +5,7 @@ import logging
 import os
 import time
 
+from app.jobs.worker_health import beat
 from app.db.session import engine
 from app.services.backup_service import process_tick
 
@@ -25,6 +26,7 @@ def main() -> None:
     while True:
         try:
             state = process_tick(engine, manual=args.manual)
+            beat("backup")
             if state not in {"idle", "busy"}:
                 logger.info("Backup worker result: %s", state)
         except Exception:  # noqa: BLE001 - never log credentials from exception text

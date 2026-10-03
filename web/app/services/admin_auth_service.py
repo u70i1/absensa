@@ -99,3 +99,13 @@ def set_admin_credentials(db: Session, username: str, password: str) -> Admin:
     db.commit()
     db.refresh(admin)
     return admin
+
+
+def bootstrap_first_admin(db: Session, username: str, password: str) -> Admin | None:
+    """Serialize first-time setup and never change an existing account."""
+    from sqlalchemy import text
+
+    db.execute(text("SELECT pg_advisory_xact_lock(418527092)"))
+    if db.scalar(select(Admin.id).limit(1)) is not None:
+        return None
+    return set_admin_credentials(db, username, password)

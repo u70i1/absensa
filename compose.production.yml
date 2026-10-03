@@ -1,3 +1,5 @@
+# LEGACY developer/source deployment only; school installer uses deploy/installer/compose.yml.
+# See deploy/README.md before operating an existing installation.
 # Always use this file alone; merging the development file would publish PostgreSQL.
 name: absensa
 

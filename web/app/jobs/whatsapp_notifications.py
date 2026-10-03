@@ -4,6 +4,7 @@ import argparse
 import logging
 import time
 
+from app.jobs.worker_health import beat
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.services.whatsapp_gateway_service import WhatsAppGateway
@@ -33,12 +34,16 @@ def main() -> None:
     while True:
         try:
             result = tick()
+            beat("scheduler")
             if result["state"] in ("completed", "interrupted"):
                 logger.info("WhatsApp notification run: %s", result)
         except NotificationProblem as exc:
+            beat("scheduler")
             logger.warning("WhatsApp notification not started: %s", exc.detail)
         except Exception:
-            logger.exception("WhatsApp notification scheduler failed")
+            logger.error(
+                "Penjadwal WhatsApp gagal; periksa database dan layanan WhatsApp."
+            )
         if args.once:
             return
         time.sleep(POLL_SECONDS)

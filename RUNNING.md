@@ -1,5 +1,9 @@
 # Run Absensa locally
 
+This guide covers local development. School deployments should use the
+[release installer with HTTPS](deploy/README.md). Do not use the development
+HTTP configuration in production.
+
 These are developer instructions. For Windows deployments with all runtimes
 inside containers, use the [deployment guide](deploy/README.md).
 
