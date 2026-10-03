@@ -19,7 +19,7 @@ def tick() -> dict:
         gateway = WhatsAppGateway(
             settings.whatsapp_bridge_url, settings.whatsapp_bridge_token
         )
-        return run_daily(db, gateway)
+        return run_daily(db, gateway, progress=lambda: beat("scheduler"))
 
 
 def main() -> None:

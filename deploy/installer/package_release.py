@@ -9,7 +9,7 @@ import shutil
 import tarfile
 from pathlib import Path
 
-from release import ARTIFACT, TAG
+from release import ARTIFACT, REPOSITORY, TAG
 
 
 def main():
@@ -34,7 +34,20 @@ def main():
     for name in ("manage.py", "release.py", "compose.yml"):
         shutil.copyfile(Path(__file__).parent / name, staging / name)
     root = Path(__file__).resolve().parents[2]
-    shutil.copyfile(root / "deploy/README.md", staging / "PANDUAN.md")
+    guide = (root / "deploy/README.md").read_text()
+    # The installed artifact is not a repository checkout. Keep cross-document
+    # links usable and tied to this release rather than pointing at absent files.
+    for relative, repository_path in {
+        "../RUNNING.md": "RUNNING.md",
+        "RELEASING.md": "deploy/RELEASING.md",
+        "BACKUPS.md": "deploy/BACKUPS.md",
+        "INSTALLER-VALIDATION.md": "deploy/INSTALLER-VALIDATION.md",
+    }.items():
+        guide = guide.replace(
+            f"]({relative})",
+            f"](https://github.com/{REPOSITORY}/blob/{args.version}/{repository_path})",
+        )
+    (staging / "PANDUAN.md").write_text(guide)
     (staging / "release.json").write_text(
         json.dumps(
             {

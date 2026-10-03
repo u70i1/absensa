@@ -78,6 +78,10 @@ def run(args, *, data=None, check=True, timeout=900, env_remove=()):
         ) from exc
     if check and result.returncode:
         # Never log raw Docker/SQL/validation errors: they can contain secrets.
+        if "all predefined address pools have been fully subnetted" in result.stderr:
+            raise InstallError(
+                "Alamat subnet jaringan Docker sudah habis. Minta petugas IT meninjau jaringan Docker yang tidak digunakan atau menyediakan server lain. Jangan menghapus jaringan aplikasi sekolah. Data dipertahankan; setelah kapasitas tersedia, jalankan perbaiki, atau ulangi pemulihan ke direktori baru jika yang gagal adalah pemulihan."
+            )
         raise InstallError(
             "Operasi gagal. Data dipertahankan. Gunakan perintah status atau log untuk memeriksa layanan."
         )
@@ -398,10 +402,28 @@ class Installation:
     def migrate(self):
         self.ensure_storage()
         self.ensure_no_orphans()
+        self.prepare_backup_directory()
         say("Menjalankan migrasi database…")
         self.compose("up", "-d", "--wait", "--wait-timeout", "120", "db")
         self.compose("run", "--rm", "--no-deps", "migrate", timeout=900)
         self.prepare_socket()
+
+    def prepare_backup_directory(self):
+        if self.state.get("initialized"):
+            return
+        # A failed initial pull may leave this approved directory owned by the
+        # host account. Repair must finish setup before the worker writes here.
+        self.compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--user",
+            "0",
+            "backup",
+            "python",
+            "-c",
+            "import os; os.chown('/app/backups',10001,10001); os.chmod('/app/backups',0o700)",
+        )
 
     def prepare_socket(self):
         self.compose(
@@ -564,6 +586,7 @@ class Installation:
 
     def snapshot(self, resume=True):
         self.guard()
+        self.ensure_no_orphans()
         if not self.state.get("initialized"):
             raise InstallError(
                 "Jalankan instalasi sampai siap sebelum membuat cadangan lengkap."
@@ -974,17 +997,7 @@ def install_release(source, root):
     installation.write_runtime()
     installation.pull()
     # Own only the newly created, explicitly approved backup directory, not its parent.
-    installation.compose(
-        "run",
-        "--rm",
-        "--no-deps",
-        "--user",
-        "0",
-        "backup",
-        "python",
-        "-c",
-        "import os; os.chown('/app/backups',10001,10001); os.chmod('/app/backups',0o700)",
-    )
+    installation.prepare_backup_directory()
     say(
         f"Simpan {root / 'recovery.key'} di tempat aman terpisah dari arsip. Jangan kirim melalui pesan umum."
     )

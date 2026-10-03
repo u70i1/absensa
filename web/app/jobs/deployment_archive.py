@@ -54,6 +54,18 @@ def safe_unpack(source, destination):
                     shutil.copyfileobj(src, out)
 
 
+def publish_snapshot(partial, destination):
+    # The encrypted writer fsyncs the contents. Also persist the directory entry
+    # before reporting success and allowing a database migration to begin.
+    os.link(partial, destination)
+    partial.unlink()
+    fd = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def snapshot(destination):
     from app.db.session import SessionLocal
     from app.models.backup import Backup
@@ -81,8 +93,7 @@ def snapshot(destination):
         encrypted.finish()
     verify_archive(partial, key)
     # Exclusive destination; snapshots are named with random IDs by the manager.
-    os.link(partial, destination)
-    partial.unlink()
+    publish_snapshot(partial, destination)
 
 
 def unpack(source, destination):

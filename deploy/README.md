@@ -427,6 +427,7 @@ jalankan bootstrap GitHub kembali pada direktori yang sama.
 | Rilis tidak tersedia / GitHub 404 | Pengelola harus menerbitkan rilis stabil dengan artefak lengkap; periksa internet dan visibilitas repositori. |
 | Verifikasi provenance gagal | Periksa tanggal/jam, akses Sigstore/GitHub, `gh attestation verify --help`, dan tag. Jangan melewati verifikasi. |
 | Docker tidak dapat diakses | Minta IT memeriksa daemon, konteks soket lokal dan izin akun; jangan mengubah container lain. |
+| Alamat subnet Docker habis | Minta IT memeriksa jaringan Docker yang benar-benar tidak digunakan atau sediakan server lain. Jangan melakukan prune atau menghapus jaringan aplikasi sekolah. Setelah diperbaiki, jalankan perbaiki; pemulihan yang gagal diulang ke direktori baru. |
 | Port sudah digunakan | Pilih port HTTPS berbeda, misalnya 8443, atau integrasikan proxy. Jangan hentikan e-Rapor/web server lain. |
 | HTTPS tidak siap | `./absensa log caddy`, periksa DNS/token/domain/jam server. Tidak ada fallback HTTP. |
 | Browser tidak percaya sertifikat | Pasang CA publik yang benar pada perangkat dan cocokkan fingerprint; jangan bypass peringatan. |

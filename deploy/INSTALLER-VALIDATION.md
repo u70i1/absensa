@@ -4,6 +4,82 @@ Date: October 2, 2026. Implementation branch: `feat/installer`.
 No changes, tags, GHCR images, or GitHub Releases were pushed or published during
 this work. See [RELEASING.md](RELEASING.md) for the first publication steps.
 
+## Pre-merge revalidation — October 3, 2026
+
+Reviewed branch commit `dbd63a0` and the working-tree fixes described below.
+These fixes must be included in the merge; validation did not create a commit,
+push changes, merge the branch, or publish a release.
+
+### Findings addressed
+
+- **Interrupted initial setup:** an image-pull failure could leave the approved
+  backup directory owned by the host account. Repair now finishes ownership
+  setup before migration/startup. Existing initialized installations are not
+  re-owned. The integration test deliberately recreates this interrupted state.
+- **Overlapping maintenance:** a full backup now refuses to start while an
+  earlier one-off maintenance container is still running, before stopping any
+  application services.
+- **Worker readiness during long jobs:** the scheduler now reports progress
+  after reading configuration and between recipients, so a batch longer than
+  five minutes does not expire its heartbeat merely because it is still sending.
+  The backup worker reports readiness after database/storage initialization,
+  before the potentially long dump. Regression tests cover both paths.
+- **Docker network exhaustion:** failures now identify exhausted subnet pools
+  without exposing raw command output or modifying Docker's network settings.
+  The smoke harness has an explicit `--cleanup` option scoped to its own test
+  containers/networks, retaining named volumes and files.
+- **Backup publication durability:** the encrypted file was already synced, but
+  publication now also syncs the containing directory before returning success.
+  Storage-sync errors propagate and prevent an update from advancing.
+- Added twelve full-archive tests for path traversal, links/devices, duplicate
+  entries, Chromium process locks, nested data restoration, and durable
+  publication, including simulated storage-sync failure.
+- **Packaged guide links:** cross-document links in `PANDUAN.md` now target the
+  exact release tag on GitHub. They no longer point at files absent from the
+  installed artifact. A packaging test checks these links, image pins, and the
+  archive checksum together.
+
+### Completed checks in this review
+
+| Check | Result |
+| --- | --- |
+| Full Python suite with the real PostgreSQL backup/restore drill enabled | **662 passed, 4 skipped**, one complete final run |
+| Installer unit tests, packaging, and piped execution | **36 passed** |
+| Legacy deployment tests | **4 passed** |
+| WhatsApp bridge tests | **13 passed** |
+| Docker end-to-end installation/repair, HTTPS/login, persistence, backup/export, isolated restore, update, failed-migration recovery and repair | Passed after releasing confirmed old test networks |
+| Final backup image: authenticated full snapshot publication with directory sync | Passed |
+| Rebuild web, backup, WhatsApp, and Caddy images from the branch | Passed (Docker build cache reused where applicable) |
+| Ruff on changed modules and all Python tests | Passed |
+| ShellCheck, Bash syntax, actionlint, PowerShell parser, Git whitespace | Passed |
+
+The four skips are explicit: the two browser test modules could not import
+`playwright.sync_api`, and two barcode checks could not import `zxingcpp`.
+No skipped check is counted as passing. Full-repository Ruff also found six
+pre-existing `E402` import-order violations in `web/app/routes/__init__.py`.
+That file is unchanged from `main`; this review leaves those unrelated errors
+visible rather than suppressing them.
+
+The first end-to-end attempt reached authenticated backup and export, then hit
+Docker's exhausted subnet pools while creating a restore network. Earlier
+disposable test projects had retained their networks. Their test image names,
+stopped state, and `/tmp/absensa-smoke-52its2tq` Compose labels were checked before
+removing their containers/networks. All data volumes were retained. The failed
+attempt's own containers/networks were also removed without deleting its backup
+or volumes. No school application resources or Docker pool configuration were
+changed.
+
+The successful rerun used `--local --cleanup` and retained its data and artifacts
+under `/tmp/absensa-smoke-s3fxoyyc`. The final durability-only image change is
+covered by archive regression tests and a real full-snapshot publication check.
+
+The provenance policy's flags were checked against the
+[official GitHub CLI reference](https://cli.github.com/manual/gh_attestation_verify).
+Positive verification of this project's published release still requires the
+first authorized release workflow run. Windows execution, actual DNS-01 issuance,
+school networking, and clean-VM package installation remain field-test gates,
+as detailed below.
+
 ## Implementation basis
 
 Inspection covered FastAPI configuration and authentication, models and Alembic,
@@ -37,7 +113,7 @@ The web Dockerfile also prepares the private socket directory. `deploy/install.p
 delegates to the new bootstrap. `.gitignore` excludes installation artifacts and
 keys to reduce the risk of accidentally adding them to Git.
 
-## Completed checks
+## Initial implementation checks — October 2, 2026
 
 Actual environment: a Linux amd64 host with Docker Engine 29.8.1 and Compose 5.5.1.
 This development host is not a clean Ubuntu/Debian VM. Container tests used

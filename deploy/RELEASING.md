@@ -36,6 +36,10 @@ version range needs review if byte-for-byte reproducible builds are required.
 Installed versions are reproducible through **image digests**; rebuilding the
 same source is not assumed to produce identical bytes.
 
+The packaged guide's cross-document links point to the same release tag on GitHub,
+because the installed artifact is not a full repository checkout. Those extra
+documents require network access; the main guide is included as `PANDUAN.md`.
+
 Archive provenance binds the image digests in the manifest to the workflow and
 tag. Verification uses `gh attestation verify --bundle`, the exact certificate
 identity, repository and source ref, and rejects self-hosted runners. There is no
@@ -80,6 +84,12 @@ failed migrations, and repair. It stops the projects it creates and retains
 volumes and files for diagnosis. It never deletes pre-existing containers or
 volumes. CI runners are ephemeral; before cleaning local test resources, check
 which project owns them.
+
+For repeated local runs, use `--local --cleanup` to remove only that run's test
+containers and networks afterward. Named data volumes and files are retained.
+Without `--cleanup`, stopped test projects retain networks and repeated runs can
+exhaust Docker's default subnet pools. Never use a system-wide prune to clear
+school application resources.
 
 ## Existing source deployments
 

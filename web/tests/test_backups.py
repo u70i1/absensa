@@ -309,10 +309,21 @@ def test_worker_schedule_deduplication_and_crash_recovery(
     from sqlalchemy import delete
     from sqlalchemy.orm import Session
 
-    monkeypatch.setattr(backups, "create_archive", fake_archive)
+    progress = []
+
+    def archive_after_progress(*args):
+        assert progress, "Health must be reported before a potentially long dump"
+        return fake_archive(*args)
+
+    monkeypatch.setattr(backups, "create_archive", archive_after_progress)
     now = datetime(2026, 10, 2, 3, 0, tzinfo=UTC)
     try:
-        assert backups.process_tick(engine, now=now) == "success"
+        assert (
+            backups.process_tick(
+                engine, now=now, progress=lambda: progress.append(True)
+            )
+            == "success"
+        )
         assert backups.process_tick(engine, now=now) == "idle"
         with Session(engine) as db:
             records = list(db.scalars(select(Backup)))

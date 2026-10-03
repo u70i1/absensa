@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import manage
+import package_release
 import release
 
 
@@ -74,6 +75,16 @@ class InstallerTests(unittest.TestCase):
         obj = self.installation()
         self.assertEqual((self.root / "production.env").stat().st_mode & 0o777, 0o600)
         self.assertEqual(manage.env_read(obj.config_path), obj.config)
+
+    def test_network_pool_exhaustion_has_safe_actionable_error(self):
+        result = Mock(
+            returncode=1,
+            stderr="all predefined address pools have been fully subnetted\nprivate-secret",
+        )
+        with patch.object(manage.subprocess, "run", return_value=result):
+            with self.assertRaisesRegex(release.InstallError, "subnet") as error:
+                manage.run(["docker", "compose", "up"])
+        self.assertNotIn("private-secret", str(error.exception))
 
     def test_missing_persistent_volume_stops_without_creating_empty_storage(self):
         obj = self.installation()
@@ -147,7 +158,10 @@ class InstallerTests(unittest.TestCase):
                 raise release.InstallError("gagal")
             return Mock(stdout="web\nscheduler\ncaddy\n")
 
-        with patch.object(obj, "compose", side_effect=compose) as commands:
+        with (
+            patch.object(obj, "ensure_no_orphans"),
+            patch.object(obj, "compose", side_effect=compose) as commands,
+        ):
             with self.assertRaises(release.InstallError):
                 obj.snapshot(resume=False)
         self.assertIn(
@@ -158,6 +172,37 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(
             any("migrate" in call.args for call in commands.call_args_list)
         )
+
+    def test_backup_rejects_running_maintenance_before_stopping_services(self):
+        obj = self.installation()
+        with (
+            patch.object(
+                obj,
+                "ensure_no_orphans",
+                side_effect=release.InstallError("masih berjalan"),
+            ),
+            patch.object(obj, "compose") as compose,
+        ):
+            with self.assertRaises(release.InstallError):
+                obj.snapshot()
+        compose.assert_not_called()
+        self.assertNotIn("transaction", obj.state)
+
+    def test_initial_migration_finishes_backup_permissions_before_database_start(self):
+        obj = self.installation()
+        obj.state["initialized"] = False
+        with (
+            patch.object(obj, "ensure_no_orphans"),
+            patch.object(obj, "compose") as compose,
+        ):
+            obj.migrate()
+        commands = [call.args for call in compose.call_args_list]
+        self.assertIn("os.chown('/app/backups',10001,10001)", commands[0][-1])
+        self.assertEqual(commands[1][0], "up")
+        obj.state["initialized"] = True
+        with patch.object(obj, "compose") as compose:
+            obj.prepare_backup_directory()
+        compose.assert_not_called()
 
     def test_failed_migration_keeps_target_and_recovery_journal(self):
         obj = self.installation()
@@ -398,6 +443,36 @@ class InstallerTests(unittest.TestCase):
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_package_pins_images_checksum_and_guide_links_to_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory)
+            images = {
+                name.upper() + "_IMAGE": "example/" + name + "@sha256:" + "a" * 64
+                for name in ("web", "backup", "whatsapp", "caddy", "postgres")
+            }
+            with (
+                patch.dict(os.environ, images),
+                patch(
+                    "sys.argv", ["package_release.py", "v1.2.3", "--output", directory]
+                ),
+            ):
+                package_release.main()
+            archive = destination / release.ARTIFACT
+            self.assertEqual(
+                (destination / "SHA256SUMS").read_text().split()[0],
+                hashlib.sha256(archive.read_bytes()).hexdigest(),
+            )
+            guide = (destination / "release/PANDUAN.md").read_text()
+            self.assertNotIn("](../RUNNING.md)", guide)
+            self.assertIn(
+                "https://github.com/u70i1/absensa/blob/v1.2.3/deploy/BACKUPS.md", guide
+            )
+            manifest = json.loads((destination / "release/release.json").read_text())
+            self.assertEqual(manifest["version"], "v1.2.3")
+            self.assertTrue(
+                all("@sha256:" in image for image in manifest["images"].values())
+            )
+
     def test_latest_rejects_drafts_prerelease_and_missing_assets(self):
         for values in (
             {"draft": True},

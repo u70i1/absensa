@@ -7,6 +7,7 @@ images; this test-only shim is not shipped inside the release/bootstrap.
 import argparse
 import contextlib
 import json
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -25,6 +26,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("release", type=Path)
     parser.add_argument("--local", action="store_true")
+    parser.add_argument(
+        "--cleanup",
+        action="store_true",
+        help="Remove only this run's test containers and networks; retain data volumes and files",
+    )
     args = parser.parse_args()
     source = args.release.resolve()
     temporary = Path(tempfile.mkdtemp(prefix="absensa-smoke-"))
@@ -82,6 +88,19 @@ def main():
         sites.append(site)
         assert not site.running(), "Choosing no startup must leave all services stopped"
         runtime(site)
+        # Model an interrupted initial setup: pull failed before backup ownership
+        # was transferred to the container UID. Repair must complete that step.
+        site.compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "--user",
+            "0",
+            "backup",
+            "python",
+            "-c",
+            f"import os; os.chown('/app/backups',{os.getuid()},{os.getgid()}); os.chmod('/app/backups',0o700)",
+        )
         with (
             patch.object(manage, "yes", return_value=True),
             patch.object(manage, "ask", return_value="smoke-admin"),
@@ -89,7 +108,7 @@ def main():
                 manage.getpass, "getpass", return_value="synthetic-smoke-password-123"
             ),
         ):
-            site.start(admin=True)
+            site.repair()
         first_hash = sql(
             site, "SELECT password_hash FROM admins WHERE username='smoke-admin'"
         )
@@ -242,13 +261,16 @@ def main():
             "PASSED: deferred startup, migrations, idempotent admin creation, TLS/CSRF/Secure cookies, persistence, full backups, isolated restoration, failed migrations, and repair."
         )
     finally:
-        # Keep artifacts for diagnosis. Only containers created by this test are stopped.
+        # Cleanup is opt-in and scoped to newly created projects; never remove volumes.
         for path in (root, temporary / "restored", temporary / "recovered-failure"):
             if (path / "state.json").exists():
                 try:
                     site = manage.Installation(path)
                     runtime(site)
-                    site.compose("stop", check=False)
+                    if args.cleanup:
+                        site.compose("down", check=False)
+                    else:
+                        site.compose("stop", check=False)
                 except Exception:
                     pass
         stack.close()

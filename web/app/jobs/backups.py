@@ -25,7 +25,9 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     while True:
         try:
-            state = process_tick(engine, manual=args.manual)
+            state = process_tick(
+                engine, manual=args.manual, progress=lambda: beat("backup")
+            )
             beat("backup")
             if state not in {"idle", "busy"}:
                 logger.info("Backup worker result: %s", state)
