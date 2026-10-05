@@ -2,15 +2,28 @@
 
 An ongoing project.
 
-For setup and the commands to run every service, see [Run Absensa locally](RUNNING.md).
+Untuk pemasangan di sekolah, baca [panduan instalasi lengkap berbahasa Indonesia](deploy/README.md).
+Installer menyediakan rilis terverifikasi, HTTPS, cadangan, pemulihan, pembaruan,
+dan perintah pemeliharaan. Mendukung Linux amd64, Windows melalui WSL2 yang
+kompatibel, dan Windows Server melalui VM Linux.
 
-For a Windows school PC or Windows Server, see the
-[container deployment guide](deploy/README.md). It packages the whole application
-and keeps the existing development workflow separate. This is a deployment
-foundation for the app while features are still being developed, not a finished installer.
-On a Linux server or a Windows Server Linux VM with Docker already installed,
-run `python3 deploy/install.py` for guided first-time setup. Manual steps remain
-in the guide.
+Cara yang disarankan adalah mengunduh dan membaca installer terlebih dahulu:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/u70i1/absensa/main/install.sh -o install.sh
+less install.sh
+bash install.sh
+```
+
+Cara cepat: `curl -fsSL https://raw.githubusercontent.com/u70i1/absensa/main/install.sh | bash`.
+Windows memakai [install.ps1](install.ps1); lihat persyaratan dalam panduan.
+**Maintainer note:** The `main` URLs will be available after the installer changes
+are merged and the first stable release is published. See the
+[release checklist](deploy/RELEASING.md) and
+[validation results](deploy/INSTALLER-VALIDATION.md). This implementation work
+has not published any changes or releases.
+
+For local development, see [Run Absensa locally](RUNNING.md).
 
 Contributions are welcomed! Please check out the to-do list below for current priorities.
 
@@ -261,9 +274,11 @@ through fixtures; authentication tests exercise the real dependency chain.
 
 ### Infra & Deployment
 
-- [ ] HTTPS setup (mkcert + reverse proxy) for LAN deployment
+- [x] Caddy HTTPS for LAN access, local CA, and Cloudflare DNS-01
 - [x] Administrator password/PIN reset flow
-- [ ] Backups strategy for the database
+- [x] Encrypted backups, isolated restoration, and mandatory backups before updates
+- [x] Linux/WSL2 release installer, GHCR workflow, and provenance verification
+- [ ] Publish the first stable release and field-test Windows and school DNS
 
 ### Testing
 

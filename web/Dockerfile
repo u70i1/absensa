@@ -20,7 +20,7 @@ COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini .
 COPY scripts ./scripts
-RUN mkdir photos backups && chown absensa:absensa photos backups && chmod 700 backups
+RUN mkdir -p photos backups /run/absensa && chown absensa:absensa photos backups /run/absensa && chmod 700 backups
 USER absensa
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers"]

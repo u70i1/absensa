@@ -1,5 +1,10 @@
 # Automated backups and offline recovery
 
+For the release installer, use the Indonesian [backup and recovery guide](README.md#7-cadangan).
+The commands below describe the legacy source deployment and application-only
+`.absbackup` format. Release installations additionally support encrypted full
+`.absfull` snapshots with WhatsApp, Caddy and deployment configuration.
+
 Absensa's dedicated `backup` service polls a durable PostgreSQL job queue every
 10 seconds. HTTP requests only enqueue work. PostgreSQL advisory locks and a
 unique active-job index serialize manual and scheduled work across processes.

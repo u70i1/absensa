@@ -12,3 +12,13 @@ dist/
 /backup-*/
 /deploy/install.log
 /deploy/initialized.json
+
+# Installer artifacts and private installation state
+/dist/
+/recovery.key
+/production.env
+/state.json
+/operations.log
+/schedule.log
+/root-ca.crt
+*.absfull

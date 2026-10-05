@@ -266,6 +266,7 @@ def run_daily(
     prepare_only: bool = False,
     reserved_run_id: int | None = None,
     clock=None,
+    progress=None,
 ) -> dict:
     # Explicit dates support deterministic checks; live batches follow the clock.
     clock = clock or (now_local if at is None else lambda: at)
@@ -273,6 +274,8 @@ def run_daily(
     local = at.astimezone(LOCAL_TZ)
     day = local.date()
     config = get_settings(db, lock=True)
+    if progress is not None:
+        progress()
     if reserved_run_id is not None:
         reserved = db.get(Log, reserved_run_id)
         if reserved is None or reserved.kind != "run" or reserved.day != day:
@@ -349,6 +352,8 @@ def run_daily(
     interrupted = False
     needs_attention = False
     for student in _absent_students(db, at):
+        if progress is not None:
+            progress()
         # Existing claims include successes and uncertain sends. Never retry them
         # automatically, and do not delay for rows that cannot be sent.
         if db.scalar(

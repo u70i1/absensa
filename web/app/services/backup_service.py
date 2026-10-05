@@ -344,7 +344,9 @@ def execute_backup(
     apply_retention(db, storage, config)
 
 
-def process_tick(bind, *, now: datetime | None = None, manual: bool = False) -> str:
+def process_tick(
+    bind, *, now: datetime | None = None, manual: bool = False, progress=None
+) -> str:
     """Hold a cross-process PostgreSQL session lock for recovery and execution."""
     now = now or datetime.now(UTC)
     with bind.connect() as lock_connection:
@@ -380,6 +382,8 @@ def process_tick(bind, *, now: datetime | None = None, manual: bool = False) -> 
                         interrupted.error = None
                     interrupted.finished_at = now
                 db.commit()
+                if progress is not None:
+                    progress()
                 # Only clean this service's UUID-shaped temporary files under lock.
                 for path in storage.root.iterdir():
                     if re.fullmatch(r"\.[0-9a-f]{32}\.(work|partial)", path.name):

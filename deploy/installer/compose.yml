@@ -1,0 +1,145 @@
+# Standalone release deployment. Never merge with the development Compose file.
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "3"}
+x-python: &python
+  image: ${WEB_IMAGE:?}
+  init: true
+  logging: *logging
+  environment: &environment
+    DATABASE_URL: postgresql+psycopg2://absensa:${POSTGRES_PASSWORD:?}@db:5432/absensa?connect_timeout=5
+    TIMEZONE: ${TIMEZONE:?}
+    PHOTOS_DIR: /app/photos
+    BACKUPS_DIR: /app/backups
+    BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:?}
+    BACKUP_TIMES: ${BACKUP_TIMES:?}
+    BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY:?}
+    ADMIN_COOKIE_SECURE: "true"
+    ACCESS_COOKIE_SECURE: "true"
+    CORS_ORIGIN: ${PUBLIC_URL:?}
+    WHATSAPP_BRIDGE_URL: http://whatsapp:3001
+    WHATSAPP_BRIDGE_TOKEN: ${WHATSAPP_BRIDGE_TOKEN:?}
+  networks: [database, messaging]
+  security_opt: [no-new-privileges:true]
+  mem_limit: 768m
+  pids_limit: 128
+services:
+  db:
+    image: ${POSTGRES_IMAGE:?}
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_USER: absensa
+      POSTGRES_DB: absensa
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes: [pgdata:/var/lib/postgresql]
+    networks: [database]
+    mem_limit: 768m
+    pids_limit: 256
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U absensa -d absensa"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  migrate:
+    <<: *python
+    profiles: [maintenance]
+    command: [alembic, upgrade, head]
+  web:
+    <<: *python
+    restart: unless-stopped
+    # Socket only: only Caddy mounts this volume; no TCP listener can spoof headers.
+    command: [uvicorn, app.main:app, --uds, /run/absensa/web.sock, --proxy-headers, --forwarded-allow-ips, "*"]
+    volumes:
+      - socket:/run/absensa
+      - photos:/app/photos
+      - type: bind
+        source: ${BACKUP_DIR:?}
+        target: /app/backups
+        read_only: true
+        bind: {create_host_path: false}
+    healthcheck:
+      test: [CMD, python, -c, "import httpx; c=httpx.Client(transport=httpx.HTTPTransport(uds='/run/absensa/web.sock')); c.get('http://localhost/health').raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+  scheduler:
+    <<: *python
+    restart: unless-stopped
+    command: [python, -m, app.jobs.whatsapp_notifications]
+    stop_grace_period: 60s
+    healthcheck:
+      test: [CMD, python, -m, app.jobs.worker_health, scheduler]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+  backup:
+    <<: *python
+    image: ${BACKUP_IMAGE:?}
+    restart: unless-stopped
+    command: [python, -m, app.jobs.backups]
+    stop_grace_period: 120s
+    volumes:
+      - photos:/app/photos:ro
+      - type: bind
+        source: ${BACKUP_DIR:?}
+        target: /app/backups
+        bind: {create_host_path: false}
+    healthcheck:
+      test: [CMD, python, -m, app.jobs.worker_health, backup]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+  whatsapp:
+    image: ${WHATSAPP_IMAGE:?}
+    init: true
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      BRIDGE_API_TOKEN: ${WHATSAPP_BRIDGE_TOKEN:?}
+      CHROME_NO_SANDBOX: "false"
+    cap_add: [SYS_ADMIN]
+    shm_size: 256mb
+    mem_limit: 1024m
+    pids_limit: 512
+    volumes: [whatsapp_auth:/app/.wwebjs_auth]
+    networks: [messaging]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+  caddy:
+    image: ${CADDY_IMAGE:?}
+    restart: unless-stopped
+    logging: *logging
+    ports: ["${BIND_IP:?}:${HTTPS_PORT:?}:443"]
+    environment:
+      CF_API_TOKEN: ${CF_API_TOKEN:-}
+    volumes:
+      - socket:/run/absensa:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - type: bind
+        source: ${INSTALL_DIR:?}/Caddyfile
+        target: /etc/caddy/Caddyfile
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [edge]
+    mem_limit: 256m
+    pids_limit: 128
+    security_opt: [no-new-privileges:true]
+volumes:
+  pgdata:
+  photos:
+  socket:
+  whatsapp_auth:
+  caddy_data:
+  caddy_config:
+networks:
+  database: {internal: true}
+  messaging:
+  edge:

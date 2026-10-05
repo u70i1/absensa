@@ -60,6 +60,35 @@ def test_scheduled_waits_for_service_time_and_minimum(db_session, existing_stude
     assert gateway.messages == []
 
 
+def test_long_batch_reports_progress_before_each_send(db_session, student_factory):
+    for index in range(12):
+        contact(
+            student_factory(name=f"Batch {index}", nisn=f"{7000000000 + index}"),
+            db_session,
+            "+628111111111",
+        )
+    configure(db_session, safe_mode=True, delay=30)
+    elapsed = [0]
+    last_progress = [-1]
+
+    def progress():
+        last_progress[0] = elapsed[0]
+
+    def sleep(delay):
+        elapsed[0] += delay
+
+    class CheckedGateway(FakeGateway):
+        def send_message(self, phone, message):
+            assert 0 <= elapsed[0] - last_progress[0] <= 30
+            super().send_message(phone, message)
+
+    result = service.run_daily(
+        db_session, CheckedGateway(), at=AT, sleep=sleep, progress=progress
+    )
+    assert result["sent"] == 12
+    assert elapsed[0] > 300  # The old end-of-batch-only heartbeat would expire.
+
+
 def test_scheduled_sends_only_absent_students_and_never_repeats(
     db_session, existing_student, student_factory, scan_log_factory
 ):

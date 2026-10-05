@@ -1,0 +1,103 @@
+name: Prepare Absensa release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'u70i1/absensa'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {persist-credentials: false}
+      - name: Validate tag and test installer
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          python3 -m unittest discover -s deploy/installer -p 'test_*.py'
+          bash -n install.sh
+          shellcheck install.sh
+          python3 deploy/installer/build_bootstrap.py
+          git diff --exit-code -- install.sh
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
+      - uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
+        id: web
+        with:
+          context: web
+          target: runtime
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/u70i1/absensa-web:${{ github.ref_name }}
+          provenance: mode=max
+          sbom: true
+      - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
+        id: backup
+        with:
+          context: web
+          target: backup
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/u70i1/absensa-backup:${{ github.ref_name }}
+          provenance: mode=max
+          sbom: true
+      - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
+        id: whatsapp
+        with:
+          context: services/whatsapp
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/u70i1/absensa-whatsapp:${{ github.ref_name }}
+          provenance: mode=max
+          sbom: true
+      - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
+        id: caddy
+        with:
+          context: deploy/caddy
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/u70i1/absensa-caddy:${{ github.ref_name }}
+          provenance: mode=max
+          sbom: true
+      - name: Package manifest with image digests
+        env:
+          WEB_IMAGE: ghcr.io/u70i1/absensa-web@${{ steps.web.outputs.digest }}
+          BACKUP_IMAGE: ghcr.io/u70i1/absensa-backup@${{ steps.backup.outputs.digest }}
+          WHATSAPP_IMAGE: ghcr.io/u70i1/absensa-whatsapp@${{ steps.whatsapp.outputs.digest }}
+          CADDY_IMAGE: ghcr.io/u70i1/absensa-caddy@${{ steps.caddy.outputs.digest }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          docker pull postgres:18.4-alpine
+          POSTGRES_IMAGE="$(docker image inspect postgres:18.4-alpine --format '{{index .RepoDigests 0}}')"
+          export POSTGRES_IMAGE
+          python3 deploy/installer/package_release.py "$RELEASE_TAG"
+      - name: Test HTTPS, migrations, backups, and restoration
+        run: python3 deploy/installer/smoke.py dist/release
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v3
+        id: attest
+        with:
+          subject-path: dist/absensa-linux-amd64.tar.gz
+      - name: Create draft release (maintainer publishes)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          cp "$BUNDLE_PATH" dist/provenance.jsonl
+          gh attestation verify dist/absensa-linux-amd64.tar.gz --bundle dist/provenance.jsonl --repo u70i1/absensa --cert-identity "https://github.com/u70i1/absensa/.github/workflows/release.yml@refs/tags/$RELEASE_TAG" --source-ref "refs/tags/$RELEASE_TAG" --deny-self-hosted-runners
+          gh release create "$RELEASE_TAG" --verify-tag --draft --title "Absensa $RELEASE_TAG" --notes-file deploy/RELEASE-NOTES.md dist/absensa-linux-amd64.tar.gz dist/SHA256SUMS dist/provenance.jsonl

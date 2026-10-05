@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+  - package-ecosystem: docker
+    directory: /deploy/caddy
+    schedule: {interval: weekly}
+  - package-ecosystem: docker
+    directory: /web
+    schedule: {interval: weekly}
+  - package-ecosystem: docker
+    directory: /services/whatsapp
+    schedule: {interval: weekly}
