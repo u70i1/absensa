@@ -1,31 +1,53 @@
 # Persiapan penggunaan
 
-## Memastikan Absensa sudah terpasang
+Sebelum mencatat presensi, sekolah perlu memasang Absensa, menyiapkan data
+siswa, dan menentukan perangkat yang akan dipakai. Pekerjaan ini bisa diurus
+oleh satu orang atau dibagi sesuai kebutuhan sekolah.
 
-<!-- TODO: Jelaskan kebutuhan pengguna untuk mendapatkan alamat aplikasi sekolah dan akun awal. Periksa status rilis saat tulisan dibuat; jangan menjanjikan paket yang belum diterbitkan. Pemasangan teknis tetap di panduan repositori. -->
+## Memasang Absensa
 
-[Panduan pemasangan terpisah](https://github.com/u70i1/absensa/blob/main/deploy/README.md)
+Sekolah perlu memasang Absensa pada komputer yang akan menjalankan aplikasi.
+Untuk Linux, perintah pemasangan singkatnya adalah:
 
-## Membuka alamat aplikasi sekolah
+```bash
+curl -fsSL https://raw.githubusercontent.com/u70i1/absensa/main/install.sh | bash
+```
 
-<!-- TODO: Jelaskan pemeriksaan koneksi jaringan dan alamat yang diberikan sekolah tanpa mengarang alamat, akun, atau kata sandi. VISUAL: halaman awal pada browser. -->
+Perintah ini memerlukan berkas pemasang di `main` dan rilis stabil Absensa.
+Jika rilis belum tersedia, pemasangan belum dapat diselesaikan.
 
-## Menyiapkan data dan perlengkapan
+Pemasang akan meminta beberapa pilihan, termasuk alamat aplikasi dan zona
+waktu sekolah. Untuk persyaratan komputer, pilihan Windows, dan langkah
+pemasangan yang ada saat ini, baca [panduan pemasangan](https://github.com/u70i1/absensa/blob/main/deploy/README.md).
 
-### Data siswa, kelas, dan nomor wali
+Ikuti [panduan memasang Absensa](instalasi.md) untuk langkah Windows dengan
+WSL2, Windows Server dengan VM Linux, dan pilihan yang ditanyakan pemasang.
 
-<!-- TODO: Buat daftar persiapan data untuk administrator; nomor wali diperlukan bila sekolah memakai notifikasi WhatsApp. -->
+Simpan alamat aplikasi serta nama pengguna dan kata sandi administrator yang
+dibuat saat pemasangan. Alamat ini akan dipakai untuk membuka Absensa dari
+perangkat sekolah.
 
-### Perangkat presensi dan akun operator
+## Membuka aplikasi
 
-<!-- TODO: Buat daftar persiapan perangkat/browser yang didaftarkan admin, akun operator, dan kartu siswa bila memakai pemindai barcode. Jangan mengasumsikan pemindaian kamera. -->
+Hubungkan perangkat ke jaringan sekolah, buka browser, lalu masukkan alamat
+Absensa yang telah ditetapkan. Halaman awal menampilkan **Buka presensi** dan
+**Dashboard admin**. Jika halaman tidak terbuka, periksa alamat dan sambungan
+jaringan sekolah.
 
-## Menyepakati zona waktu dan penggunaan bersama
+{Gambar: halaman awal Absensa di browser, tanpa alamat atau data pribadi}
 
-<!-- TODO: Arahkan pengguna untuk memastikan zona waktu sekolah benar dan menentukan siapa yang menggunakan akun/perangkat. Pengaturan zona waktu dilakukan saat pemasangan, bukan melalui menu web. -->
+## Menyiapkan data siswa
 
-## Memulai penggunaan
+Data bisa dimasukkan satu per satu atau melalui berkas Excel. Ikuti [panduan
+menyiapkan data sekolah](administrator/menyiapkan-data.md) saat memasukkannya.
 
-- [Menyiapkan data sekolah](administrator/menyiapkan-data.md)
-- [Menyiapkan akses dan perangkat](administrator/mengatur-akses.md)
-- [Masuk sebagai operator](operator/masuk.md)
+## Menyiapkan perangkat dan akses presensi
+
+Perangkat didefinisikan oleh perangkat dimana operator bisa masuk. Satu akun
+tentunya hanya dapat login dalam satu perangkat. Ketika sebuah perangkat sudah
+teridentifikasi dengan akun perangkat, barulah operator dapat login dalam
+perangkat tersebut dengan nama dan PIN yang sudah didaftarkan oleh admin.
+
+Mulailah dari [Menyiapkan data sekolah](administrator/menyiapkan-data.md),
+lanjutkan ke [Menyiapkan akses dan perangkat](administrator/mengatur-akses.md),
+lalu [Masuk sebagai operator](operator/masuk.md).
