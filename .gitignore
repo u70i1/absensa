@@ -22,3 +22,7 @@ dist/
 /schedule.log
 /root-ca.crt
 *.absfull
+
+# Documentation environment and generated website
+/.venv-docs/
+/site/

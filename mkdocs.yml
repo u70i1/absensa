@@ -1,0 +1,74 @@
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+site_name: Absensa
+site_description: Panduan penggunaan Absensa untuk administrator dan operator sekolah.
+site_url: https://u70i1.github.io/absensa/
+repo_url: https://github.com/u70i1/absensa
+repo_name: u70i1/absensa
+edit_uri: edit/main/docs/
+docs_dir: docs
+site_dir: site
+strict: true
+validation:
+  nav:
+    omitted_files: warn
+  links:
+    absolute_links: warn
+    unrecognized_links: warn
+    anchors: warn
+
+theme:
+  name: material
+  language: id
+  # Inter is served locally from the application's existing font asset.
+  font: false
+  icon:
+    logo: material/book-open-page-variant
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.footer
+    - navigation.top
+    - toc.follow
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Beralih ke mode gelap
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Beralih ke mode terang
+
+plugins:
+  - search:
+      # The bundled search engine has no Indonesian stemmer.
+      lang: en
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+
+extra_css:
+  - assets/stylesheets/brand.css
+
+extra:
+  generator: false
+
+nav:
+  - Beranda: index.md
+  - Memulai:
+      - memulai/index.md
+  - Referensi:
+      - referensi/index.md
