@@ -1,0 +1,102 @@
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+site_name: Absensa
+site_description: Panduan penggunaan Absensa untuk administrator dan operator sekolah.
+site_url: https://u70i1.github.io/absensa/
+repo_url: https://github.com/u70i1/absensa
+repo_name: u70i1/absensa
+edit_uri: edit/main/docs/
+docs_dir: docs
+site_dir: site
+strict: true
+validation:
+  nav:
+    omitted_files: warn
+  links:
+    absolute_links: warn
+    unrecognized_links: warn
+    anchors: warn
+
+theme:
+  name: material
+  language: id
+  # Inter is served locally from the application's existing font asset.
+  font: false
+  icon:
+    logo: material/book-open-page-variant
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.footer
+    - navigation.top
+    - toc.follow
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Beralih ke mode gelap
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Beralih ke mode terang
+
+plugins:
+  - search:
+      # The bundled search engine has no Indonesian stemmer.
+      lang: en
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+
+extra_css:
+  - assets/stylesheets/brand.css
+
+extra:
+  generator: false
+
+nav:
+  - Beranda: index.md
+  - Memulai:
+      - memulai/index.md
+      - Pengenalan Absensa: memulai/pengenalan.md
+      - Persiapan penggunaan: memulai/persiapan.md
+      - Panduan operator:
+          - memulai/operator/index.md
+          - Masuk dan berganti operator: memulai/operator/masuk.md
+          - Mencatat presensi harian: memulai/operator/mencatat-presensi.md
+      - Panduan administrator:
+          - memulai/administrator/index.md
+          - Menyiapkan data sekolah: memulai/administrator/menyiapkan-data.md
+          - Menyiapkan akses dan perangkat: memulai/administrator/mengatur-akses.md
+          - Mencetak dan mengunduh kartu siswa: memulai/administrator/mencetak-kartu.md
+          - Memeriksa dan mengekspor presensi: memulai/administrator/memeriksa-presensi.md
+          - Menyiapkan notifikasi WhatsApp: memulai/administrator/notifikasi-whatsapp.md
+          - Membuat dan menyimpan cadangan: memulai/administrator/menyimpan-cadangan.md
+      - Pemecahan masalah: memulai/pemecahan-masalah.md
+  - Referensi:
+      - referensi/index.md
+      - Data sekolah:
+          - Siswa: referensi/siswa.md
+          - Kelas: referensi/kelas.md
+          - Impor dan ekspor data: referensi/impor-dan-ekspor.md
+          - Kartu siswa: referensi/kartu-siswa.md
+      - Presensi:
+          - Pencatatan dan aturan presensi: referensi/presensi.md
+          - Log presensi: referensi/log-presensi.md
+      - Akses dan layanan:
+          - Akun dan perangkat tepercaya: referensi/akun-dan-perangkat.md
+          - Notifikasi WhatsApp: referensi/whatsapp.md
+          - Cadangan data: referensi/cadangan.md
+          - Pengaturan aplikasi: referensi/pengaturan.md

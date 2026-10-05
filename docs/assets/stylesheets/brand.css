@@ -1,0 +1,38 @@
+/* Brand source: web/app/static/tokens.css and dashboard.css. */
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/InterVariable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  --md-text-font: "Inter";
+  --md-code-font: monospace;
+}
+
+[data-md-color-primary="custom"] {
+  --md-primary-fg-color: #006a68;
+  --md-primary-fg-color--light: #2a6f6c;
+  --md-primary-fg-color--dark: #113b3b;
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: #daf1f1;
+}
+
+[data-md-color-scheme="default"] {
+  --md-default-bg-color: #f4fbf9;
+  --md-default-fg-color: #161d1c;
+  --md-typeset-a-color: #006a68;
+  --md-accent-fg-color: #075c4e;
+  --md-accent-fg-color--transparent: #006a681a;
+  --md-accent-bg-color: #ffffff;
+}
+
+/* Keep Material's slate surfaces; use the application's pale teal for links. */
+[data-md-color-scheme="slate"] {
+  --md-typeset-a-color: #b5e3e2;
+  --md-accent-fg-color: #daf1f1;
+  --md-accent-fg-color--transparent: #b5e3e21a;
+  --md-accent-bg-color: #113b3b;
+}
