@@ -38,3 +38,40 @@ MkDocs dan Material dipin agar pembaruan dependensi dapat diperiksa sebelum dipa
 Panduan pemasangan dan pemulihan teknis tetap di [deploy/README.md](deploy/README.md)
 dan [deploy/BACKUPS.md](deploy/BACKUPS.md). Situs ini ditujukan untuk pengguna
 aplikasi, dengan jalur belajar administrator dan operator.
+
+## Validasi dan publikasi
+
+[Workflow dokumentasi](.github/workflows/docs.yml) memakai Python 3.12 dan
+menjalankan build strict untuk PR menuju `main` serta perubahan dokumentasi
+di `main`. Path yang dipantau: `docs/**`, `mkdocs.yml`, `requirements-docs.txt`,
+`DOCUMENTATION.md`, dan workflow itu sendiri. Pemeriksaan PR dapat berjalan
+sebelum Pages diaktifkan. Workflow rilis aplikasi tidak diubah.
+
+Setelah perubahan digabungkan ke `main`, job build mengunggah artefak `site/`
+dan job deploy menerbitkannya melalui Actions resmi GitHub Pages. Job deploy
+saja memiliki izin `pages: write` dan `id-token: write`. Tidak ada branch
+`gh-pages`. Dependabot yang sudah ada memantau pin GitHub Actions.
+
+Workflow juga dapat dijalankan dari **Actions → Documentation → Run workflow**.
+Pilih `main` untuk publikasi; branch lain hanya menjalankan validasi.
+
+## Pengaturan GitHub yang perlu disiapkan
+
+1. Buka [Settings → Pages](https://github.com/u70i1/absensa/settings/pages).
+   Pada **Build and deployment → Source**, pilih **GitHub Actions**.
+   Biarkan **Custom domain** kosong; situs direncanakan memakai
+   `https://u70i1.github.io/absensa/`.
+2. Pastikan GitHub Actions diizinkan di pengaturan repositori. Jika kebijakan
+   membatasi Actions, izinkan `actions/checkout`, `actions/setup-python`,
+   `actions/configure-pages`, `actions/upload-pages-artifact`, dan
+   `actions/deploy-pages`. Tidak diperlukan token atau rahasia tambahan.
+3. Setelah environment `github-pages` tersedia, periksa aturan deployment-nya
+   di **Settings → Environments**. Izinkan `main`; sesuaikan persetujuan
+   environment jika publikasi otomatis diinginkan.
+4. Tinjau dan gabungkan PR dokumentasi. Pastikan job build dan deploy berhasil.
+   Jika Pages baru diaktifkan setelah merge, jalankan workflow secara manual
+   dari `main`. URL situs belum dianggap aktif sampai deployment berhasil.
+
+Jika memakai branch protection, jadikan **Validate documentation** wajib hanya
+dengan kebijakan yang sesuai path filter: PR tanpa perubahan dokumentasi tidak
+menjalankan workflow ini.
