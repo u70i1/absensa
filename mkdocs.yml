@@ -70,5 +70,20 @@ nav:
   - Beranda: index.md
   - Memulai:
       - memulai/index.md
+      - Pengenalan Absensa: memulai/pengenalan.md
+      - Persiapan penggunaan: memulai/persiapan.md
+      - Panduan operator:
+          - memulai/operator/index.md
+          - Masuk dan berganti operator: memulai/operator/masuk.md
+          - Mencatat presensi harian: memulai/operator/mencatat-presensi.md
+      - Panduan administrator:
+          - memulai/administrator/index.md
+          - Menyiapkan data sekolah: memulai/administrator/menyiapkan-data.md
+          - Menyiapkan akses dan perangkat: memulai/administrator/mengatur-akses.md
+          - Mencetak dan mengunduh kartu siswa: memulai/administrator/mencetak-kartu.md
+          - Memeriksa dan mengekspor presensi: memulai/administrator/memeriksa-presensi.md
+          - Menyiapkan notifikasi WhatsApp: memulai/administrator/notifikasi-whatsapp.md
+          - Membuat dan menyimpan cadangan: memulai/administrator/menyimpan-cadangan.md
+      - Pemecahan masalah: memulai/pemecahan-masalah.md
   - Referensi:
       - referensi/index.md
