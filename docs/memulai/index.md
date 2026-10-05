@@ -1,31 +1,20 @@
 # Memulai
 
-<!-- TODO: Tulis pengantar singkat dan arahkan pembaca sesuai perannya di sekolah. -->
+Baru memakai Absensa? Baca [Pengenalan Absensa](pengenalan.md) untuk melihat apa
+yang bisa dikerjakan, lalu [Persiapan penggunaan](persiapan.md) sebelum mulai
+mencatat presensi.
 
-## Mengenal dan menyiapkan Absensa
+Jika sekolah belum memasang aplikasinya, lanjutkan ke [Memasang
+Absensa](instalasi.md). Panduan itu mencakup Windows, Windows Server, dan Linux.
 
-<!-- TODO: Jelaskan urutan membaca pengenalan dan persiapan penggunaan. -->
+Absensa memiliki dua peran. **Administrator** mengurus data dan pengaturan;
+**operator** mencatat presensi. Satu orang boleh menjalankan kedua peran itu.
 
-- [Pengenalan Absensa](pengenalan.md)
-- [Persiapan penggunaan](persiapan.md)
+## Panduan sesuai tugas
 
-## Mencatat presensi sebagai operator
+- [Panduan operator](operator/index.md): masuk dan mencatat presensi harian.
+- [Panduan administrator](administrator/index.md): menyiapkan data, akses, dan
+  memeriksa catatan presensi.
 
-<!-- TODO: Arahkan guru dan staf pencatat presensi langsung ke jalur operator. -->
-
-- [Panduan operator](operator/index.md)
-- [Masuk dan berganti operator](operator/masuk.md)
-- [Mencatat presensi harian](operator/mencatat-presensi.md)
-
-## Mengelola Absensa sebagai administrator
-
-<!-- TODO: Arahkan penanggung jawab data dan akses sekolah ke jalur administrator. -->
-
-- [Panduan administrator](administrator/index.md)
-
-## Mencari bantuan
-
-<!-- TODO: Jelaskan kapan memakai panduan masalah dan kapan mencari detail fitur. -->
-
-- [Pemecahan masalah](pemecahan-masalah.md)
-- [Referensi fitur](../referensi/index.md)
+Jika ada kendala, buka [Pemecahan masalah](pemecahan-masalah.md). Penjelasan
+tiap fitur ada di [Referensi](../referensi/index.md).

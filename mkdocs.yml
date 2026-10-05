@@ -72,6 +72,7 @@ nav:
       - memulai/index.md
       - Pengenalan Absensa: memulai/pengenalan.md
       - Persiapan penggunaan: memulai/persiapan.md
+      - Memasang Absensa: memulai/instalasi.md
       - Panduan operator:
           - memulai/operator/index.md
           - Masuk dan berganti operator: memulai/operator/masuk.md
