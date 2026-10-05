@@ -27,7 +27,7 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-pro
 
 # PostgreSQL client tools live only in the dedicated worker image. Use matching
 # Debian/PostgreSQL images, including the client library required by PG 18.
-FROM postgres:18.4-bookworm AS postgres-client
+FROM postgres:18.6-bookworm AS postgres-client
 FROM runtime AS backup
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends liblz4-1 libzstd1 \
