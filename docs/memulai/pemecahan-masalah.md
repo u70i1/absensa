@@ -66,3 +66,4 @@
 - [Mencatat presensi harian](operator/mencatat-presensi.md)
 - [Panduan administrator](administrator/index.md)
 - [Referensi fitur](../referensi/index.md)
+- [Referensi pengaturan aplikasi](../referensi/pengaturan.md)

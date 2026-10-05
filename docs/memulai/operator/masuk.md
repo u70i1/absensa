@@ -32,3 +32,4 @@
 
 - [Mencatat presensi harian](mencatat-presensi.md)
 - [Pemecahan masalah](../pemecahan-masalah.md)
+- [Referensi akun dan perangkat tepercaya](../../referensi/akun-dan-perangkat.md)

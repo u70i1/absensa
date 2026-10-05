@@ -43,4 +43,4 @@
 ## Jika koneksi atau pengiriman gagal
 
 - [Pemecahan masalah](../pemecahan-masalah.md)
-- [Referensi fitur](../../referensi/index.md)
+- [Referensi notifikasi WhatsApp](../../referensi/whatsapp.md)

@@ -40,4 +40,6 @@
 
 - [Menyiapkan akses dan perangkat](mengatur-akses.md)
 - [Mencetak kartu siswa](mencetak-kartu.md)
-- [Referensi fitur](../../referensi/index.md)
+- [Referensi siswa](../../referensi/siswa.md)
+- [Referensi kelas](../../referensi/kelas.md)
+- [Referensi impor dan ekspor](../../referensi/impor-dan-ekspor.md)

@@ -33,4 +33,4 @@
 ## Jika cetak atau unduhan bermasalah
 
 - [Pemecahan masalah](../pemecahan-masalah.md)
-- [Referensi fitur](../../referensi/index.md)
+- [Referensi kartu siswa](../../referensi/kartu-siswa.md)

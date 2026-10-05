@@ -87,3 +87,16 @@ nav:
       - Pemecahan masalah: memulai/pemecahan-masalah.md
   - Referensi:
       - referensi/index.md
+      - Data sekolah:
+          - Siswa: referensi/siswa.md
+          - Kelas: referensi/kelas.md
+          - Impor dan ekspor data: referensi/impor-dan-ekspor.md
+          - Kartu siswa: referensi/kartu-siswa.md
+      - Presensi:
+          - Pencatatan dan aturan presensi: referensi/presensi.md
+          - Log presensi: referensi/log-presensi.md
+      - Akses dan layanan:
+          - Akun dan perangkat tepercaya: referensi/akun-dan-perangkat.md
+          - Notifikasi WhatsApp: referensi/whatsapp.md
+          - Cadangan data: referensi/cadangan.md
+          - Pengaturan aplikasi: referensi/pengaturan.md

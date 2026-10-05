@@ -38,3 +38,4 @@
 
 - [Masuk dan berganti operator](masuk.md)
 - [Pemecahan masalah](../pemecahan-masalah.md)
+- [Referensi pencatatan dan aturan presensi](../../referensi/presensi.md)

@@ -30,4 +30,4 @@
 
 - [Panduan operator](../operator/index.md)
 - [Pemecahan masalah](../pemecahan-masalah.md)
-- [Referensi fitur](../../referensi/index.md)
+- [Referensi log presensi](../../referensi/log-presensi.md)

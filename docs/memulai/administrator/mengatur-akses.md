@@ -35,4 +35,4 @@
 ## Jika akses masih bermasalah
 
 - [Pemecahan masalah](../pemecahan-masalah.md)
-- [Referensi fitur](../../referensi/index.md)
+- [Referensi akun dan perangkat tepercaya](../../referensi/akun-dan-perangkat.md)
