@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from app.core.config import settings
 from app.models.backup import Backup, BackupSettings
+from app.services.durable_file import publish
 from app.services.backup_crypto_service import (
     EncryptedWriter,
     encryption_key,
@@ -301,13 +302,7 @@ def create_archive(backup: Backup, storage: LocalBackupStorage, bind) -> Path:
                     )
                     archive.add(manifest, arcname="manifest.json", recursive=False)
                 encrypted.finish()
-        os.replace(partial, destination)
-        # Persist the directory entry before advertising the archive as complete.
-        fd = os.open(storage.root, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(fd)
-        finally:
-            os.close(fd)
+        publish(partial, destination, replace=True)
         return destination
     finally:
         partial.unlink(missing_ok=True)

@@ -14,6 +14,7 @@ from app.services.backup_crypto_service import (
     encryption_key,
     verify_archive,
 )
+from app.services.durable_file import publish
 
 
 def add_tree(archive, root, prefix):
@@ -25,7 +26,11 @@ def add_tree(archive, root, prefix):
             continue
         if path.is_symlink() or not (path.is_file() or path.is_dir()):
             raise ValueError("Berkas khusus tidak boleh masuk cadangan")
-        archive.add(path, arcname=f"{prefix}/{path.relative_to(root)}", recursive=False)
+        archive.add(
+            path,
+            arcname=f"{prefix}/{path.relative_to(root).as_posix()}",
+            recursive=False,
+        )
 
 
 def safe_unpack(source, destination):
@@ -37,14 +42,29 @@ def safe_unpack(source, destination):
             total += item.size
             if (
                 name.is_absolute()
+                or "\\" in item.name
+                or ":" in item.name
+                or any(
+                    part.endswith((".", " "))
+                    or part.split(".")[0].upper()
+                    in {
+                        "CON",
+                        "PRN",
+                        "AUX",
+                        "NUL",
+                        *[f"COM{i}" for i in range(1, 10)],
+                        *[f"LPT{i}" for i in range(1, 10)],
+                    }
+                    for part in name.parts
+                )
                 or ".." in name.parts
                 or not name.parts
-                or item.name in seen
+                or item.name.casefold() in seen
                 or not (item.isfile() or item.isdir())
                 or total > 64 * 1024**3
             ):
                 raise ValueError("Arsip tidak aman")
-            seen.add(item.name)
+            seen.add(item.name.casefold())
             target = destination / name
             if item.isdir():
                 target.mkdir(parents=True, exist_ok=True)
@@ -55,15 +75,7 @@ def safe_unpack(source, destination):
 
 
 def publish_snapshot(partial, destination):
-    # The encrypted writer fsyncs the contents. Also persist the directory entry
-    # before reporting success and allowing a database migration to begin.
-    os.link(partial, destination)
-    partial.unlink()
-    fd = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+    publish(partial, destination)
 
 
 def snapshot(destination):

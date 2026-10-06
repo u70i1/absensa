@@ -150,7 +150,7 @@ def host_check(directory, *, resources=True):
         or platform.machine() != "x86_64"
     ):
         raise InstallError(
-            "Diperlukan Linux amd64 dan Python 3.10+. Gunakan Ubuntu 24.04 LTS 64-bit, termasuk VM Linux di Windows Server."
+            "Diperlukan Linux amd64 dan Python 3.10+. Gunakan Ubuntu 24.04 LTS 64-bit. Windows Server menggunakan install.ps1 native."
         )
     if any(
         os.environ.get(k)

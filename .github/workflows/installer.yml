@@ -1,7 +1,7 @@
 name: Installer checks
 on:
   push:
-    branches: [main, feat/installer]
+    branches: [main, feat/installer, feat/native-windows-server]
   pull_request:
 permissions:
   contents: read
@@ -14,6 +14,7 @@ jobs:
       - name: Test and lint scripts
         run: |
           python3 -m unittest discover -s deploy/installer -p 'test_*.py'
+          python3 -m unittest discover -s deploy/windows -p 'test_*.py'
           bash -n install.sh
           shellcheck install.sh
           python3 deploy/installer/build_bootstrap.py
@@ -25,3 +26,35 @@ jobs:
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile("$PWD/install.ps1", [ref]$tokens, [ref]$errors) | Out-Null
           if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }
+
+  windows-2022:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {persist-credentials: false}
+      - uses: ./.github/actions/windows-package
+        with:
+          version: v0.0.1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: windows-2022-diagnostics
+          path: C:/ProgramData/Absensa Integration Test/logs
+          retention-days: 7
+
+  windows-2025:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {persist-credentials: false}
+      - uses: ./.github/actions/windows-package
+        with:
+          version: v0.0.1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: windows-2025-diagnostics
+          path: C:/ProgramData/Absensa Integration Test/logs
+          retention-days: 7

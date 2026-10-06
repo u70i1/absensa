@@ -4,8 +4,9 @@ This guide covers local development. School deployments should use the
 [release installer with HTTPS](deploy/README.md). Do not use the development
 HTTP configuration in production.
 
-These are developer instructions. For Windows deployments with all runtimes
-inside containers, use the [deployment guide](deploy/README.md).
+These are developer instructions. For native Windows Server 2019/2022/2025 installations with bundled runtimes
+and Windows services, use the [Windows deployment guide](deploy/windows/README.md).
+Production installation starts with one PowerShell command and requires no clone.
 
 Absensa has five running parts: PostgreSQL, FastAPI, the WhatsApp bridge,
 the notification scheduler, and the backup worker. You need Python, Node.js 18+,

@@ -3,11 +3,11 @@
 Panduan ini untuk installer rilis `install.sh`/`install.ps1`. Pengembangan aplikasi
 menggunakan [RUNNING.md](../RUNNING.md). Jangan mencampur Compose pengembangan
 dengan instalasi sekolah. Installer tidak memerlukan Git, Node.js, Python paket
-aplikasi, PostgreSQL, atau Chromium di komputer sekolah; semuanya ada dalam image.
+aplikasi, PostgreSQL, atau Chromium di komputer sekolah; Linux memakai image; Windows Server memakai paket runtime native.
 Python standar di Linux hanya dipakai untuk pengelolaan instalasi.
 
 **Status distribusi:** kode installer dan workflow disiapkan dalam branch
-`feat/installer`. URL `main` di bawah baru tersedia setelah perubahan digabungkan.
+`feat/native-windows-server` untuk backend Windows. URL `main` di bawah baru tersedia setelah perubahan digabungkan.
 Instalasi memerlukan sedikitnya satu rilis stabil lengkap yang telah diterbitkan
 pengelola. Installer berhenti jika rilis belum tersedia; tidak beralih ke kode
 pengembangan. Lihat [panduan pengelola rilis](RELEASING.md).
@@ -18,22 +18,16 @@ pengembangan. Lihat [panduan pengelola rilis](RELEASING.md).
 | --- | --- |
 | Ubuntu Server 22.04/24.04 LTS amd64 | Jalur Linux, pemasangan dependensi melalui APT bila disetujui |
 | Debian 12/13 amd64 | Jalur Linux, Python 3.10+ dan Docker Linux |
-| Windows 11 23H2, build 22631 atau lebih baru yang masih didukung | PowerShell → Ubuntu/Debian di WSL2 2.1.5+, Docker Linux yang sudah disiapkan |
-| Windows 10 22H2, build 19045, 64-bit | Bersyarat: harus tetap menerima pembaruan keamanan dan didukung versi Docker; minta konfirmasi petugas IT |
-| Windows Server | VM Linux yang didukung, dengan IP LAN sendiri; bukan Docker Desktop |
-| Windows 8/8.1, WSL1, container Windows, macOS, ARM/32-bit | Tidak didukung paket ini; gunakan server/VM Linux amd64 |
+| Windows Server 2019/2022/2025 amd64 | Backend native, PowerShell 5.1, Windows services; lihat [validasi](windows/VALIDATION.md) |
+| Windows desktop, macOS, ARM/32-bit | Tidak ditangani bootstrap native Windows |
 
-Untuk server yang harus kembali menyala tanpa login pengguna setelah listrik
-padam, gunakan Linux atau VM Linux dengan startup otomatis. Docker Desktop/WSL
-bergantung pada konfigurasi startup dan akun Windows; jangan menganggapnya sebagai
-layanan server tanpa pengawasan. ARM belum didukung karena image cadangan memakai
-pustaka PostgreSQL amd64.
+Server Linux dan Windows native kembali menyala melalui layanan sistem tanpa
+login pengguna. ARM belum didukung.
 
 Sediakan minimal 2 vCPU, RAM 4 GB untuk Docker (8 GB disarankan), RAM tersedia
 minimal 2 GB saat pemasangan, dan ruang kosong minimal 10 GB. Sediakan disk 40 GB
 atau lebih, disesuaikan jumlah foto dan retensi cadangan. Batas ini adalah syarat
-awal, bukan hasil uji kapasitas sekolah besar. Windows/Docker Desktop membutuhkan
-RAM host sesuai persyaratan vendornya, sedikitnya 8 GB. Gunakan SSD dan UPS bila ada.
+awal, bukan hasil uji kapasitas sekolah besar. Windows native disarankan RAM 8 GB. Gunakan SSD dan UPS bila ada.
 
 Docker Engine minimal 24 dan Compose plugin minimal 2.24 diperlukan. Gunakan
 versi yang masih menerima pembaruan keamanan. Instalasi baru membutuhkan internet
@@ -97,51 +91,24 @@ dinyalakan.** Jalankan `./absensa mulai` kemudian; admin pertama ditanyakan saat
 Menunda pembuatan admin juga diperbolehkan; buat dengan `./absensa admin` sebelum
 sekolah mulai menggunakan aplikasi. Perintah ini tidak mengganti sandi admin yang ada.
 
-## 3. Windows 10/11
+## 3. Windows Server
 
-Petugas IT menyiapkan WSL2 2.1.5+ dengan Ubuntu/Debian yang didukung dan Docker Linux.
-Untuk Docker Desktop, aktifkan integrasi distribusi WSL tersebut. Persyaratan
-Windows dan ketentuan lisensi Docker harus diperiksa oleh pengelola sekolah.
-Installer tidak mengaktifkan virtualisasi, mengubah boot, atau memulai reboot.
-
-Unduh dan periksa PowerShell bootstrap:
+Buka **PowerShell sebagai Administrator** dan jalankan:
 
 ```powershell
-Invoke-WebRequest 'https://raw.githubusercontent.com/u70i1/absensa/main/install.ps1' -OutFile install.ps1
-Get-Content .\install.ps1
-powershell -NoProfile -File .\install.ps1
+irm https://raw.githubusercontent.com/u70i1/absensa/main/install.ps1 | iex
 ```
 
-Ikuti kebijakan eksekusi skrip sekolah; jangan menonaktifkan kebijakan komputer
-secara menyeluruh. Cara singkat mengunduh berkas lalu menjalankannya:
+Server 2019/2022/2025 amd64 menjalankan Absensa secara native. Bootstrap memilih
+rilis stabil yang sama dengan Linux, memeriksa SHA-256 dan provenance, lalu
+memasang semua runtime, PostgreSQL, migrasi, Caddy dan enam layanan Windows.
+Tidak perlu WSL, VM, Docker Desktop, Git, atau clone repositori.
 
-```powershell
-Invoke-WebRequest 'https://raw.githubusercontent.com/u70i1/absensa/main/install.ps1' -OutFile "$env:TEMP\absensa-install.ps1"; & "$env:TEMP\absensa-install.ps1"
-```
+Ikuti [panduan Windows](windows/README.md) untuk direktori, akun layanan, firewall,
+CA lokal, backup/restore/update, uninstall, dan batas pengujian. Perintah Linux
+pada bagian berikut tidak digunakan untuk mengelola layanan Windows.
 
-Bootstrap memeriksa edisi/build, arsitektur dan versi WSL, lalu meminta nama
-distribusi WSL2. Ia mengunduh installer Linux ke berkas sementara, menampilkan
-lokasinya untuk ditinjau, dan meminta persetujuan sebelum menjalankan berkas itu.
-Inti installer sama dengan Linux. Simpan instalasi di filesystem Linux WSL,
-bukan `/mnt/c`, OneDrive, atau folder Windows yang izin Unix-nya berbeda.
-
-Jalankan perintah pemeliharaan dari terminal distribusi WSL yang sama. Pada
-Windows 10, dukungan teknis Docker dan status pembaruan keamanan/ESU perlu
-konfirmasi petugas IT; nomor build saja tidak membuktikan status dukungan.
-
-Alamat NAT WSL dapat berubah dan belum tentu dapat diakses Wi-Fi sekolah.
-Petugas IT harus memilih jaringan WSL yang sesuai atau menggunakan VM dengan IP
-LAN sendiri, mengatur aturan firewall terbatas ke LAN, lalu mencoba dari komputer
-lain. Bootstrap tidak membuat port forwarding Windows/router. Untuk layanan
-sekolah permanen, jalur VM Linux lebih mudah dipastikan startup dan akses LAN-nya.
-
-## 4. Windows Server dan server bersama
-
-Pada Windows Server, gunakan VM Ubuntu Server 24.04 LTS amd64 dalam Hyper-V atau
-hypervisor yang memang dikelola sekolah. Administrator harus menyetujui pembuatan
-VM, alokasi RAM/disk, jaringan virtual, startup otomatis, dan shutdown yang baik.
-Jalankan installer Linux di dalam VM. Tidak diperlukan Docker Desktop di host
-Windows Server, dan installer menolak menganggapnya lingkungan yang didukung.
+## 4. Server Linux bersama
 
 Pada server e-Rapor/ujian/aplikasi lain, jangan mengganti Docker, mematikan web
 server, atau mengosongkan disk aplikasi lain. Absensa memakai nama proyek acak
@@ -431,11 +398,11 @@ jalankan bootstrap GitHub kembali pada direktori yang sama.
 | Port sudah digunakan | Pilih port HTTPS berbeda, misalnya 8443, atau integrasikan proxy. Jangan hentikan e-Rapor/web server lain. |
 | HTTPS tidak siap | `./absensa log caddy`, periksa DNS/token/domain/jam server. Tidak ada fallback HTTP. |
 | Browser tidak percaya sertifikat | Pasang CA publik yang benar pada perangkat dan cocokkan fingerprint; jangan bypass peringatan. |
-| Server bisa membuka tetapi ponsel tidak | Periksa DNS lokal, Wi-Fi tamu/client isolation, IP/port, firewall host/VM/Windows, NAT WSL bersama IT. |
+| Server bisa membuka tetapi ponsel tidak | Periksa DNS lokal, Wi-Fi tamu/client isolation, IP/port, firewall host/Windows dan profil/cakupan LAN bersama IT. |
 | Cadangan gagal | Periksa media terpasang, ruang kosong, izin UID 10001, kunci, log backup dan halaman Cadangan. Update tidak dilanjutkan. |
 | `perbaiki` berhenti saat migrasi | Pertahankan jurnal dan arsip; periksa log database dan pulihkan ke proyek baru bila perlu. |
 | Layanan sehat tetapi WhatsApp belum bekerja | Pairing QR dan akses internet WhatsApp diperiksa terpisah. |
-| Server restart tetapi aplikasi tidak kembali | Pastikan Docker/VM aktif otomatis dan layanan sebelumnya tidak sengaja dihentikan; WSL/Desktop bisa memerlukan login. |
+| Server restart tetapi aplikasi tidak kembali | Linux: periksa daemon Docker dan status deployment. Windows: jalankan `absensa.ps1 status`; periksa layanan dan jurnal pemeliharaan sesuai panduan Windows. |
 
 `operations.log` hanya berisi tahap/tanggal, tidak berisi environment atau keluaran
 SQL. `./absensa log` menyamarkan rahasia yang dikenal. Log aplikasi masih dapat
@@ -445,11 +412,11 @@ publik. Jangan membagikan `docker inspect`, env, kunci, atau arsip tanpa kontrol
 ## Referensi dan batas pengujian
 
 Keputusan kompatibilitas mengikuti [Docker Linux](https://docs.docker.com/engine/install/ubuntu/),
-[Docker Windows](https://docs.docker.com/desktop/setup/install/windows-install/),
-[WSL](https://learn.microsoft.com/windows/wsl/install),
+[backend Windows native](windows/README.md),
 [Caddy HTTPS](https://caddyserver.com/docs/automatic-https),
 [modul Cloudflare](https://github.com/caddy-dns/cloudflare), dan
 [verifikasi provenance GitHub](https://cli.github.com/manual/gh_attestation_verify).
 Lihat [catatan pengujian installer](INSTALLER-VALIDATION.md) untuk hasil nyata dan
 lingkungan yang belum diuji. Pemasangan CA di perangkat, DNS-01 akun sekolah,
-Windows/Windows Server dan firewall/router sekolah tetap memerlukan uji lapangan.
+Windows Server dan firewall/router sekolah tetap memerlukan uji lapangan;
+lihat [catatan validasi Windows](windows/VALIDATION.md).

@@ -8,15 +8,9 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  release:
+  validate:
     if: github.repository == 'u70i1/absensa'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    permissions:
-      contents: write
-      packages: write
-      id-token: write
-      attestations: write
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: {persist-credentials: false}
@@ -30,6 +24,22 @@ jobs:
           shellcheck install.sh
           python3 deploy/installer/build_bootstrap.py
           git diff --exit-code -- install.sh
+      - name: Windows backend safety tests
+        run: python3 -m unittest discover -s deploy/windows -p 'test_*.py'
+
+  build-linux:
+    needs: validate
+    if: github.repository == 'u70i1/absensa'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {persist-credentials: false}
       - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
       - uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3
         with:
@@ -92,7 +102,7 @@ jobs:
         id: attest
         with:
           subject-path: dist/absensa-linux-amd64.tar.gz
-      - name: Create draft release (maintainer publishes)
+      - name: Verify Linux provenance
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.ref_name }}
@@ -100,4 +110,86 @@ jobs:
         run: |
           cp "$BUNDLE_PATH" dist/provenance.jsonl
           gh attestation verify dist/absensa-linux-amd64.tar.gz --bundle dist/provenance.jsonl --repo u70i1/absensa --cert-identity "https://github.com/u70i1/absensa/.github/workflows/release.yml@refs/tags/$RELEASE_TAG" --source-ref "refs/tags/$RELEASE_TAG" --deny-self-hosted-runners
-          gh release create "$RELEASE_TAG" --verify-tag --draft --title "Absensa $RELEASE_TAG" --notes-file deploy/RELEASE-NOTES.md dist/absensa-linux-amd64.tar.gz dist/SHA256SUMS dist/provenance.jsonl
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-release
+          path: |
+            dist/absensa-linux-amd64.tar.gz
+            dist/SHA256SUMS
+            dist/provenance.jsonl
+          if-no-files-found: error
+
+  build-windows:
+    needs: validate
+    runs-on: windows-2025
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {persist-credentials: false}
+      - uses: ./.github/actions/windows-package
+        with:
+          version: ${{ github.ref_name }}
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v3
+        id: attest
+        with:
+          subject-path: |
+            dist/absensa-windows-amd64.zip
+            dist/install.ps1
+      - name: Verify Windows provenance
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          Copy-Item $env:BUNDLE_PATH dist/provenance-windows.jsonl
+          gh attestation verify dist/absensa-windows-amd64.zip --bundle dist/provenance-windows.jsonl --repo u70i1/absensa --cert-identity "https://github.com/u70i1/absensa/.github/workflows/release.yml@refs/tags/$env:RELEASE_TAG" --source-ref "refs/tags/$env:RELEASE_TAG" --deny-self-hosted-runners
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-release
+          path: |
+            dist/absensa-windows-amd64.zip
+            dist/install.ps1
+            dist/SHA256SUMS.windows
+            dist/provenance-windows.jsonl
+          if-no-files-found: error
+      - name: Preserve diagnostic logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-release-diagnostics
+          path: C:/ProgramData/Absensa Integration Test/logs
+          retention-days: 7
+
+  release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {persist-credentials: false}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: '*-release'
+          path: dist
+          merge-multiple: true
+      - name: Check both platform artifacts and create one draft (maintainer publishes)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          cd dist
+          sha256sum --check SHA256SUMS
+          sha256sum --check SHA256SUMS.windows
+          for platform in linux windows; do
+            if [ "$platform" = linux ]; then archive=absensa-linux-amd64.tar.gz; bundle=provenance.jsonl; else archive=absensa-windows-amd64.zip; bundle=provenance-windows.jsonl; fi
+            gh attestation verify "$archive" --bundle "$bundle" --repo u70i1/absensa --cert-identity "https://github.com/u70i1/absensa/.github/workflows/release.yml@refs/tags/$RELEASE_TAG" --source-ref "refs/tags/$RELEASE_TAG" --deny-self-hosted-runners
+          done
+          gh attestation verify install.ps1 --bundle provenance-windows.jsonl --repo u70i1/absensa --cert-identity "https://github.com/u70i1/absensa/.github/workflows/release.yml@refs/tags/$RELEASE_TAG" --source-ref "refs/tags/$RELEASE_TAG" --deny-self-hosted-runners
+          gh release create "$RELEASE_TAG" --verify-tag --draft --title "Absensa $RELEASE_TAG" --notes-file ../deploy/RELEASE-NOTES.md absensa-linux-amd64.tar.gz absensa-windows-amd64.zip install.ps1 SHA256SUMS SHA256SUMS.windows provenance.jsonl provenance-windows.jsonl

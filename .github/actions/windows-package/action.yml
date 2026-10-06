@@ -1,0 +1,60 @@
+name: Build native Windows package
+description: Bundle pinned runtimes and native libraries; build tools remain on CI.
+inputs:
+  version:
+    required: true
+    description: Shared Absensa stable version tag
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      with:
+        python-version: '3.13.15'
+    - uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5
+      with:
+        go-version: '1.26.1'
+        cache: false
+    - name: Test PowerShell 5.1 and backend safety
+      shell: powershell
+      run: |
+        & ./deploy/windows/test-bootstrap.ps1
+        if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        python -m unittest discover -s deploy/windows -p 'test_*.py'
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    - name: Test native virtual service account registration
+      shell: powershell
+      run: |
+        & ./deploy/windows/test-service-account.ps1
+        if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    - name: Compile pinned Cairo and libarchive
+      shell: powershell
+      run: ./deploy/windows/build-native.ps1 -Output "$env:RUNNER_TEMP\absensa-native-output"
+    - name: Build Caddy with the same Cloudflare module as Linux
+      shell: powershell
+      run: |
+        $ErrorActionPreference = 'Stop'
+        go install github.com/caddyserver/xcaddy/cmd/xcaddy@v0.4.7
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & "$(go env GOPATH)\bin\xcaddy.exe" build v2.11.6 --with github.com/caddy-dns/cloudflare@v0.2.4 --output "$env:RUNNER_TEMP\caddy.exe"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        go version -m "$env:RUNNER_TEMP\caddy.exe" | Out-File -Encoding utf8 "$env:RUNNER_TEMP\caddy.build.txt"
+    - name: Package ready-to-run application and runtimes
+      shell: powershell
+      env:
+        ABSENSA_BUILD_TAG: ${{ inputs.version }}
+      run: |
+        python deploy/windows/package.py $env:ABSENSA_BUILD_TAG --native "$env:RUNNER_TEMP\absensa-native-output" --caddy "$env:RUNNER_TEMP\caddy.exe"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    - name: Validate ZIP bytes and extracted inventory
+      shell: powershell
+      run: |
+        . ./install.ps1
+        Test-AbsensaChecksum "$PWD\dist\absensa-windows-amd64.zip" "$PWD\dist\SHA256SUMS.windows" 'absensa-windows-amd64.zip'
+        Expand-AbsensaZip "$PWD\dist\absensa-windows-amd64.zip" "$env:RUNNER_TEMP\Absensa Package With Spaces"
+        python deploy/windows/verify-package.py "$env:RUNNER_TEMP\Absensa Package With Spaces"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    - name: Native services, migrations, TLS, backup, restore and update drill
+      shell: powershell
+      run: |
+        python deploy/windows/smoke.py "$env:RUNNER_TEMP\Absensa Package With Spaces"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

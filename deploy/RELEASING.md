@@ -6,7 +6,8 @@ identity. Forks must update the verifier, workflows, and bootstrap URLs together
 
 ## Before the first release
 
-1. Review and merge the `deploy/v1.0.0` release branch into `main` after the tests pass.
+1. Review and merge the native Windows changes into `main` after Linux and both
+   Windows installer jobs pass and the required Windows field tests are recorded.
 2. Make the repository public so Raw files, anonymous release downloads, and
    public Sigstore attestations are available. Enable Actions with package,
    attestation, and OIDC permissions scoped to the release workflow. Protect
@@ -19,16 +20,57 @@ identity. Forks must update the verifier, workflows, and bootstrap URLs together
 4. Choose a `vMAJOR.MINOR.PATCH` version, then create and push its tag on the
    reviewed commit **after owner authorization**. The implementation work has
    not pushed any changes.
-5. `release.yml` builds Linux amd64 images with BuildKit provenance and SBOM
-   metadata, pins every image by digest (including PostgreSQL), runs container
-   tests, packages the deployment artifact, signs its provenance, and creates a
-   **draft** GitHub Release. The installer ignores drafts.
+5. `release.yml` validates one tag, then independently builds `build-linux` and
+   `build-windows`. Linux retains digest-pinned GHCR images, BuildKit provenance,
+   SBOM and container smoke tests. Windows builds a ready-to-run ZIP on
+   `windows-2025` and runs native service/migration/TLS/backup/update tests.
+   The `release` job requires **both** jobs to succeed, re-verifies checksums and
+   attestations, then creates **one draft** GitHub Release. Installers ignore drafts.
 6. Check smoke test results, source commit metadata, public image access, and
    anonymous downloads. Complete the release notes and publish the draft as a
    stable release. Then test the Raw installation commands on a clean VM.
    These code changes do not mean that a release has already been published.
 
-Required assets: `absensa-linux-amd64.tar.gz`, `SHA256SUMS`, and `provenance.jsonl`.
+Required assets:
+
+- `absensa-linux-amd64.tar.gz`, `SHA256SUMS`, `provenance.jsonl` (existing Linux contract).
+- `absensa-windows-amd64.zip`, `install.ps1`, `SHA256SUMS.windows`, `provenance-windows.jsonl`.
+
+`SHA256SUMS` deliberately remains Linux-only because already-installed Linux
+verifiers require exactly that one entry. Windows checksums cover the ZIP and
+bootstrap; one Windows provenance bundle covers both. Both bundles enforce the
+same repository, workflow identity and exact source tag, and reject self-hosted
+build provenance. Do not combine the checksum files and break older Linux
+installations. No separate Windows application version exists.
+
+The Windows ZIP includes embedded CPython, Windows wheels, Node and locked npm
+modules, PostgreSQL 18, Chrome for Testing, Caddy with Cloudflare, WinSW and native
+Cairo/libarchive DLLs. It is not a source-only artifact. Client servers never run
+pip/npm/Go/compiler tools. See `deploy/windows/dependencies.lock.json` for reviewed
+upstream binary SHA-256 pins. vcpkg uses a committed baseline and SHA512 source
+pins; Caddy matches the Linux source/module versions. Dependency upgrade review
+must include Server 2019 compatibility and Chromium session tests.
+
+Native compilation happens only on CI runners. School servers install the built
+ZIP; they never download vcpkg or compile Cairo/libarchive. The build seeds gperf
+from GNU mirrors using the exact version and SHA512 read from the pinned vcpkg
+checkout, and vcpkg verifies the file again. This handles primary GNU endpoint
+timeouts without changing source versions or disabling integrity checks. If all
+mirrors fail, the job fails and no combined release draft is created. Rerun failed
+jobs for a transient outage; push a new commit when a script needs fixing. Do not
+follow generic advice to update vcpkg to latest during a pinned release build.
+
+Windows input/output inventories include `release.json`, `files.sha256.json`,
+`python-install-report.json` and Caddy build module metadata. Python dependencies
+reuse application requirements (Windows excludes uvloop and uses psycopg2-binary;
+tzdata supplies IANA zones). Byte-identical rebuilds are not promised: Python
+transitive ranges and toolchain inputs still need a lock refresh process. Each
+published archive is immutable and digest-verifiable.
+
+Do not publish the draft until the [Windows field gates](windows/VALIDATION.md)
+are recorded, including Server 2019 PostgreSQL/Chromium startup and a reboot.
+Build success alone does not establish that a clean school machine works.
+
 The archive contains `manage.py`, `release.py`, `compose.yml`, `release.json`, and
 an operator guide. Application images are not built on school servers. Python
 packages follow the project's existing dependency pins; the existing Faker
@@ -65,7 +107,8 @@ git diff --exit-code -- install.sh
 ```
 
 `install.sh` is generated from `bootstrap.sh.in` and `release.py`; do not edit the
-embedded verifier directly. Pull request CI also checks PowerShell syntax.
+embedded verifier directly. Pull request CI runs PowerShell 5.1 validation and native package/service drills
+on Windows 2022 and 2025. Real Server 2019 remains an explicit field gate.
 Actions are pinned to reviewed commit SHAs. Dependabot tracks Actions and base
 images. Review dependency changes alongside build results; do not assume major
 upgrades are compatible.
