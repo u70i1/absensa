@@ -147,7 +147,7 @@ def main():
             restore_files(args.source)
         else:
             verify_archive(args.source, encryption_key())
-    except Exception:
+    except Exception:  # noqa: BLE001 - archive errors must not expose secrets
         raise SystemExit(
             "Cadangan/pemulihan gagal. Periksa kunci, ruang disk, izin, dan integritas arsip. Data sumber tetap disimpan."
         ) from None

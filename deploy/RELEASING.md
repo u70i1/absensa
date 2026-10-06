@@ -6,7 +6,7 @@ identity. Forks must update the verifier, workflows, and bootstrap URLs together
 
 ## Before the first release
 
-1. Review and merge `feat/installer` into `main` after the tests pass.
+1. Review and merge the `deploy/v1.0.0` release branch into `main` after the tests pass.
 2. Make the repository public so Raw files, anonymous release downloads, and
    public Sigstore attestations are available. Enable Actions with package,
    attestation, and OIDC permissions scoped to the release workflow. Protect

@@ -5,8 +5,8 @@ import logging
 import os
 import time
 
-from app.jobs.worker_health import beat
 from app.db.session import engine
+from app.jobs.worker_health import beat
 from app.services.backup_service import process_tick
 
 logger = logging.getLogger(__name__)

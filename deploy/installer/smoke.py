@@ -271,8 +271,8 @@ def main():
                         site.compose("down", check=False)
                     else:
                         site.compose("stop", check=False)
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001 - cleanup must continue
+                    print(f"Cleanup failed for {path}: {type(exc).__name__}")
         stack.close()
         print("Test artifacts retained:", temporary)
 

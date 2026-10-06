@@ -142,6 +142,7 @@ def fetch(directory, tag=None):
         ],
         capture_output=True,
         text=True,
+        check=False,
     )
     if result.returncode:
         raise InstallError(

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Absensa installation manager. Standard-library Python; the app runs in Docker."""
 
 import argparse
@@ -19,7 +18,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from release import InstallError, TAG, fetch
+from release import TAG, InstallError, fetch
 
 SERVICES = ("web", "scheduler", "backup", "whatsapp", "caddy")
 TIMEZONES = ("Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura")
@@ -70,7 +69,8 @@ def run(args, *, data=None, check=True, timeout=900, env_remove=()):
     }
     try:
         result = subprocess.run(
-            args, input=data, capture_output=True, text=True, env=env, timeout=timeout
+            args, input=data, capture_output=True, text=True, env=env, timeout=timeout,
+            check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise InstallError(
@@ -1393,7 +1393,7 @@ if __name__ == "__main__":
             "\nOperasi terhenti. Konfigurasi dan data tetap disimpan; jalankan perbaiki untuk melanjutkan."
         )
         sys.exit(130)
-    except Exception as exc:  # Never expose raw subprocess/config errors or secrets.
+    except Exception as exc:  # noqa: BLE001 - never expose raw errors or secrets
         say(
             "\n"
             + (
