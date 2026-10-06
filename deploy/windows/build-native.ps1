@@ -21,13 +21,14 @@ if ($LASTEXITCODE -ne 0) { throw 'Build cairo/libarchive gagal.' }
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
 Copy-Item "$work\installed\x64-windows\bin\*.dll" $Output
 Copy-Item "$work\installed\x64-windows\share" (Join-Path $Output 'licenses') -Recurse
+# Meson emits cairo-2.dll with MSVC. Validate aliases immediately, rather than
+# discovering a missing DLL after downloading and assembling all the runtimes.
+. (Join-Path $PSScriptRoot 'build-libraries.ps1')
+$aliases = Set-AbsensaLibraryAliases -Directory $Output
 # App-local MSVC runtime: avoids a global redistributable installation/reboot.
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 $crt = Get-ChildItem "$vs\VC\Redist\MSVC\*\x64\Microsoft.VC*.CRT" -Directory | Sort-Object FullName -Descending | Select-Object -First 1
 if (-not $crt) { throw 'MSVC redistributable tidak ditemukan.' }
 Copy-Item (Join-Path $crt.FullName '*.dll') $Output
-@{ vcpkg = $baseline; crt = $crt.Parent.Parent.Name; triplet = 'x64-windows' } | ConvertTo-Json | Set-Content -Encoding ASCII (Join-Path $Output 'build.json')
-# Match CairoCFFI's Windows loader name without changing business logic.
-if (Test-Path (Join-Path $Output 'cairo.dll')) { Copy-Item (Join-Path $Output 'cairo.dll') (Join-Path $Output 'libcairo-2.dll') }
-if (Test-Path (Join-Path $Output 'libarchive.dll')) { Copy-Item (Join-Path $Output 'libarchive.dll') (Join-Path $Output 'archive.dll') }
+@{ vcpkg = $baseline; crt = $crt.Parent.Parent.Name; triplet = 'x64-windows'; dll_aliases = $aliases } | ConvertTo-Json | Set-Content -Encoding ASCII (Join-Path $Output 'build.json')

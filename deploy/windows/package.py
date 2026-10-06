@@ -1,6 +1,7 @@
 """Build a ready-to-run Windows release; compiler tools are CI-only."""
 
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -43,6 +44,39 @@ REQUIRED = (
     "dependencies.lock.json",
     "licenses/NOTICE.txt",
 )
+NATIVE_REQUIRED = ("libcairo-2.dll", "archive.dll", "build.json")
+
+
+def validate_native(root):
+    missing = [name for name in NATIVE_REQUIRED if not (root / name).is_file()]
+    if missing:
+        available = ", ".join(sorted(p.name for p in root.glob("*.dll"))) or "none"
+        raise ValueError(
+            f"Incomplete native libraries: {', '.join(missing)}. "
+            f"DLLs found in {root}: {available}. Check the native build step."
+        )
+
+
+def probe_native(root):
+    """Load real Windows libraries and dependencies before any runtime downloads."""
+    validate_native(root)
+    with os.add_dll_directory(str(root.resolve())):
+        for filename, function, minimum in (
+            ("libcairo-2.dll", "cairo_version", 11000),
+            ("archive.dll", "archive_version_number", 3000000),
+        ):
+            try:
+                library = ctypes.CDLL(str((root / filename).resolve()))
+                query = getattr(library, function)
+                query.argtypes = []
+                query.restype = ctypes.c_int
+                if query() < minimum:
+                    raise ValueError("Unsupported library version")
+            except (OSError, AttributeError, ValueError) as exc:
+                raise ValueError(
+                    f"Cannot load native {filename} and its DLL dependencies: {exc}"
+                ) from exc
+    print("Native Cairo/libarchive DLLs loaded successfully", flush=True)
 
 
 def digest(path):
@@ -132,6 +166,7 @@ def build(args):
         r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", args.version
     ):
         raise ValueError("Invalid release tag")
+    probe_native(args.native)
     lock = json.loads((HERE / "dependencies.lock.json").read_text())
     args.output.mkdir(parents=True, exist_ok=True)
     args.cache.mkdir(parents=True, exist_ok=True)

@@ -289,6 +289,23 @@ class WindowsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "secret"):
             package.validate(self.root)
 
+    def test_native_preflight_reports_versioned_cairo_without_loader_alias(self):
+        native = self.path / "Native DLLs with spaces"
+        native.mkdir()
+        for name in ("cairo-2.dll", "archive.dll", "build.json"):
+            (native / name).touch()
+        with self.assertRaisesRegex(ValueError, "libcairo-2.dll.*cairo-2.dll"):
+            package.validate_native(native)
+        (native / "libcairo-2.dll").touch()
+        package.validate_native(native)
+
+    def test_native_preflight_requires_libarchive_and_build_metadata(self):
+        native = self.path / "native"
+        native.mkdir()
+        (native / "libcairo-2.dll").touch()
+        with self.assertRaisesRegex(ValueError, "archive.dll, build.json"):
+            package.validate_native(native)
+
 
 if __name__ == "__main__":
     unittest.main()
