@@ -1,12 +1,14 @@
 """Platform-independent safety tests; native service integration lives in smoke.py."""
 
 import importlib.util
+import contextlib
 import io
 import json
 import sys
 import subprocess
 import tempfile
 import unittest
+from types import SimpleNamespace
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -139,6 +141,90 @@ class WindowsTests(unittest.TestCase):
             self.assertIsNone(root.find("interactive"))
             self.assertNotIn(self.obj.config["db_password"], xml)
             self.assertNotEqual(root.findtext("serviceaccount/username"), "LocalSystem")
+
+    def registration_fixture(self, existing, owned=True):
+        self.obj.release.mkdir(parents=True)
+        (self.obj.release / "winsw.exe").write_bytes(b"pinned wrapper fixture")
+        self.obj.exists = Mock(return_value=existing)
+        self.obj.sc = Mock()
+        self.obj.run = Mock()
+        self.obj.host = Mock(return_value=SimpleNamespace(stdout="fixture firewall"))
+        self.obj.set_start = Mock()
+        binary = '"' + str(self.root) + '\\services\\Absensa.exe"'
+        if not owned:
+            binary = '"C:\\Another App\\service.exe"'
+        return SimpleNamespace(
+            HKEY_LOCAL_MACHINE=object(),
+            OpenKey=Mock(side_effect=lambda *args: contextlib.nullcontext(object())),
+            QueryValueEx=Mock(return_value=(binary, 1)),
+        )
+
+    def test_existing_services_reconfigured_in_place_for_repair_and_upgrade(self):
+        registry = self.registration_fixture(existing=True)
+        for installed_version in ("v1.0.0", "v1.1.0"):
+            with self.subTest(version=installed_version):
+                self.obj.state["version"] = installed_version
+                self.obj.release.mkdir(parents=True, exist_ok=True)
+                (self.obj.release / "winsw.exe").write_bytes(installed_version.encode())
+                self.obj.sc.reset_mock()
+                with patch.dict(sys.modules, {"winreg": registry}):
+                    self.obj.register()
+                # No wrapper refresh/install/uninstall, no service deletion and no
+                # privileged account substitution during existing-service repair.
+                self.obj.run.assert_not_called()
+                for call in self.obj.sc.call_args_list:
+                    self.assertNotEqual(call.args[0], "delete")
+                    self.assertNotIn("obj=", call.args)
+                for role in manage.APPLICATION:
+                    name = manage.SERVICES[role]
+                    executable = self.root / "services" / (name + ".exe")
+                    self.assertEqual(
+                        executable.read_bytes(), installed_version.encode()
+                    )
+                    definition = ET.parse(executable.with_suffix(".xml")).getroot()
+                    self.assertEqual(
+                        definition.findtext("executable"),
+                        str(self.obj.release / "python/python.exe"),
+                    )
+                    dependency = (
+                        manage.SERVICES["web"]
+                        if role == "caddy"
+                        else manage.SERVICES["postgres"]
+                    )
+                    self.obj.sc.assert_any_call(
+                        "config",
+                        name,
+                        "binPath=",
+                        '"' + str(executable) + '"',
+                        "start=",
+                        "demand",
+                        "depend=",
+                        dependency,
+                        "DisplayName=",
+                        definition.findtext("name"),
+                    )
+                    self.obj.sc.assert_any_call(
+                        "description", name, definition.findtext("description")
+                    )
+                    self.obj.host.assert_any_call("service", Name=name)
+                self.obj.set_start.assert_called_with(False)
+
+    def test_fresh_services_use_supported_winsw_install(self):
+        self.registration_fixture(existing=False)
+        self.obj.register()
+        for role in manage.APPLICATION:
+            executable = self.root / "services" / (manage.SERVICES[role] + ".exe")
+            self.obj.run.assert_any_call([executable, "install"])
+        self.assertEqual(self.obj.run.call_count, len(manage.APPLICATION) + 1)
+
+    def test_registration_refuses_existing_service_from_another_installation(self):
+        registry = self.registration_fixture(existing=True, owned=False)
+        with patch.dict(sys.modules, {"winreg": registry}):
+            with self.assertRaisesRegex(manage.OperationError, "instalasi lain"):
+                self.obj.register()
+        self.obj.sc.assert_not_called()
+        self.obj.run.assert_not_called()
+        self.obj.host.assert_not_called()
 
     def test_caddy_uses_local_backend_and_never_embeds_token(self):
         self.obj.config.update(tls="cloudflare", cf_token="secret-fixture")

@@ -525,11 +525,28 @@ class Installation:
                 executable = service_dir / (name + ".exe")
                 # Services are stopped before replacing the wrapper during maintenance.
                 shutil.copy2(self.release / "winsw.exe", executable)
-                atomic(
-                    executable.with_suffix(".xml"),
-                    service_xml(role, self.release, self.data),
-                )
-                self.run([executable, "refresh" if self.exists(role) else "install"])
+                xml = service_xml(role, self.release, self.data)
+                atomic(executable.with_suffix(".xml"), xml)
+                if self.exists(role):
+                    # Pinned WinSW 2.12 has no refresh command. It reads the new
+                    # XML on start; update SCM fields in place without deleting
+                    # the service, its SID or its service-specific permissions.
+                    definition = ET.fromstring(xml)
+                    self.sc(
+                        "config",
+                        name,
+                        "binPath=",
+                        subprocess.list2cmdline([str(executable)]),
+                        "start=",
+                        "demand",
+                        "depend=",
+                        "/".join(node.text for node in definition.findall("depend")),
+                        "DisplayName=",
+                        definition.findtext("name"),
+                    )
+                    self.sc("description", name, definition.findtext("description"))
+                else:
+                    self.run([executable, "install"])
             self.host("service", Name=name)
             self.host("grant", Path=self.root, Name=name)
             self.host("grant", Path=self.data, Name=name, Rights="Traverse")
