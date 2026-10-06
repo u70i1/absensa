@@ -20,6 +20,33 @@ def check(command, **kwargs):
     subprocess.run([str(p) for p in command], check=True, **kwargs)
 
 
+def run_smoke():
+    try:
+        main()
+    except Exception:
+        # Also covers initial installation, before the service cleanup block exists.
+        # Only operations.log is emitted: manage.py redacts its configured secrets.
+        # Never print installation.json, recovery keys, or arbitrary service logs.
+        program_data = os.environ.get("ProgramData")
+        if program_data:
+            log = Path(program_data) / "Absensa Integration Test/logs/operations.log"
+            try:
+                with log.open("rb") as stream:
+                    stream.seek(0, os.SEEK_END)
+                    start = max(0, stream.tell() - 65536)
+                    stream.seek(start)
+                    if start:
+                        stream.readline()  # Discard any partial first line.
+                    diagnostic = stream.read().decode("utf-8", errors="replace")
+                print(f"Windows smoke failure; diagnostic tail: {log}", file=sys.stderr)
+                for line in diagnostic.splitlines():
+                    # Prefix prevents log content being interpreted as Actions commands.
+                    print(f"operations.log | {line}", file=sys.stderr)
+            except OSError as error:
+                print(f"Cannot read Windows smoke diagnostic: {error}", file=sys.stderr)
+        raise
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("package", type=Path)
@@ -258,4 +285,4 @@ assert read_archive(b.getvalue())[0][0][1] == b'archive DLL fixture'
 
 
 if __name__ == "__main__":
-    main()
+    run_smoke()

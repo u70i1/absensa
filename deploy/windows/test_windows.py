@@ -1,13 +1,15 @@
 """Platform-independent safety tests; native service integration lives in smoke.py."""
 
 import importlib.util
+import io
 import json
 import sys
+import subprocess
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "web"))
@@ -22,6 +24,7 @@ def load(name, filename):
 
 manage = load("windows_manage", "manage.py")
 package = load("windows_package", "package.py")
+smoke = load("windows_smoke", "smoke.py")
 
 
 class WindowsTests(unittest.TestCase):
@@ -57,6 +60,59 @@ class WindowsTests(unittest.TestCase):
         self.assertNotIn("DATABASE_URL", self.obj.environment("caddy"))
         self.assertIn(str(self.data), env["PHOTOS_DIR"])
         self.assertNotIn(str(self.root), env["PHOTOS_DIR"])
+
+    def test_failed_host_operation_reports_action_and_redacts_secrets(self):
+        (self.data / "logs").mkdir()
+        output = "SC failure " + " ".join(
+            self.obj.config[key]
+            for key in ("pg_password", "db_password", "bridge_token", "backup_key")
+        )
+        result = subprocess.CompletedProcess([], 1, stdout=output, stderr="error")
+        with (
+            patch.dict(manage.os.environ, {"SystemRoot": "C:/Windows"}),
+            patch.object(manage.subprocess, "run", return_value=result),
+            self.assertRaisesRegex(
+                manage.OperationError, "host.ps1 service.*AbsensaWeb"
+            ),
+        ):
+            self.obj.host("service", Name="AbsensaWeb")
+        log = (self.data / "logs/operations.log").read_text()
+        self.assertIn("host.ps1 service (AbsensaWeb): exit 1", log)
+        self.assertIn("[RAHASIA]", log)
+        for key in ("pg_password", "db_password", "bridge_token", "backup_key"):
+            self.assertNotIn(self.obj.config[key], log)
+
+    def test_smoke_initial_failure_prints_only_operations_log_and_preserves_error(self):
+        fixture = self.path / "Absensa Integration Test"
+        (fixture / "logs").mkdir(parents=True)
+        (fixture / "logs/operations.log").write_text(
+            "SC configuration failed\n::error::fixture\n"
+        )
+        (fixture / "installation.json").write_text("SECRET_CONFIG")
+        output = io.StringIO()
+        error = subprocess.CalledProcessError(1, ["manage.py", "install"])
+        with (
+            patch.dict(smoke.os.environ, {"ProgramData": str(self.path)}),
+            patch.object(smoke, "main", side_effect=error),
+            patch.object(smoke.sys, "stderr", output),
+            self.assertRaises(subprocess.CalledProcessError) as caught,
+        ):
+            smoke.run_smoke()
+        self.assertIs(caught.exception, error)
+        self.assertIn("operations.log | SC configuration failed", output.getvalue())
+        self.assertIn("operations.log | ::error::fixture", output.getvalue())
+        self.assertNotIn("SECRET_CONFIG", output.getvalue())
+
+    def test_smoke_missing_diagnostic_preserves_original_error(self):
+        error = RuntimeError("original failure")
+        with (
+            patch.dict(smoke.os.environ, {"ProgramData": str(self.path)}),
+            patch.object(smoke, "main", side_effect=error),
+            patch.object(smoke.sys, "stderr", io.StringIO()),
+            self.assertRaises(RuntimeError) as caught,
+        ):
+            smoke.run_smoke()
+        self.assertIs(caught.exception, error)
 
     def test_host_validation_rejects_caddy_injection(self):
         for name in (

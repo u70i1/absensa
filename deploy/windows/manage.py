@@ -253,7 +253,9 @@ class Installation:
     def python(self):
         return self.release / "python/python.exe"
 
-    def run(self, args, *, input=None, env=None, check=True, timeout=900):
+    def run(
+        self, args, *, input=None, env=None, check=True, timeout=900, operation=None
+    ):
         result = subprocess.run(
             [str(a) for a in args],
             input=input,
@@ -266,6 +268,7 @@ class Installation:
             check=False,
         )
         if result.returncode:
+            operation = operation or Path(args[0]).name
             # Log redacted diagnostics; process arguments may contain private paths.
             message = result.stdout + result.stderr
             for key in (
@@ -279,11 +282,11 @@ class Installation:
                     message = message.replace(self.config[key], "[RAHASIA]")
             with (self.data / "logs/operations.log").open("a", encoding="utf-8") as log:
                 log.write(
-                    f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {Path(args[0]).name}: exit {result.returncode}\n{message}\n"
+                    f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {operation}: exit {result.returncode}\n{message}\n"
                 )
             if check:
                 raise OperationError(
-                    f"Operasi {Path(args[0]).name} gagal. Periksa {self.data / 'logs/operations.log'}."
+                    f"Operasi {operation} gagal. Periksa {self.data / 'logs/operations.log'}."
                 )
         return result
 
@@ -303,7 +306,11 @@ class Installation:
         ]
         for key, value in values.items():
             command.extend(["-" + key, str(value)])
-        return self.run(command)
+        # Include the host action and service, never the full argument list or secrets.
+        operation = f"host.ps1 {action}"
+        if values.get("Name"):
+            operation += f" ({values['Name']})"
+        return self.run(command, operation=operation)
 
     def save(self):
         write_json(self.state_path, self.state)
