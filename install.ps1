@@ -72,6 +72,8 @@ function Get-AbsensaFile {
 
 function Expand-AbsensaZip {
     param([string]$Archive, [string]$Destination)
+    # Windows PowerShell 5.1 must load ZIP types separately from ZipFile helpers.
+    Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [IO.Compression.ZipFile]::OpenRead($Archive)
     try {

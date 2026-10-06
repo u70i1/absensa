@@ -14,6 +14,7 @@ foreach ($case in @(@(1,26100,'AMD64',$true),@(3,14393,'AMD64',$true),@(3,17763,
 }
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('absensa-package-tests-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($temp) | Out-Null
+Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 try {
     $file = Join-Path $temp 'payload'
@@ -25,6 +26,22 @@ try {
     $rejected = $false
     try { Test-AbsensaChecksum $file $sum 'payload' } catch { $rejected = $true }
     if (-not $rejected) { throw 'Tampered bytes accepted.' }
+    # Valid extraction must work too: rejection-only tests could pass if all ZIPs fail.
+    $archive = Join-Path $temp 'valid release.zip'
+    $zip = [IO.Compression.ZipFile]::Open($archive, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        $entry = $zip.CreateEntry('folder with spaces/payload.txt')
+        $writer = New-Object IO.StreamWriter($entry.Open())
+        try { $writer.Write('verified fixture') } finally { $writer.Dispose() }
+    } finally { $zip.Dispose() }
+    $destination = Join-Path $temp 'Program Files fixture'
+    Expand-AbsensaZip $archive $destination
+    if ([IO.File]::ReadAllText((Join-Path $destination 'folder with spaces/payload.txt')) -ne 'verified fixture') {
+        throw 'Valid release ZIP did not extract correctly.'
+    }
+    $rejected = $false
+    try { Expand-AbsensaZip $archive $destination } catch { $rejected = $true }
+    if (-not $rejected) { throw 'Existing extraction destination was overwritten.' }
     foreach ($name in @('../outside','C:/outside','folder\outside','folder/file:ads','folder/NUL.txt','folder/a.','folder/a ')) {
         $archive = Join-Path $temp ([Guid]::NewGuid().ToString('N') + '.zip')
         $zip = [IO.Compression.ZipFile]::Open($archive, [IO.Compression.ZipArchiveMode]::Create)
@@ -34,5 +51,5 @@ try {
         try { Expand-AbsensaZip $archive (Join-Path $temp ([Guid]::NewGuid().ToString('N'))) } catch { $rejected = $true }
         if (-not $rejected) { throw "Unsafe ZIP entry accepted: $name" }
     }
-    Write-Host 'Bootstrap syntax, Server build gates, checksum and unsafe archive tests passed.'
+    Write-Host 'Bootstrap syntax, Server build gates, checksum, valid ZIP extraction and unsafe archive tests passed.'
 } finally { Remove-Item -LiteralPath $temp -Recurse -Force }
