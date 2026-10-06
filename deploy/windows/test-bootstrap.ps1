@@ -51,5 +51,6 @@ try {
         try { Expand-AbsensaZip $archive (Join-Path $temp ([Guid]::NewGuid().ToString('N'))) } catch { $rejected = $true }
         if (-not $rejected) { throw "Unsafe ZIP entry accepted: $name" }
     }
+    & (Join-Path $PSScriptRoot 'test-build-source.ps1')
     Write-Host 'Bootstrap syntax, Server build gates, checksum, valid ZIP extraction and unsafe archive tests passed.'
 } finally { Remove-Item -LiteralPath $temp -Recurse -Force }

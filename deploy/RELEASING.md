@@ -6,7 +6,8 @@ identity. Forks must update the verifier, workflows, and bootstrap URLs together
 
 ## Before the first release
 
-1. Review and merge the `deploy/v1.0.0` release branch into `main` after the tests pass.
+1. Review and merge the native Windows changes into `main` after Linux and both
+   Windows installer jobs pass and the required Windows field tests are recorded.
 2. Make the repository public so Raw files, anonymous release downloads, and
    public Sigstore attestations are available. Enable Actions with package,
    attestation, and OIDC permissions scoped to the release workflow. Protect
@@ -49,6 +50,15 @@ pip/npm/Go/compiler tools. See `deploy/windows/dependencies.lock.json` for revie
 upstream binary SHA-256 pins. vcpkg uses a committed baseline and SHA512 source
 pins; Caddy matches the Linux source/module versions. Dependency upgrade review
 must include Server 2019 compatibility and Chromium session tests.
+
+Native compilation happens only on CI runners. School servers install the built
+ZIP; they never download vcpkg or compile Cairo/libarchive. The build seeds gperf
+from GNU mirrors using the exact version and SHA512 read from the pinned vcpkg
+checkout, and vcpkg verifies the file again. This handles primary GNU endpoint
+timeouts without changing source versions or disabling integrity checks. If all
+mirrors fail, the job fails and no combined release draft is created. Rerun failed
+jobs for a transient outage; push a new commit when a script needs fixing. Do not
+follow generic advice to update vcpkg to latest during a pinned release build.
 
 Windows input/output inventories include `release.json`, `files.sha256.json`,
 `python-install-report.json` and Caddy build module metadata. Python dependencies

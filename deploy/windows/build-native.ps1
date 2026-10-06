@@ -11,6 +11,10 @@ if ($LASTEXITCODE -ne 0) { throw 'vcpkg clone gagal.' }
 if ($LASTEXITCODE -ne 0) { throw 'vcpkg baseline gagal.' }
 & (Join-Path $work 'vcpkg\bootstrap-vcpkg.bat') -disableMetrics
 if ($LASTEXITCODE -ne 0) { throw 'vcpkg bootstrap gagal.' }
+# GNU's primary endpoints sometimes time out on hosted runners. Seed only the
+# exact gperf archive/hash from this checkout; never change ports or their pins.
+. (Join-Path $PSScriptRoot 'build-source.ps1')
+Save-AbsensaGperfSource -VcpkgRoot (Join-Path $work 'vcpkg')
 # vcpkg port sources and tools are checked against their recorded SHA512 pins.
 & (Join-Path $work 'vcpkg\vcpkg.exe') install --triplet x64-windows --x-manifest-root=$PSScriptRoot --x-install-root="$work\installed"
 if ($LASTEXITCODE -ne 0) { throw 'Build cairo/libarchive gagal.' }
