@@ -9,8 +9,14 @@
   {% include 'navigation/admin-header.html' %}
   <main class="content-page">
     <div class="card-page-heading"><div><h1>Kartu Siswa</h1><p>Cetak kartu atau unduh gambar PNG siap cetak.</p></div>
-      <button class="button secondary" type="button" hx-get="{{ url_for('admin_card_settings') }}"
-        hx-target="#modal-content" hx-swap="innerHTML" aria-haspopup="dialog">Pengaturan cetak</button>
+      <div class="page-documentation-actions">
+        <a class="documentation-link" href="https://u70i1.github.io/absensa/referensi/kartu-siswa/" target="_blank" rel="noopener noreferrer">
+          <img src="{{ url_for('static', path='icons/documentation-external-link.svg') }}" alt="" width="16" height="16">
+          <span>Lihat dokumentasi tentang kartu siswa</span>
+        </a>
+        <button class="button secondary" type="button" hx-get="{{ url_for('admin_card_settings') }}"
+          hx-target="#modal-content" hx-swap="innerHTML" aria-haspopup="dialog">Pengaturan cetak</button>
+      </div>
     </div>
     {% include 'tables/student-results.html' %}
   </main>

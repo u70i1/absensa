@@ -7,7 +7,13 @@
 {% block content %}
 {% set active_tab = 'backups' %}{% include 'navigation/admin-header.html' %}
 <main class="content-page backup-page">
-  <div class="backup-heading"><div><h1>Cadangan Data</h1><p>Lindungi database, foto siswa, dan logo sekolah dengan cadangan terenkripsi.</p></div></div>
+  <div class="backup-heading page-documentation-heading">
+    <div><h1>Cadangan Data</h1><p>Lindungi database, foto siswa, dan logo sekolah dengan cadangan terenkripsi.</p></div>
+    <a class="documentation-link" href="https://u70i1.github.io/absensa/referensi/cadangan/" target="_blank" rel="noopener noreferrer">
+      <img src="{{ url_for('static', path='icons/documentation-external-link.svg') }}" alt="" width="16" height="16">
+      <span>Lihat dokumentasi tentang cadangan data</span>
+    </a>
+  </div>
   {% if error %}<p class="form-errors" role="alert">{{ error }}</p>{% endif %}
   {% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
   {% include 'admin/components/backup-results.html' %}

@@ -4,6 +4,12 @@
 .class-dashboard h1 {
   margin-bottom: var(--space-9);
 }
+.class-dashboard .page-documentation-heading {
+  margin-bottom: var(--space-9);
+}
+.class-dashboard .page-documentation-heading h1 {
+  margin-bottom: 0;
+}
 #class-results {
   display: flex;
   flex-direction: column;

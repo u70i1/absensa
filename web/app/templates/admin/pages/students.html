@@ -4,7 +4,13 @@
   {% set active_tab = 'students' %}
   {% include 'navigation/admin-header.html' %}
   <main class="content-page">
-    <h1>Dashboard Siswa</h1>
+    <div class="page-documentation-heading">
+      <h1>Dashboard Siswa</h1>
+      <a class="documentation-link" href="https://u70i1.github.io/absensa/referensi/siswa/" target="_blank" rel="noopener noreferrer">
+        <img src="{{ url_for('static', path='icons/documentation-external-link.svg') }}" alt="" width="16" height="16">
+        <span>Lihat dokumentasi tentang siswa</span>
+      </a>
+    </div>
     {% include 'tables/student-results.html' %}
   </main>
 {% endblock %}

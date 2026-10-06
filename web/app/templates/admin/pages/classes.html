@@ -6,7 +6,13 @@
   {% set active_tab = 'classes' %}
   {% include 'navigation/admin-header.html' %}
   <main class="content-page class-dashboard" data-dashboard-home="{{ url_for('admin_classes') }}">
-    <h1>Dashboard Kelas</h1>
+    <div class="page-documentation-heading">
+      <h1>Dashboard Kelas</h1>
+      <a class="documentation-link" href="https://u70i1.github.io/absensa/referensi/kelas/" target="_blank" rel="noopener noreferrer">
+        <img src="{{ url_for('static', path='icons/documentation-external-link.svg') }}" alt="" width="16" height="16">
+        <span>Lihat dokumentasi tentang kelas</span>
+      </a>
+    </div>
     {% include 'tables/class-results.html' %}
   </main>
 {% endblock %}

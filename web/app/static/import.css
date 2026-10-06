@@ -32,19 +32,11 @@
   align-items: flex-start;
   gap: var(--space-8);
 }
+.import-heading { flex-wrap: wrap; }
 .import-heading p, .import-section-heading h2 + p {
   margin-top: var(--space-2);
 }
-.import-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-  color: var(--color-on-primary-fixed);
-  font-size: var(--font-size-body);
-  text-decoration: underline;
-  text-underline-offset: var(--space-micro);
-}
-.import-link img, .import-error img {
+.import-error img {
   flex-shrink: 0;
 }
 .import-panel {

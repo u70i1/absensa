@@ -7,7 +7,14 @@
 .gateway-page h2 { font-size: var(--font-size-section-heading); }
 .gateway-page-heading p,
 .gateway-status-panel p { color: var(--color-on-surface-variant); line-height: 1.5; }
-.gateway-page-heading { display: grid; gap: var(--space-3); }
+.gateway-page-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+.gateway-page-heading > div { display: grid; gap: var(--space-3); }
 .gateway-status-panel { display: grid; gap: var(--space-9); }
 .gateway-status-header {
   display: flex;

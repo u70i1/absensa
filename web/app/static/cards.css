@@ -1,4 +1,4 @@
-.card-page-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+.card-page-heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 20px; margin-bottom: 24px; }
 .card-page-heading h1 { margin-bottom: 8px; }
 .card-page-heading p { color: var(--color-on-surface-variant); margin: 0; }
 .card-operations { display: flex; align-items: end; flex-wrap: wrap; gap: var(--space-5); padding: var(--space-8); margin: var(--space-8) 0; border: var(--border-subtle); border-radius: var(--radius-surface); background: var(--color-surface-container-lowest); }

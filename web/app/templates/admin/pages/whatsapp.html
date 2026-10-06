@@ -8,8 +8,14 @@
   {% include 'navigation/admin-header.html' %}
   <main class="content-page gateway-page">
     <div class="gateway-page-heading">
-      <h1>WhatsApp Gateway</h1>
-      <p>Kelola koneksi dan notifikasi ketidakhadiran kepada wali siswa.</p>
+      <div>
+        <h1>WhatsApp Gateway</h1>
+        <p>Kelola koneksi dan notifikasi ketidakhadiran kepada wali siswa.</p>
+      </div>
+      <a class="documentation-link" href="https://u70i1.github.io/absensa/memulai/administrator/notifikasi-whatsapp/" target="_blank" rel="noopener noreferrer">
+        <img src="{{ url_for('static', path='icons/documentation-external-link.svg') }}" alt="" width="16" height="16">
+        <span>Lihat dokumentasi tentang notifikasi WhatsApp</span>
+      </a>
     </div>
     {% if error %}<p class="form-errors" role="alert">{{ error }}</p>{% endif %}
     {% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
