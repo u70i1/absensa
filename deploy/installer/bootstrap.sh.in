@@ -10,7 +10,7 @@ absensa_bootstrap() {
         printf 'Pemasang Absensa: bash install.sh [direktori-instalasi]\nMemerlukan terminal, Linux amd64, dan koneksi HTTPS.\n'
         return
     fi
-    [[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] || { printf 'Gunakan Linux amd64. Windows: jalankan install.ps1; Windows Server: gunakan VM Ubuntu 24.04 LTS.\n' >&2; return 1; }
+    [[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] || { printf 'Gunakan Linux amd64. Windows: jalankan install.ps1; Windows Server: jalankan install.ps1 native.\n' >&2; return 1; }
     [[ -r /dev/tty ]] || { printf 'Jalankan dari terminal interaktif.\n' >&2; return 1; }
     # os-release is local OS metadata, never a downloaded script.
     os_id=$(sed -n 's/^ID=//p' /etc/os-release | tr -d '"')

@@ -9,7 +9,20 @@ import pytest
 from app.jobs.deployment_archive import add_tree, publish_snapshot, safe_unpack
 
 
-@pytest.mark.parametrize("name", ["../outside", "/outside", "nested/../../outside"])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "../outside",
+        "/outside",
+        "nested/../../outside",
+        "C:/outside",
+        "nested\\outside",
+        "file:stream",
+        "NUL.txt",
+        "a.",
+        "a ",
+    ],
+)
 def test_restore_rejects_path_escape(tmp_path, name):
     source = tmp_path / "archive.tar"
     with tarfile.open(source, "w") as archive:

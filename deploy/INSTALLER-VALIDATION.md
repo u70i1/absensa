@@ -1,5 +1,9 @@
 # Installer inspection and validation results
 
+This is the historical Linux/WSL installer validation record. Windows Server now
+has a native backend; its current results and field gates are recorded in
+[windows/VALIDATION.md](windows/VALIDATION.md).
+
 Date: October 2, 2026. Implementation branch: `feat/installer`.
 No changes, tags, GHCR images, or GitHub Releases were pushed or published during
 this work. See [RELEASING.md](RELEASING.md) for the first publication steps.

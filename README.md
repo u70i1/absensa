@@ -4,8 +4,8 @@ Version 1.0.0 is being prepared for its first stable release.
 
 Untuk pemasangan di sekolah, baca [panduan instalasi lengkap berbahasa Indonesia](deploy/README.md).
 Installer menyediakan rilis terverifikasi, HTTPS, cadangan, pemulihan, pembaruan,
-dan perintah pemeliharaan. Mendukung Linux amd64, Windows melalui WSL2 yang
-kompatibel, dan Windows Server melalui VM Linux.
+dan perintah pemeliharaan. Mendukung deployment Linux amd64 dan menyediakan backend native Windows Server
+2019/2022/2025 amd64. Lihat batas validasi Windows sebelum dipakai di sekolah.
 
 Cara yang disarankan adalah mengunduh dan membaca installer terlebih dahulu:
 
@@ -16,7 +16,19 @@ bash install.sh
 ```
 
 Cara cepat: `curl -fsSL https://raw.githubusercontent.com/u70i1/absensa/main/install.sh | bash`.
-Windows memakai [install.ps1](install.ps1); lihat persyaratan dalam panduan.
+### Windows Server
+
+Buka **PowerShell sebagai Administrator** dan jalankan:
+
+```powershell
+irm https://raw.githubusercontent.com/u70i1/absensa/main/install.ps1 | iex
+```
+
+Bootstrap memasang paket rilis stabil terverifikasi, runtime dan layanan Windows
+native. Binary berada di `C:\Program Files\Absensa`, data di
+`C:\ProgramData\Absensa`. Lihat [panduan Windows](deploy/windows/README.md)
+dan [status pengujian](deploy/windows/VALIDATION.md). Perintah ini memerlukan
+rilis Windows yang sudah diterbitkan; branch ini belum menerbitkan rilis.
 **Maintainer note:** The installer requires a published stable release and public
 image access. See the [release checklist](deploy/RELEASING.md) and
 [validation results](deploy/INSTALLER-VALIDATION.md) before using these commands
@@ -276,7 +288,7 @@ through fixtures; authentication tests exercise the real dependency chain.
 - [x] Caddy HTTPS for LAN access, local CA, and Cloudflare DNS-01
 - [x] Administrator password/PIN reset flow
 - [x] Encrypted backups, isolated restoration, and mandatory backups before updates
-- [x] Linux/WSL2 release installer, GHCR workflow, and provenance verification
+- [x] Linux release installer, native Windows backend, parallel release builds, and provenance verification
 - [ ] Publish the first stable release and field-test Windows and school DNS
 
 ### Testing

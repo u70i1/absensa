@@ -18,6 +18,7 @@ const QR_IMAGE_SIZE = 320; // Clear enough to scan in the admin dashboard card.
 const gateway = createGateway({
   createClient: () => new Client({
     authStrategy: new LocalAuth({ dataPath: authDir }),
+    webVersionCache: { type: "local", path: process.env.WHATSAPP_CACHE_DIR || ".wwebjs_cache" },
     puppeteer: {
       headless: true,
       ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}),

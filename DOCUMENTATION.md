@@ -35,7 +35,8 @@ Antarmuka memakai bahasa Indonesia. Mesin pencarian bawaan tidak mendukung
 `id`, sehingga `lang: en` menjadi fallback untuk mengindeks tulisan Indonesia.
 MkDocs dan Material dipin agar pembaruan dependensi dapat diperiksa sebelum dipakai.
 
-Panduan pemasangan dan pemulihan teknis tetap di [deploy/README.md](deploy/README.md)
+Panduan pemasangan dan pemulihan teknis tetap di [deploy/README.md](deploy/README.md),
+[Windows Server native](deploy/windows/README.md),
 dan [deploy/BACKUPS.md](deploy/BACKUPS.md). Situs ini ditujukan untuk pengguna
 aplikasi, dengan jalur belajar administrator dan operator.
 
@@ -53,7 +54,8 @@ masing-masing, tanpa mengasumsikan menu Pengaturan umum.
 menjalankan build strict untuk PR menuju `main` serta perubahan dokumentasi
 di `main`. Path yang dipantau: `docs/**`, `mkdocs.yml`, `requirements-docs.txt`,
 `DOCUMENTATION.md`, dan workflow itu sendiri. Pemeriksaan PR dapat berjalan
-sebelum Pages diaktifkan. Workflow rilis aplikasi tidak diubah.
+sebelum Pages diaktifkan. Workflow rilis aplikasi membangun Linux dan Windows dari tag versi yang sama;
+lihat [panduan rilis](deploy/RELEASING.md).
 
 Setelah perubahan digabungkan ke `main`, job build mengunggah artefak `site/`
 dan job deploy menerbitkannya melalui Actions resmi GitHub Pages. Job deploy
