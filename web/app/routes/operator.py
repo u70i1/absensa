@@ -1,6 +1,7 @@
 """Attendance application built on the existing scan service."""
 
 from typing import Annotated
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from app.core.access_auth import CurrentDevice, CurrentOperator, Db
@@ -91,6 +92,35 @@ def operator_app(
     before: Before = None,
 ):
     return result_response(request, db, operator, device, before=before)
+
+
+@router.get("/summary", name="operator_daily_summary")
+def daily_summary(
+    request: Request,
+    db: Db,
+    operator: CurrentOperator,
+    device: CurrentDevice,
+    name: Annotated[str, Query(max_length=100)] = "",
+    page: Annotated[int, Query(ge=1, le=1000000)] = 1,
+):
+    summary = scan_service.get_daily_summary(db, name=name, page=page)
+
+    def page_url(number: int) -> str:
+        params = {"page": number}
+        if summary["search_name"]:
+            params["name"] = summary["search_name"]
+        return f"{request.url_for('operator_daily_summary')}?{urlencode(params)}"
+
+    return templates.TemplateResponse(
+        request=request,
+        name="operator/pages/daily-summary.html",
+        context={
+            "operator_name": operator.display_name,
+            "device_name": device.username,
+            **summary,
+            "page_url": page_url,
+        },
+    )
 
 
 @router.get("/history", name="operator_history")

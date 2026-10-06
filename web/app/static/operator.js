@@ -172,10 +172,64 @@ if (scanForm) {
     input.focus();
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
-
-  document.addEventListener('error', (event) => {
-    if (!event.target.matches?.('[data-avatar-photo]')) return;
-    const avatar = event.target.closest('[data-avatar-fallback]');
-    avatar.textContent = avatar.dataset.avatarFallback;
-  }, true);
 }
+
+const absentDialog = document.getElementById('operator-absent-dialog');
+if (absentDialog) {
+  let dialogOpener;
+
+  function closeAbsentDialog() {
+    if (!absentDialog.open || absentDialog.classList.contains('is-closing')) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      absentDialog.close();
+      return;
+    }
+    absentDialog.classList.add('is-closing');
+    const animations = absentDialog.getAnimations().map((animation) => animation.finished);
+    Promise.allSettled(animations).then(() => {
+      absentDialog.close();
+      absentDialog.classList.remove('is-closing');
+    });
+  }
+
+  document.querySelector('.operator-absent-list')?.addEventListener('click', (event) => {
+    const entry = event.target.closest('[data-absent-student]');
+    if (!entry) return;
+    dialogOpener = entry;
+    const name = entry.querySelector('[data-student-name]').textContent;
+    const avatar = entry.querySelector('.operator-avatar').cloneNode(true);
+    avatar.removeAttribute('aria-hidden');
+    const photo = avatar.querySelector('img');
+    if (photo) photo.alt = `Foto ${name}`;
+    absentDialog.querySelector('[data-dialog-photo]').replaceChildren(avatar);
+    absentDialog.querySelector('[data-dialog-name]').textContent = name;
+    absentDialog.querySelector('[data-dialog-class]').textContent =
+      entry.querySelector('[data-student-class]').textContent;
+    absentDialog.querySelector('[data-dialog-nisn]').textContent =
+      entry.querySelector('[data-student-nisn]').textContent;
+    absentDialog.showModal();
+  });
+
+  absentDialog.querySelector('[data-operator-dialog-close]').addEventListener('click', closeAbsentDialog);
+  absentDialog.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    closeAbsentDialog();
+  });
+  absentDialog.addEventListener('click', (event) => {
+    const bounds = absentDialog.getBoundingClientRect();
+    if (event.target === absentDialog && (
+      event.clientX < bounds.left || event.clientX > bounds.right ||
+      event.clientY < bounds.top || event.clientY > bounds.bottom
+    )) closeAbsentDialog();
+  });
+  absentDialog.addEventListener('close', () => {
+    if (dialogOpener?.isConnected) dialogOpener.focus();
+    dialogOpener = null;
+  });
+}
+
+document.addEventListener('error', (event) => {
+  if (!event.target.matches?.('[data-avatar-photo]')) return;
+  const avatar = event.target.closest('[data-avatar-fallback]');
+  avatar.textContent = avatar.dataset.avatarFallback;
+}, true);

@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% block page_title %}Ringkasan Harian{% endblock %}
+{% block body_class %}fluid-layout operator-summary{% endblock %}
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', path='operator.css') }}">
+  <script defer src="{{ url_for('static', path='operator.js') }}"></script>
+{% endblock %}
+{% block content %}
+<header class="operator-header">
+  <a class="operator-brand" href="{{ url_for('home') }}">Absensa</a>
+  <div class="operator-session">
+    <div class="operator-identity"><strong>{{ operator_name }}</strong><span>{{ device_name }}</span></div>
+    <form method="post" action="{{ url_for('operator_logout') }}"><button class="button secondary" type="submit">Keluar</button></form>
+  </div>
+</header>
+<main class="operator-summary-layout">
+  <a class="button secondary operator-summary-back" href="{{ url_for('operator_app') }}">Kembali ke pemindai</a>
+  <div class="operator-summary-heading">
+    <div>
+      <h1>Ringkasan Harian</h1>
+      <p>Presensi {{ summary_day.strftime('%d/%m/%Y') }}</p>
+    </div>
+    <div class="operator-summary-stats" aria-label="Jumlah kehadiran hari ini">
+      <div class="operator-summary-stat"><strong>{{ attended_count }}</strong><span>Sudah hadir</span></div>
+      <div class="operator-summary-stat"><strong>{{ absent_count }}</strong><span>Belum hadir</span></div>
+    </div>
+  </div>
+  <section class="operator-absent-panel" aria-labelledby="operator-absent-title">
+    <div class="operator-absent-heading">
+      <h2 id="operator-absent-title">Siswa belum hadir</h2>
+      <form class="operator-summary-search" role="search" method="get" action="{{ url_for('operator_daily_summary') }}">
+        <label for="operator-student-search" class="sr-only">Cari nama siswa yang belum hadir</label>
+        <input id="operator-student-search" type="search" name="name" value="{{ search_name }}"
+          placeholder="Cari nama siswa" maxlength="100" autocomplete="off">
+        <button class="button secondary" type="submit">Cari</button>
+      </form>
+    </div>
+    {% if absent_students %}
+    <ul class="operator-absent-list">
+      {% for student in absent_students %}
+      <li class="operator-absent-item">
+        <button class="operator-absent-button" type="button" data-absent-student aria-haspopup="dialog">
+          {% set avatar_name = student.name %}
+          {% set avatar_id = student.id %}
+          {% set avatar_photo = student.photo_path %}
+          {% include 'operator/components/avatar.html' %}
+          <span class="operator-absent-details">
+            <strong data-student-name>{{ student.name }}</strong>
+            <span data-student-class>{{ student.class_name or 'Tanpa kelas' }}</span>
+            <span data-student-nisn>NISN {{ student.nisn }}</span>
+          </span>
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="operator-summary-empty">{% if search_name %}Tidak ada siswa yang belum hadir dengan nama tersebut.{% else %}Tidak ada siswa yang belum hadir hari ini.{% endif %}</p>{% endif %}
+    <nav class="pagination operator-summary-pagination" aria-label="Halaman siswa belum hadir">
+      <p>Menampilkan {{ start }}–{{ end }} dari {{ filtered_count }} siswa{% if search_name %} yang cocok{% endif %}</p>
+      {% if pages > 1 %}<div class="page-controls">
+        {% if page > 1 %}<a class="page-button" href="{{ page_url(page - 1) }}">Sebelumnya</a>{% endif %}
+        {% for number in page_numbers %}
+          {% if not loop.first and number > page_numbers[loop.index0 - 1] + 1 %}<span aria-hidden="true">…</span>{% endif %}
+          <a class="page-button{% if number == page %} active{% endif %}" href="{{ page_url(number) }}"
+            aria-label="Halaman {{ number }}" {% if number == page %}aria-current="page"{% endif %}>{{ number }}</a>
+        {% endfor %}
+        {% if page < pages %}<a class="page-button" href="{{ page_url(page + 1) }}">Selanjutnya</a>{% endif %}
+      </div>{% endif %}
+    </nav>
+  </section>
+</main>
+<dialog id="operator-absent-dialog" class="operator-student-dialog" aria-labelledby="operator-dialog-title">
+  <button class="operator-dialog-close" type="button" data-operator-dialog-close aria-label="Tutup detail siswa">×</button>
+  <div class="operator-dialog-photo" data-dialog-photo></div>
+  <h2 id="operator-dialog-title" data-dialog-name></h2>
+  <p data-dialog-class></p>
+  <p data-dialog-nisn></p>
+</dialog>
+{% endblock %}

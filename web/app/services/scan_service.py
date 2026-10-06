@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 tz_info = ZoneInfo(settings.timezone)
+DAILY_SUMMARY_PAGE_SIZE = 50
 
 
 def post_scan(db: Session, nisn: str):
@@ -198,11 +199,7 @@ def get_recent_history(db: Session, before: int | None = None, limit: int = 30):
 
 def get_today_history(db: Session, at: datetime | None = None, limit: int = 25):
     """Latest school-wide scans from the current local calendar day."""
-    local_tz = ZoneInfo(settings.timezone)
-    at = at or datetime.now(tz=local_tz)
-    day = at.astimezone(local_tz).date()
-    start = datetime.combine(day, time.min, tzinfo=local_tz)
-    end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=local_tz)
+    day, start, end = _local_day_bounds(at)
     filters = (ScanLog.timestamp >= start, ScanLog.timestamp < end)
     history = db.execute(
         select(
@@ -221,6 +218,83 @@ def get_today_history(db: Session, at: datetime | None = None, limit: int = 25):
     ).all()
     total = db.scalar(select(func.count(ScanLog.scan_id)).where(*filters)) or 0
     return {"recent_scans": history, "today_count": total, "history_day": day}
+
+
+def _local_day_bounds(at: datetime | None):
+    local_tz = ZoneInfo(settings.timezone)
+    at = at or datetime.now(tz=local_tz)
+    day = at.astimezone(local_tz).date()
+    start = datetime.combine(day, time.min, tzinfo=local_tz)
+    end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=local_tz)
+    return day, start, end
+
+
+def get_daily_summary(
+    db: Session, at: datetime | None = None, *, name: str = "", page: int = 1
+):
+    """Active students absent and present on the current local day."""
+    name = name.strip()
+    day, start, end = _local_day_bounds(at)
+    attended = (
+        select(ScanLog.scan_id)
+        .where(
+            ScanLog.student_id == Student.id,
+            ScanLog.timestamp >= start,
+            ScanLog.timestamp < end,
+        )
+        .exists()
+    )
+    attended_count = (
+        db.scalar(
+            select(func.count(Student.id)).where(Student.current.is_(True), attended)
+        )
+        or 0
+    )
+    active_count = (
+        db.scalar(select(func.count(Student.id)).where(Student.current.is_(True))) or 0
+    )
+    absent_count = active_count - attended_count
+    filters = [Student.current.is_(True), ~attended]
+    if name:
+        filters.append(Student.name.icontains(name, autoescape=True))
+    filtered_count = (
+        db.scalar(select(func.count(Student.id)).where(*filters))
+        if name
+        else absent_count
+    ) or 0
+    pages = max(
+        1, (filtered_count + DAILY_SUMMARY_PAGE_SIZE - 1) // DAILY_SUMMARY_PAGE_SIZE
+    )
+    page = min(page, pages)
+    absent_students = db.execute(
+        select(
+            Student.id,
+            Student.name,
+            Student.nisn,
+            Student.photo_path,
+            Class.class_name,
+        )
+        .outerjoin(Class, Class.class_id == Student.class_id)
+        .where(*filters)
+        .order_by(Class.grade, Class.class_name, Student.name, Student.id)
+        .offset((page - 1) * DAILY_SUMMARY_PAGE_SIZE)
+        .limit(DAILY_SUMMARY_PAGE_SIZE)
+    ).all()
+    return {
+        "summary_day": day,
+        "absent_students": absent_students,
+        "attended_count": attended_count,
+        "absent_count": absent_count,
+        "filtered_count": filtered_count,
+        "search_name": name,
+        "page": page,
+        "pages": pages,
+        "page_numbers": sorted(
+            {1, pages, *range(max(1, page - 2), min(pages, page + 2) + 1)}
+        ),
+        "start": (page - 1) * DAILY_SUMMARY_PAGE_SIZE + 1 if filtered_count else 0,
+        "end": min(page * DAILY_SUMMARY_PAGE_SIZE, filtered_count),
+    }
 
 
 def _admin_scan_filters(day: date, name: str):

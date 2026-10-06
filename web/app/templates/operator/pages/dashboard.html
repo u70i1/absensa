@@ -39,7 +39,10 @@
     </section>
   </div>
   <section class="recent-panel" aria-labelledby="recent-title">
-    <h2 id="recent-title">Riwayat Scan Hari Ini</h2>
+    <div class="recent-panel-heading">
+      <h2 id="recent-title">Riwayat Scan Hari Ini</h2>
+      <a class="button secondary" href="{{ url_for('operator_daily_summary') }}">Ringkasan Hari Ini</a>
+    </div>
     {% include 'operator/components/recent-scans.html' %}
   </section>
 </main>
