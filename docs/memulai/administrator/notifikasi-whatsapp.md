@@ -1,46 +1,25 @@
 # Menyiapkan notifikasi WhatsApp
 
-## Memeriksa data penerima dan kesiapan layanan
+Dokumentasi halaman ini sedang saya susun. Silakan kembali lagi nanti.
 
-<!-- TODO: Susun pemeriksaan siswa aktif, nomor wali, dan layanan yang sudah disiapkan saat pemasangan. Notifikasi yang tersedia adalah ketidakhadiran, bukan pesan otomatis setelah scan. -->
+<!--
+TODO: Ganti pesan sementara setelah halaman ini selesai ditulis.
 
-## Menautkan nomor WhatsApp sekolah
+Pengantar
+TODO: Tulis pengantar singkat untuk pembaca halaman ini.
 
-<!-- TODO: Uraikan Minta kode QR, pemindaian melalui Perangkat tertaut di WhatsApp, dan pemeriksaan status koneksi. VISUAL: status koneksi; samarkan nomor dan jangan menampilkan QR aktif. -->
+## Periksa data penerima
+TODO: Isi bagian ini.
 
-## Menyiapkan pengiriman otomatis
+## Hubungkan nomor WhatsApp sekolah
+TODO: Tambahkan gambar: {Gambar: status WhatsApp terhubung dengan nomor disamarkan}
 
-### Waktu pengiriman dan minimum kehadiran
+## Atur pemberitahuan otomatis
+TODO: Tambahkan gambar: {Gambar: pengaturan waktu, minimum kehadiran, dan templat pesan tanpa data pribadi}
 
-<!-- TODO: Uraikan pengisian dua pengaturan ini dan pemeriksaan zona waktu. -->
+## Kirim pesan uji, lalu aktifkan layanan
+TODO: Isi bagian ini.
 
-### Templat pesan dan pengiriman bertahap
-
-<!-- TODO: Uraikan variabel yang didukung dan pilihan Safe Mode dengan bahasa sederhana. Contoh pesan akan ditulis pemilik, bukan dibuat saat scaffolding. VISUAL: panel pengaturan. -->
-
-## Mengirim pesan uji
-
-<!-- TODO: Uraikan pemilihan nomor uji; tindakan ini mengirim pesan nyata ke nomor tersebut dan memakai data siswa aktif acak. -->
-
-## Mengaktifkan dan memantau layanan
-
-<!-- TODO: Uraikan tombol layanan otomatis, simpan pengaturan, dan panel Tindakan hari ini. -->
-
-## Menyesuaikan tindakan hari ini
-
-### Mengirim sekarang atau melanjutkan pengiriman
-
-<!-- TODO: Uraikan konfirmasi dan perbedaan dengan syarat jadwal otomatis; arahkan batas pengiriman ulang pada referensi. -->
-
-### Melewati hari ini atau membatalkannya
-
-<!-- TODO: Uraikan Lewati hari ini dan Batalkan tanpa mengarang kalender libur. -->
-
-### Menonaktifkan layanan atau memutuskan koneksi
-
-<!-- TODO: Bedakan tombol layanan otomatis dari Putuskan koneksi WhatsApp. -->
-
-## Jika koneksi atau pengiriman gagal
-
-- [Pemecahan masalah](../pemecahan-masalah.md)
-- [Referensi notifikasi WhatsApp](../../referensi/whatsapp.md)
+## Jika jadwal hari ini berubah
+TODO: Isi bagian ini.
+-->

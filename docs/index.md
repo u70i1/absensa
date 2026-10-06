@@ -1,7 +1,12 @@
 # Dokumentasi Absensa
 
-Panduan penggunaan Absensa untuk administrator dan operator sekolah.
-Halaman panduan masih berupa kerangka dan akan dilengkapi secara bertahap.
+Panduan Absensa sedang saya susun. Silakan kembali lagi nanti.
 
-- [Memulai](memulai/index.md)
-- [Referensi](referensi/index.md)
+<!--
+TODO: Ganti pesan sementara setelah halaman ini selesai ditulis.
+
+Pengantar
+TODO: Tulis pengantar singkat untuk pembaca halaman ini.
+
+TODO: Tambahkan bagian yang diperlukan.
+-->

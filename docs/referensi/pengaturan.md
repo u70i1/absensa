@@ -1,55 +1,43 @@
 # Pengaturan aplikasi
 
-<!-- TODO: Buat peta lokasi pengaturan yang sudah tersedia; aplikasi belum memiliki satu menu Pengaturan umum. Gunakan tautan ke referensi terkait agar aturan tidak diduplikasi. -->
+Dokumentasi halaman ini sedang saya susun. Silakan kembali lagi nanti.
+
+<!--
+TODO: Ganti pesan sementara setelah halaman ini selesai ditulis.
+
+Pengantar
+TODO: Buat peta lokasi pengaturan yang sudah tersedia; aplikasi belum memiliki satu menu Pengaturan umum. Gunakan tautan ke referensi terkait agar aturan tidak diduplikasi.
 
 ## Pengaturan yang dapat diubah administrator
+TODO: Isi bagian ini.
 
 ### Kartu siswa
-
-<!-- TODO: Ringkas lokasi Pengaturan cetak serta kelompok jarak, nama sekolah, dan logo; rincian nilai ada pada referensi kartu. -->
-
-[Pengaturan kartu siswa](kartu-siswa.md#pengaturan-cetak)
+TODO: Ringkas lokasi Pengaturan cetak serta kelompok jarak, nama sekolah, dan logo; rincian nilai ada pada referensi kartu.
 
 ### WhatsApp
-
-<!-- TODO: Ringkas lokasi status otomatis, waktu, minimum kehadiran, templat, dan pengiriman bertahap. -->
-
-[Pengaturan notifikasi WhatsApp](whatsapp.md#pengaturan-layanan-otomatis)
+TODO: Ringkas lokasi status otomatis, waktu, minimum kehadiran, templat, dan pengiriman bertahap.
 
 ### Cadangan
-
-<!-- TODO: Ringkas lokasi jadwal, aktif/nonaktif, dan jumlah cadangan yang disimpan. -->
-
-[Pengaturan cadangan](cadangan.md#pengaturan-jadwal-dan-retensi)
+TODO: Ringkas lokasi jadwal, aktif/nonaktif, dan jumlah cadangan yang disimpan.
 
 ### Akun operator dan perangkat
-
-<!-- TODO: Ringkas lokasi nama, status, kata sandi/PIN, dan reset koneksi. -->
-
-[Akun dan perangkat tepercaya](akun-dan-perangkat.md)
+TODO: Ringkas lokasi nama, status, kata sandi/PIN, dan reset koneksi.
 
 ## Pengaturan saat pemasangan yang memengaruhi pengguna
+TODO: Isi bagian ini.
 
 ### Alamat aplikasi dan akses jaringan
-
-<!-- TODO: Jelaskan bahwa alamat/HTTPS disiapkan saat pemasangan dan bagaimana pengguna mendapatkan alamat yang benar; tidak ada menu web untuk mengubah jaringan. -->
+TODO: Jelaskan bahwa alamat/HTTPS disiapkan saat pemasangan dan bagaimana pengguna mendapatkan alamat yang benar; tidak ada menu web untuk mengubah jaringan.
 
 ### Zona waktu sekolah
-
-<!-- TODO: Jelaskan dampak zona waktu pada batas hari presensi, waktu log, jadwal WhatsApp, dan cadangan. Perubahan dilakukan melalui konfigurasi pemasangan, bukan dashboard. -->
+TODO: Jelaskan dampak zona waktu pada batas hari presensi, waktu log, jadwal WhatsApp, dan cadangan. Perubahan dilakukan melalui konfigurasi pemasangan, bukan dashboard.
 
 ### Masa sesi administrator dan kesiapan layanan
-
-<!-- TODO: Jelaskan pengaruh masa sesi serta layanan WhatsApp/cadangan yang disiapkan saat pemasangan, tanpa daftar variabel lingkungan atau petunjuk mengelola server. -->
-
-[Panduan pemasangan terpisah](https://github.com/u70i1/absensa/blob/main/deploy/README.md)
+TODO: Jelaskan pengaruh masa sesi serta layanan WhatsApp/cadangan yang disiapkan saat pemasangan, tanpa daftar variabel lingkungan atau petunjuk mengelola server.
 
 ## Menyimpan perubahan dan memeriksa hasil
-
-<!-- TODO: Jelaskan perbedaan pratinjau dan pengaturan tersimpan pada kartu serta pemeriksaan status setelah perubahan layanan. VISUAL: pesan penyimpanan dari layar yang sebenarnya. -->
+TODO: Jelaskan perbedaan pratinjau dan pengaturan tersimpan pada kartu serta pemeriksaan status setelah perubahan layanan. VISUAL: pesan penyimpanan dari layar yang sebenarnya.
 
 ## Terkait
-
-- [Persiapan penggunaan](../memulai/persiapan.md)
-- [Pencatatan dan aturan presensi](presensi.md)
-- [Pemecahan masalah](../memulai/pemecahan-masalah.md)
+TODO: Isi bagian ini.
+-->
