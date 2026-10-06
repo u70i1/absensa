@@ -6,7 +6,6 @@ import stat
 import tarfile
 
 import pytest
-
 from app.jobs.deployment_archive import add_tree, publish_snapshot, safe_unpack
 
 
@@ -75,9 +74,11 @@ def test_snapshot_rejects_other_symlinks(tmp_path):
     profile = tmp_path / "profile"
     profile.mkdir()
     (profile / "unexpected").symlink_to("/outside")
-    with tarfile.open(tmp_path / "archive.tar", "w") as archive:
-        with pytest.raises(ValueError, match="Berkas khusus"):
-            add_tree(archive, profile, "whatsapp")
+    with (
+        tarfile.open(tmp_path / "archive.tar", "w") as archive,
+        pytest.raises(ValueError, match="Berkas khusus"),
+    ):
+        add_tree(archive, profile, "whatsapp")
 
 
 def test_snapshot_publication_persists_directory_entry(tmp_path, monkeypatch):

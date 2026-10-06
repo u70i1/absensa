@@ -4,9 +4,9 @@ import argparse
 import logging
 import time
 
-from app.jobs.worker_health import beat
 from app.core.config import settings
 from app.db.session import SessionLocal
+from app.jobs.worker_health import beat
 from app.services.whatsapp_gateway_service import WhatsAppGateway
 from app.services.whatsapp_notification_service import NotificationProblem, run_daily
 
@@ -40,7 +40,7 @@ def main() -> None:
         except NotificationProblem as exc:
             beat("scheduler")
             logger.warning("WhatsApp notification not started: %s", exc.detail)
-        except Exception:
+        except Exception:  # noqa: BLE001 - keep the scheduler alive after failures
             logger.error(
                 "Penjadwal WhatsApp gagal; periksa database dan layanan WhatsApp."
             )

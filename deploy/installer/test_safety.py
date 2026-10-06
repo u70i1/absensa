@@ -81,9 +81,11 @@ class InstallerTests(unittest.TestCase):
             returncode=1,
             stderr="all predefined address pools have been fully subnetted\nprivate-secret",
         )
-        with patch.object(manage.subprocess, "run", return_value=result):
-            with self.assertRaisesRegex(release.InstallError, "subnet") as error:
-                manage.run(["docker", "compose", "up"])
+        with (
+            patch.object(manage.subprocess, "run", return_value=result),
+            self.assertRaisesRegex(release.InstallError, "subnet") as error,
+        ):
+            manage.run(["docker", "compose", "up"])
         self.assertNotIn("private-secret", str(error.exception))
 
     def test_missing_persistent_volume_stops_without_creating_empty_storage(self):
@@ -91,9 +93,9 @@ class InstallerTests(unittest.TestCase):
         with (
             patch.object(manage, "run", return_value=Mock(returncode=1)) as command,
             patch.object(obj, "compose") as compose,
+            self.assertRaisesRegex(release.InstallError, "Volume data"),
         ):
-            with self.assertRaisesRegex(release.InstallError, "Volume data"):
-                manage.Installation.ensure_storage(obj)
+            manage.Installation.ensure_storage(obj)
         compose.assert_not_called()
         self.assertEqual(command.call_args.args[0][:3], ["docker", "volume", "inspect"])
         self.assertEqual(len(command.call_args.args[0]), 7)
@@ -161,9 +163,9 @@ class InstallerTests(unittest.TestCase):
         with (
             patch.object(obj, "ensure_no_orphans"),
             patch.object(obj, "compose", side_effect=compose) as commands,
+            self.assertRaises(release.InstallError),
         ):
-            with self.assertRaises(release.InstallError):
-                obj.snapshot(resume=False)
+            obj.snapshot(resume=False)
         self.assertIn(
             unittest.mock.call("start", "web", "scheduler", "caddy"),
             commands.call_args_list,
@@ -182,9 +184,9 @@ class InstallerTests(unittest.TestCase):
                 side_effect=release.InstallError("masih berjalan"),
             ),
             patch.object(obj, "compose") as compose,
+            self.assertRaises(release.InstallError),
         ):
-            with self.assertRaises(release.InstallError):
-                obj.snapshot()
+            obj.snapshot()
         compose.assert_not_called()
         self.assertNotIn("transaction", obj.state)
 
@@ -216,9 +218,9 @@ class InstallerTests(unittest.TestCase):
             patch.object(obj, "write_runtime"),
             patch.object(obj, "migrate", side_effect=release.InstallError("gagal")),
             patch.object(obj, "compose") as compose,
+            self.assertRaises(release.InstallError),
         ):
-            with self.assertRaises(release.InstallError):
-                obj.finish_update()
+            obj.finish_update()
         saved = json.loads(obj.state_path.read_text())
         self.assertEqual(saved["version"], "v1.0.1")
         self.assertEqual(saved["transaction"]["backup"], "/safe/archive.absfull")
@@ -495,7 +497,7 @@ class ReleaseTests(unittest.TestCase):
                 patch.object(
                     release,
                     "download",
-                    side_effect=lambda url, p, limit: p.write_text(json.dumps(data)),
+                    side_effect=lambda url, p, limit, data=data: p.write_text(json.dumps(data)),
                 ),
                 self.assertRaises(release.InstallError),
             ):

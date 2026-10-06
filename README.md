@@ -1,6 +1,6 @@
-# Absensa - School Attendance System (Working Name!)
+# Absensa - School Attendance System
 
-An ongoing project.
+Version 1.0.0 is being prepared for its first stable release.
 
 Untuk pemasangan di sekolah, baca [panduan instalasi lengkap berbahasa Indonesia](deploy/README.md).
 Installer menyediakan rilis terverifikasi, HTTPS, cadangan, pemulihan, pembaruan,
@@ -17,11 +17,10 @@ bash install.sh
 
 Cara cepat: `curl -fsSL https://raw.githubusercontent.com/u70i1/absensa/main/install.sh | bash`.
 Windows memakai [install.ps1](install.ps1); lihat persyaratan dalam panduan.
-**Maintainer note:** The `main` URLs will be available after the installer changes
-are merged and the first stable release is published. See the
-[release checklist](deploy/RELEASING.md) and
-[validation results](deploy/INSTALLER-VALIDATION.md). This implementation work
-has not published any changes or releases.
+**Maintainer note:** The installer requires a published stable release and public
+image access. See the [release checklist](deploy/RELEASING.md) and
+[validation results](deploy/INSTALLER-VALIDATION.md) before using these commands
+for a school installation. Preparing v1.0.0 does not publish the release.
 
 For local development, see [Run Absensa locally](RUNNING.md).
 
