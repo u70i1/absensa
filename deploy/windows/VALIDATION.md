@@ -39,6 +39,15 @@ with a pinned vcpkg baseline, builds the same Caddy/Cloudflare versions as Linux
 installs wheels with `--only-binary`, installs locked npm modules, and builds and
 extracts the real release ZIP. It verifies its entire file inventory and checksum.
 
+Before compiling native dependencies, `test-service-account.ps1` creates a unique
+stopped SCM fixture and uses the production host operation twice to verify a
+virtual account, service SID resolution and unchanged manual/stopped state. It
+deletes only that fixture. This catches account configuration failures such as
+error 1057 without rebuilding the package first. Virtual accounts require a NULL
+password; `host.ps1` omits `sc.exe`'s password option rather than passing an empty
+string. This regression test requires Windows Administrator privileges and has
+not been executed on the Linux development host.
+
 The Administrator service smoke test uses new roots containing spaces under
 Program Files/ProgramData and refuses pre-existing Absensa service names. It
 registers actual services, uses actual virtual identities/ACLs, initializes a

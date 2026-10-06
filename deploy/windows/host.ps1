@@ -45,7 +45,11 @@ if ($Action -eq 'platform') {
     $acl.AddAccessRule($rule)
     Set-Acl -LiteralPath $Path -AclObject $acl
 } elseif ($Action -eq 'service') {
-    & "$env:SystemRoot\System32\sc.exe" config $Name obj= "NT SERVICE\$Name" password= '""'
+    # Virtual accounts require lpPassword=NULL in ChangeServiceConfig, not an
+    # empty string. Omit password= so sc.exe passes NULL (also avoids PS 5.1
+    # native empty-argument quoting). Windows manages this account's password.
+    # https://learn.microsoft.com/windows/win32/api/winsvc/nf-winsvc-changeserviceconfigw
+    & "$env:SystemRoot\System32\sc.exe" config $Name obj= "NT SERVICE\$Name"
     if ($LASTEXITCODE -ne 0) { throw 'Identitas layanan gagal diatur.' }
     & "$env:SystemRoot\System32\sc.exe" sidtype $Name unrestricted
     if ($LASTEXITCODE -ne 0) { throw 'SID layanan gagal diatur.' }
