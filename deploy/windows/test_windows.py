@@ -127,6 +127,75 @@ class WindowsTests(unittest.TestCase):
             smoke.run_smoke()
         self.assertIs(caught.exception, error)
 
+    def test_smoke_ports_skip_busy_and_reserved_ports_and_release_probes(self):
+        probes = []
+
+        def socket_fixture():
+            probe = Mock()
+            probes.append(probe)
+            if len(probes) in (1, 3):
+                probe.bind.side_effect = OSError("busy or excluded port")
+            return probe
+
+        with patch.object(smoke.socket, "socket", side_effect=socket_fixture):
+            ports = smoke.fixture_ports()
+        self.assertEqual(
+            ports,
+            {
+                "https_port": 20001,
+                "pg_port": 20003,
+                "web_port": 20004,
+                "bridge_port": 20005,
+            },
+        )
+        for probe in probes:
+            probe.close.assert_called_once_with()
+        probes[1].bind.assert_called_once_with(("0.0.0.0", 20001))
+        probes[3].bind.assert_called_once_with(("127.0.0.1", 20003))
+
+    def test_smoke_port_exhaustion_fails_without_reusing_an_unavailable_port(self):
+        probe = Mock()
+        probe.bind.side_effect = OSError("reserved")
+        with (
+            patch.object(smoke.socket, "socket", return_value=probe),
+            self.assertRaisesRegex(RuntimeError, "No free ports"),
+        ):
+            smoke.fixture_ports()
+        self.assertEqual(probe.close.call_count, 1000)
+
+    def test_smoke_install_overrides_only_fixture_config_and_preserves_cli(self):
+        ports = {
+            "https_port": 20001,
+            "pg_port": 20003,
+            "web_port": 20004,
+            "bridge_port": 20005,
+        }
+        observed = {}
+        fixture = SimpleNamespace(new_config=manage.new_config)
+
+        def main():
+            observed["config"] = fixture.new_config("absensa.test", ports["https_port"])
+            observed["argv"] = sys.argv.copy()
+
+        fixture.main = main
+        arguments = [
+            "--root",
+            "C:/Program Files/Absensa Integration Test",
+            "--no-admin",
+            "install",
+        ]
+        with (
+            patch.dict(sys.modules, {"manage": fixture}),
+            patch.object(sys, "argv", ["-c", json.dumps(ports), *arguments]),
+        ):
+            # Execute only our checked-in child entry point, never downloaded input.
+            exec(compile(smoke.INSTALL_FIXTURE, "<install fixture>", "exec"), {})  # noqa: S102
+        self.assertEqual(observed["argv"], ["manage.py", *arguments])
+        for key, port in ports.items():
+            self.assertEqual(observed["config"][key], port)
+        self.assertIs(fixture.new_config, manage.new_config)
+        self.assertEqual(manage.new_config("absensa.test")["pg_port"], 55438)
+
     def test_host_validation_rejects_caddy_injection(self):
         for name in (
             "https://foo",

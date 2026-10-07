@@ -44,7 +44,9 @@ jobs:
         if: failure()
         with:
           name: windows-2022-diagnostics
-          path: C:/ProgramData/Absensa Integration Test/logs
+          path: |
+            ${{ runner.temp }}/absensa-windows-diagnostics
+            C:/ProgramData/Absensa Integration Test/logs
           retention-days: 7
 
   windows-2025:
@@ -60,5 +62,7 @@ jobs:
         if: failure()
         with:
           name: windows-2025-diagnostics
-          path: C:/ProgramData/Absensa Integration Test/logs
+          path: |
+            ${{ runner.temp }}/absensa-windows-diagnostics
+            C:/ProgramData/Absensa Integration Test/logs
           retention-days: 7

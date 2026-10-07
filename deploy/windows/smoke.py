@@ -5,15 +5,64 @@ school servers. Exercises actual SCM identities, packaged runtimes, TLS and Post
 """
 
 import argparse
+import contextlib
 import importlib.util
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
+
+# Only the CI install process overrides defaults. The verified package and its
+# production CLI are unchanged; later repair/update processes read saved config.
+INSTALL_FIXTURE = """
+import json, sys
+import manage
+ports = json.loads(sys.argv[1])
+original = manage.new_config
+def fixture_config(*args, **kwargs):
+    config = original(*args, **kwargs)
+    config.update(ports)
+    return config
+sys.argv = ["manage.py", *sys.argv[2:]]
+manage.new_config = fixture_config
+try:
+    manage.main()
+finally:
+    manage.new_config = original
+"""
+
+
+def fixture_ports():
+    """Find distinct bindable test ports, holding each until all are selected."""
+    ports = {}
+    with contextlib.ExitStack() as stack:
+        candidates = iter(range(20000, 21000))
+        for role in ("https_port", "pg_port", "web_port", "bridge_port"):
+            for port in candidates:
+                probe = socket.socket()
+                try:
+                    if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                        probe.setsockopt(
+                            socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1
+                        )
+                    probe.bind(
+                        ("0.0.0.0" if role == "https_port" else "127.0.0.1", port)
+                    )
+                except OSError:
+                    probe.close()
+                    continue
+                stack.callback(probe.close)
+                ports[role] = port
+                break
+            else:
+                raise RuntimeError("No free ports for the isolated Windows fixture")
+    # Release immediately before install; production still checks every bind.
+    return ports
 
 
 def check(command, **kwargs):
@@ -87,10 +136,14 @@ def main():
             ]
         )
     python = package / "python/python.exe"
+    ports = fixture_ports()
+    print("Native smoke fixture ports: " + json.dumps(ports), flush=True)
     check(
         [
             python,
-            package / "manage.py",
+            "-c",
+            INSTALL_FIXTURE,
+            json.dumps(ports),
             "--root",
             root,
             "--data",
@@ -98,7 +151,7 @@ def main():
             "--hostname",
             "absensa.test",
             "--port",
-            "18443",
+            str(ports["https_port"]),
             "--tls",
             "internal",
             "--timezone",

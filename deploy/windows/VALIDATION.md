@@ -1,5 +1,36 @@
 # Native Windows validation record
 
+## Follow-up: CI port conflict and missing artifacts
+
+A subsequent Windows 2022 smoke run reported TCP 55438 unavailable before the
+installer created `operations.log`. The original artifact upload therefore had
+no files to collect. The log alone does not establish whether a listener,
+excluded port range, or another bind restriction caused that failure.
+
+The CI fixture now selects four distinct bindable ports in 20000–20999 and
+injects them only into its initial install process. The package bytes and
+production defaults are unchanged. The saved fixture configuration carries those
+ports through repair, update and restore. Port conflicts still stop installation;
+no other process or service is stopped to free a port. There remains a small
+bind/start race, so a later conflict still fails with diagnostics.
+
+`run-smoke.ps1` records stdout, stderr and exit status in
+`RUNNER_TEMP/absensa-windows-diagnostics` independently of the installation.
+Both installer jobs and the release job upload that directory along with
+existing service logs on failure. This covers errors before `operations.log`
+exists, including Python startup/argument failures. No configuration, recovery
+key or database directory is added to the upload paths.
+
+Local checks: 32 Windows backend tests passed, including busy/reserved port
+selection, exhaustion, and fixture-only configuration injection; Ruff and
+formatting passed; actionlint passed; PowerShell 7/Linux parsed all scripts and
+passed bootstrap fixtures. A separate PowerShell 7/Linux subprocess probe
+verified stdout/stderr files, spaces and exit codes 7/0 in the actual wrapper.
+`test-smoke-logging.ps1` adds the equivalent Python subprocess check to native
+PowerShell 5.1 CI before expensive builds. These changes still need a new
+Windows 2022/2025 Actions run; the older successful runs below do not validate
+this fix. Hold release tagging until those runs pass.
+
 ## v1.1.0 release preparation — 2026-10-07
 
 Preparation started from a clean checkout and fast-forwarded local `main` to

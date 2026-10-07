@@ -175,7 +175,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-release-diagnostics
-          path: C:/ProgramData/Absensa Integration Test/logs
+          path: |
+            ${{ runner.temp }}/absensa-windows-diagnostics
+            C:/ProgramData/Absensa Integration Test/logs
           retention-days: 7
 
   release:

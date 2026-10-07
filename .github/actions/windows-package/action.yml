@@ -21,6 +21,8 @@ runs:
         if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         python -m unittest discover -s deploy/windows -p 'test_*.py'
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & ./deploy/windows/test-smoke-logging.ps1
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     - name: Test native virtual service account registration
       shell: powershell
       run: |
@@ -56,5 +58,5 @@ runs:
     - name: Native services, migrations, TLS, backup, restore and update drill
       shell: powershell
       run: |
-        python deploy/windows/smoke.py "$env:RUNNER_TEMP\Absensa Package With Spaces"
+        & ./deploy/windows/run-smoke.ps1 -Package "$env:RUNNER_TEMP\Absensa Package With Spaces" -LogDirectory "$env:RUNNER_TEMP\absensa-windows-diagnostics"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
