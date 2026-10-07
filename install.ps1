@@ -16,7 +16,7 @@ function Protect-AbsensaDirectory {
     $full = [IO.Path]::GetFullPath($Path)
     $parent = $full
     while ($parent) {
-        if ((Test-Path -LiteralPath $parent) -and ((Get-Item -LiteralPath $parent).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Direktori instalasi tidak boleh melewati tautan/junction.' }
+        if ((Test-Path -LiteralPath $parent) -and ((Get-Item -LiteralPath $parent -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Direktori instalasi tidak boleh melewati tautan/junction.' }
         $parent = [IO.Path]::GetDirectoryName($parent)
     }
     [IO.Directory]::CreateDirectory($full) | Out-Null
