@@ -27,8 +27,10 @@ Periksa layanan dan versi terpasang:
 [Petunjuk lengkap Windows dan pemeliharaan](https://github.com/u70i1/absensa/blob/main/deploy/windows/README.md)
 memuat backup, restore, update, log, firewall dan uninstall.
 [Status pengujian Windows](https://github.com/u70i1/absensa/blob/main/deploy/windows/VALIDATION.md)
-harus ditinjau sebelum produksi, terutama Server 2019. Kode baru dan paket Windows
-harus sudah diterbitkan sebagai rilis stabil sebelum perintah dapat dipakai.
+mencatat uji CI native yang lulus pada 2022/2025. Server 2019 diterima installer,
+tetapi belum tervalidasi saat runtime; uji mesin nyata diperlukan sebelum produksi.
+Paket Windows mulai tersedia pada v1.1.0 setelah rilis stabil diterbitkan.
+Rilis v1.0.0 hanya menyediakan paket Linux.
 
 ## Linux
 

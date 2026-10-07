@@ -85,7 +85,7 @@ def main():
             unpack(*map(Path, sys.argv[2:5]))
         else:
             raise ValueError("Operasi tidak dikenal")
-    except Exception:
+    except Exception:  # noqa: BLE001 - CLI boundary must not disclose backup secrets.
         raise SystemExit(
             "Cadangan/pemulihan gagal. Periksa kunci, integritas arsip, izin dan ruang disk. Data sumber dipertahankan."
         ) from None

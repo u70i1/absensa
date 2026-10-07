@@ -6,11 +6,11 @@ dengan instalasi sekolah. Installer tidak memerlukan Git, Node.js, Python paket
 aplikasi, PostgreSQL, atau Chromium di komputer sekolah; Linux memakai image; Windows Server memakai paket runtime native.
 Python standar di Linux hanya dipakai untuk pengelolaan instalasi.
 
-**Status distribusi:** kode installer dan workflow disiapkan dalam branch
-`feat/native-windows-server` untuk backend Windows. URL `main` di bawah baru tersedia setelah perubahan digabungkan.
-Instalasi memerlukan sedikitnya satu rilis stabil lengkap yang telah diterbitkan
-pengelola. Installer berhenti jika rilis belum tersedia; tidak beralih ke kode
-pengembangan. Lihat [panduan pengelola rilis](RELEASING.md).
+**Status distribusi:** v1.1.0 menambahkan paket Windows native pada jalur Linux
+yang sudah diterbitkan melalui v1.0.0. Bootstrap Windows memerlukan rilis stabil
+lengkap v1.1.0 atau lebih baru; draft belum dapat dipasang. Installer berhenti
+jika paket platform belum tersedia dan tidak beralih ke kode pengembangan.
+Lihat [panduan pengelola rilis](RELEASING.md).
 
 ## 1. Pilih komputer yang sesuai
 
@@ -18,18 +18,19 @@ pengembangan. Lihat [panduan pengelola rilis](RELEASING.md).
 | --- | --- |
 | Ubuntu Server 22.04/24.04 LTS amd64 | Jalur Linux, pemasangan dependensi melalui APT bila disetujui |
 | Debian 12/13 amd64 | Jalur Linux, Python 3.10+ dan Docker Linux |
-| Windows Server 2019/2022/2025 amd64 | Backend native, PowerShell 5.1, Windows services; lihat [validasi](windows/VALIDATION.md) |
+| Windows Server 2022/2025 amd64 | Backend native, PowerShell 5.1, Windows services; uji CI native lulus, lihat [validasi](windows/VALIDATION.md) |
+| Windows Server 2019 amd64 | Diterima installer; runtime belum tervalidasi, wajib uji mesin nyata sebelum produksi |
 | Windows desktop, macOS, ARM/32-bit | Tidak ditangani bootstrap native Windows |
 
 Server Linux dan Windows native kembali menyala melalui layanan sistem tanpa
 login pengguna. ARM belum didukung.
 
-Sediakan minimal 2 vCPU, RAM 4 GB untuk Docker (8 GB disarankan), RAM tersedia
+Untuk Linux, sediakan minimal 2 vCPU, RAM 4 GB untuk Docker (8 GB disarankan), RAM tersedia
 minimal 2 GB saat pemasangan, dan ruang kosong minimal 10 GB. Sediakan disk 40 GB
 atau lebih, disesuaikan jumlah foto dan retensi cadangan. Batas ini adalah syarat
-awal, bukan hasil uji kapasitas sekolah besar. Windows native disarankan RAM 8 GB. Gunakan SSD dan UPS bila ada.
+awal, bukan hasil uji kapasitas sekolah besar. Untuk Windows native, sediakan 4 core dan RAM 8 GB. Gunakan SSD dan UPS bila ada.
 
-Docker Engine minimal 24 dan Compose plugin minimal 2.24 diperlukan. Gunakan
+Khusus jalur Linux, Docker Engine minimal 24 dan Compose plugin minimal 2.24 diperlukan. Gunakan
 versi yang masih menerima pembaruan keamanan. Instalasi baru membutuhkan internet
 ke GitHub, GHCR, Docker Hub, repositori APT, dan Sigstore. Absensi dengan HTTPS
 lokal dapat berjalan tanpa internet; WhatsApp dan perpanjangan sertifikat publik
@@ -99,14 +100,17 @@ Buka **PowerShell sebagai Administrator** dan jalankan:
 irm https://raw.githubusercontent.com/u70i1/absensa/main/install.ps1 | iex
 ```
 
-Server 2019/2022/2025 amd64 menjalankan Absensa secara native. Bootstrap memilih
+Windows Server amd64 menjalankan Absensa secara native; Server 2019 masih
+memerlukan validasi runtime sebelum produksi. Bootstrap memilih
 rilis stabil yang sama dengan Linux, memeriksa SHA-256 dan provenance, lalu
 memasang semua runtime, PostgreSQL, migrasi, Caddy dan enam layanan Windows.
 Tidak perlu WSL, VM, Docker Desktop, Git, atau clone repositori.
 
 Ikuti [panduan Windows](windows/README.md) untuk direktori, akun layanan, firewall,
-CA lokal, backup/restore/update, uninstall, dan batas pengujian. Perintah Linux
-pada bagian berikut tidak digunakan untuk mengelola layanan Windows.
+CA lokal, backup/restore/update, uninstall, dan batas pengujian. Bagian 4 dan
+seterusnya menjelaskan deployment Linux, termasuk konfigurasi HTTPS, perintah,
+cadangan, pemulihan, dan pembaruan. Gunakan panduan Windows
+untuk mengelola layanan native.
 
 ## 4. Server Linux bersama
 

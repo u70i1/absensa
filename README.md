@@ -1,11 +1,15 @@
 # Absensa - School Attendance System
 
-Version 1.0.0 is being prepared for its first stable release.
+Version 1.1.0 is being prepared, introducing native Windows Server deployment.
+The published v1.0.0 release remains unchanged.
 
 Untuk pemasangan di sekolah, baca [panduan instalasi lengkap berbahasa Indonesia](deploy/README.md).
 Installer menyediakan rilis terverifikasi, HTTPS, cadangan, pemulihan, pembaruan,
 dan perintah pemeliharaan. Mendukung deployment Linux amd64 dan menyediakan backend native Windows Server
-2019/2022/2025 amd64. Lihat batas validasi Windows sebelum dipakai di sekolah.
+2022/2025 amd64. Server 2019 diterima oleh installer tetapi belum tervalidasi
+saat runtime. Lihat batas validasi Windows sebelum dipakai di sekolah.
+
+### Linux
 
 Cara yang disarankan adalah mengunduh dan membaca installer terlebih dahulu:
 
@@ -16,6 +20,7 @@ bash install.sh
 ```
 
 Cara cepat: `curl -fsSL https://raw.githubusercontent.com/u70i1/absensa/main/install.sh | bash`.
+
 ### Windows Server
 
 Buka **PowerShell sebagai Administrator** dan jalankan:
@@ -28,11 +33,13 @@ Bootstrap memasang paket rilis stabil terverifikasi, runtime dan layanan Windows
 native. Binary berada di `C:\Program Files\Absensa`, data di
 `C:\ProgramData\Absensa`. Lihat [panduan Windows](deploy/windows/README.md)
 dan [status pengujian](deploy/windows/VALIDATION.md). Perintah ini memerlukan
-rilis Windows yang sudah diterbitkan; branch ini belum menerbitkan rilis.
+rilis Windows v1.1.0 atau lebih baru yang sudah diterbitkan. v1.0.0 hanya
+menyediakan paket Linux.
+
 **Maintainer note:** The installer requires a published stable release and public
 image access. See the [release checklist](deploy/RELEASING.md) and
 [validation results](deploy/INSTALLER-VALIDATION.md) before using these commands
-for a school installation. Preparing v1.0.0 does not publish the release.
+for a school installation. Preparing v1.1.0 does not publish the release.
 
 For local development, see [Run Absensa locally](RUNNING.md).
 

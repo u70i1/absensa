@@ -42,6 +42,8 @@ def main():
         "RELEASING.md": "deploy/RELEASING.md",
         "BACKUPS.md": "deploy/BACKUPS.md",
         "INSTALLER-VALIDATION.md": "deploy/INSTALLER-VALIDATION.md",
+        "windows/README.md": "deploy/windows/README.md",
+        "windows/VALIDATION.md": "deploy/windows/VALIDATION.md",
     }.items():
         guide = guide.replace(
             f"]({relative})",

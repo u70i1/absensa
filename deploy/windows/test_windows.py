@@ -1,16 +1,16 @@
 """Platform-independent safety tests; native service integration lives in smoke.py."""
 
-import importlib.util
 import contextlib
+import importlib.util
 import io
 import json
-import sys
 import subprocess
+import sys
 import tempfile
 import unittest
-from types import SimpleNamespace
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 HERE = Path(__file__).resolve().parent
@@ -30,6 +30,17 @@ smoke = load("windows_smoke", "smoke.py")
 
 
 class WindowsTests(unittest.TestCase):
+    def test_packaged_guide_links_to_its_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package.write_guide(root, "v1.1.0")
+            guide = (root / "PANDUAN.md").read_text(encoding="utf-8")
+            self.assertNotIn("](VALIDATION.md)", guide)
+            self.assertIn(
+                "](https://github.com/u70i1/absensa/blob/v1.1.0/deploy/windows/VALIDATION.md)",
+                guide,
+            )
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -219,9 +230,11 @@ class WindowsTests(unittest.TestCase):
 
     def test_registration_refuses_existing_service_from_another_installation(self):
         registry = self.registration_fixture(existing=True, owned=False)
-        with patch.dict(sys.modules, {"winreg": registry}):
-            with self.assertRaisesRegex(manage.OperationError, "instalasi lain"):
-                self.obj.register()
+        with (
+            patch.dict(sys.modules, {"winreg": registry}),
+            self.assertRaisesRegex(manage.OperationError, "instalasi lain"),
+        ):
+            self.obj.register()
         self.obj.sc.assert_not_called()
         self.obj.run.assert_not_called()
         self.obj.host.assert_not_called()

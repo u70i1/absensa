@@ -331,11 +331,11 @@ class Installation:
         return bool(re.search(r":\s+4\s", result.stdout))
 
     def set_start(self, automatic):
-        for role in SERVICES:
+        for role, name in SERVICES.items():
             if self.exists(role):
                 self.sc(
                     "config",
-                    SERVICES[role],
+                    name,
                     "start=",
                     "auto" if automatic else "demand",
                 )

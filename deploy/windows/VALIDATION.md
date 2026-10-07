@@ -1,10 +1,107 @@
 # Native Windows validation record
 
+## v1.1.0 release preparation — 2026-10-07
+
+Preparation started from a clean checkout and fast-forwarded local `main` to
+`b29fe7f6eb` (the existing native Windows merge). No local VM, WSL, Windows guest,
+or native Windows execution was used. The checks below validate this preparation
+working tree; the CI links identify the earlier tested commits explicitly.
+
+### Verified GitHub Actions evidence
+
+- [Main installer run 37505387710](https://github.com/u70i1/absensa/actions/runs/37505387710),
+  source `b29fe7f6eb`: `safety`, `windows-2022`, and `windows-2025` **success**.
+- [Windows branch run 37506216193](https://github.com/u70i1/absensa/actions/runs/37506216193),
+  source `c394996ae4`: the same three jobs **success**.
+- [Published v1.0.0 release run 37398416209](https://github.com/u70i1/absensa/actions/runs/37398416209)
+  **success**. Its published assets are Linux-only: TAR.GZ, `SHA256SUMS`,
+  and `provenance.jsonl`. They were inspected read-only and not replaced.
+
+Native jobs execute the shared `windows-package` action: PowerShell 5.1,
+service-account regression, dependency builds, real ZIP/inventory verification,
+and `smoke.py` for services, migrations, CA-verified TLS, persistent paths with
+spaces, backup/restore, candidate update, migration failure/repair, Cairo,
+libarchive, and sandboxed Chrome under the WhatsApp service identity.
+
+### Checks run for this preparation
+
+Commands run from the repository root unless stated otherwise:
+
+| Command | Result |
+| --- | --- |
+| `python3 -m unittest discover -s deploy/installer -p 'test_*.py'` | 36 passed; Linux package checksums/provenance rejection, generation and pipe tests |
+| `python3 -m unittest discover -s deploy/windows -p 'test_*.py'` | 29 passed; configuration, quoting, service/update safety and packaged guide links |
+| `python3 -m unittest discover -s deploy -p 'test_*.py'` | 4 passed |
+| `bash -n install.sh` | Passed |
+| `python3 deploy/installer/build_bootstrap.py` then `git diff --exit-code -- install.sh` | Passed; generated bootstrap unchanged |
+| `web/.venv/bin/ruff check web/app web/tests deploy` | Passed after minimal lint corrections in Windows-related code |
+| `web/.venv/bin/ruff format --check deploy/windows/manage.py deploy/windows/package.py deploy/windows/smoke.py deploy/windows/test_windows.py deploy/windows/windows_archive.py deploy/installer/package_release.py deploy/installer/test_safety.py web/app/jobs/worker_health.py web/app/services/backup_service.py` | 9 files passed |
+| `npm test --prefix services/whatsapp` | 13 passed with mocked WhatsApp clients |
+| `.venv-docs/bin/python -m mkdocs build --strict` | Passed |
+| `git diff --check` | Passed |
+
+Already-cached Linux containers supplied optional tools without downloads:
+
+```bash
+docker run --rm --pull=never --network none -v /home/shared/Codes/absensa:/repo:ro -w /repo koalaman/shellcheck:stable install.sh
+docker run --rm --pull=never --network none -v /home/shared/Codes/absensa:/repo:ro -w /repo rhysd/actionlint:latest -shellcheck=
+docker run --rm --pull=never --network none -v /home/shared/Codes/absensa:/repo:ro -w /repo mcr.microsoft.com/powershell:7.5-ubuntu-24.04 pwsh -NoProfile -File deploy/windows/test-bootstrap.ps1
+```
+
+All three passed. PowerShell 7 on Linux checks parsing, checksum/ZIP safety,
+source-download fallback fixtures and DLL-name fixtures; it does **not** validate
+PowerShell 5.1, SCM, NTFS ACLs or PE binaries. Those are covered by native CI.
+
+The full application suite used an isolated, disposable PostgreSQL 18.4 container
+from the cached image, limited to 256 MB and one CPU, on loopback port 55439.
+The existing PostgreSQL container was untouched. From `web/`:
+
+```bash
+DATABASE_URL=postgresql+psycopg2://unused:unused@127.0.0.1:1/unused \
+TEST_DATABASE_URL=postgresql+psycopg2://postgres:absensa-release-test@127.0.0.1:55439/absensa_release_test \
+ABSENSA_ALLOW_TEST_DATABASE_RESET=1 ABSENSA_TEST_REAL_BACKUP=1 .venv/bin/pytest -q
+```
+
+**692 passed, no skips**, including real Alembic upgrade/downgrade, browser tests,
+and encrypted backup/restore with PostgreSQL 18 clients. The password above is
+only the disposable fixture password. Initial sandbox runs could not open local
+sockets; the blocked pytest run was interrupted and both affected suites rerun
+with local access. Those environment failures are not counted as passing runs.
+
+Additional local checks: YAML parsing for workflows/actions and Compose files;
+relative link targets in 14 operational documents; and execution of the release
+validation shell guard with fixtures for a new version, an existing release, and
+an API failure (all behaved as expected). Conflict-marker and version/WSL/TODO
+searches were reviewed. Remaining TODOs are the existing roadmap and hidden
+comments in explicitly unfinished user documentation, not installer instructions.
+The accidentally tracked WhatsApp cache was removed and cache/session paths
+ignored. `install.ps1` is maintained directly; packaging copies its exact bytes.
+
+### Limits and publication gates
+
+The preparation commit itself has not been pushed or run on Windows CI. Its
+changes repair documentation, packaged guide links, CI guards and lint findings;
+they do not change the deployment architecture or dependency pins. Review its
+normal `installer.yml` run when pushed. The tag workflow must still build the
+actual v1.1.0 artifacts, run Linux integration and native Windows 2025 smoke,
+and verify real OIDC attestations before creating a draft. Full Linux container
+smoke was not repeated locally; `release.yml` → `build-linux` covers it using
+newly built release images.
+
+**Readiness for a release tag is not approval to publish production support.**
+Keep the resulting release a draft until the field gates below are satisfied.
+Server 2019 has no runtime result or CI runner. Reboot without login, real WhatsApp
+pairing/reconnect/delivery, Cloudflare issuance/renewal, clean hosts without build
+tools, cross-platform restore and uninstall/recovery still require native field
+evidence. No current GitHub Actions job fully covers those field checks.
+
+## Historical implementation record — 2026-10-06
+
 Implementation date: 2026-10-06. Development host: Linux amd64. Branch:
 `feat/native-windows-server`. No Windows machine was available to this session.
 No merge, push, tag, or GitHub Release was performed.
 
-## Executed locally
+### Executed locally in the original implementation
 
 - Existing installer safety/packaging/pipe tests: 36 passed.
 - Existing legacy deployment tests: 4 passed.
@@ -31,7 +128,10 @@ No merge, push, tag, or GitHub Release was performed.
   Python, Node, PostgreSQL, Chrome, GitHub CLI and WinSW. Executing their PE binaries
   was not possible on this Linux host.
 
-## CI implemented, not claimed executed here
+## Native CI coverage
+
+The following checks passed in the linked pre-preparation runs. A successful
+run applies to its recorded source SHA, not automatically to later commits.
 
 `installer.yml` runs the shared Windows build/test action separately on
 `windows-2022` and `windows-2025`. It runs PowerShell **5.1**, builds Cairo/libarchive
@@ -45,8 +145,8 @@ virtual account, service SID resolution and unchanged manual/stopped state. It
 deletes only that fixture. This catches account configuration failures such as
 error 1057 without rebuilding the package first. Virtual accounts require a NULL
 password; `host.ps1` omits `sc.exe`'s password option rather than passing an empty
-string. This regression test requires Windows Administrator privileges and has
-not been executed on the Linux development host.
+string. This regression test requires Windows Administrator privileges. It passed in
+the native CI runs linked above; it cannot execute on the Linux development host.
 
 The Administrator service smoke test uses new roots containing spaces under
 Program Files/ProgramData and refuses pre-existing Absensa service names. It
@@ -98,7 +198,10 @@ school pilot. Do not run the CI smoke script on an existing school server.
    VLANs, existing IIS/e-Rapor port conflicts, local DNS and certificate trust on
    actual phones/scanners. Test Cloudflare issuance and renewal with an approved
    zone/token separately.
-7. Real previous stable → next stable update using public attested artifacts.
+7. Public attested installation of v1.1.0. For later Windows releases, test
+   previous stable → next stable update using public attested artifacts. v1.1.0
+   is the first Windows package; v1.0.0 has no Windows upgrade source. CI currently
+   exercises updates with locally staged candidate packages.
    Kill power/process at each journal phase; test disk full, corrupt ZIP, invalid
    checksum/attestation, unavailable internet and missing data volumes.
 8. Restore real encrypted `.absbackup` Linux → Windows and Windows → Linux,

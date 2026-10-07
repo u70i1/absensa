@@ -17,8 +17,20 @@ jobs:
       - name: Validate tag and test installer
         env:
           RELEASE_TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          if git grep -n -I -E '^([<]{7} |[=]{7}$|[>]{7} )'; then
+            echo 'Unresolved merge conflict markers found.'
+            exit 1
+          fi
+          # Fail before any image tag or artifact can replace an existing release.
+          # Include drafts; an API failure must also stop the release build.
+          gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq '.[].tag_name' > "$RUNNER_TEMP/absensa-release-tags"
+          if grep -Fxq "$RELEASE_TAG" "$RUNNER_TEMP/absensa-release-tags"; then
+            echo "Release $RELEASE_TAG already exists. Use a new version; do not overwrite it."
+            exit 1
+          fi
           python3 -m unittest discover -s deploy/installer -p 'test_*.py'
           bash -n install.sh
           shellcheck install.sh

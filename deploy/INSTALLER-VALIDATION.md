@@ -6,7 +6,7 @@ has a native backend; its current results and field gates are recorded in
 
 Date: October 2, 2026. Implementation branch: `feat/installer`.
 No changes, tags, GHCR images, or GitHub Releases were pushed or published during
-this work. See [RELEASING.md](RELEASING.md) for the first publication steps.
+this work. See [RELEASING.md](RELEASING.md) for the current release procedure.
 
 ## Pre-merge revalidation — October 3, 2026
 

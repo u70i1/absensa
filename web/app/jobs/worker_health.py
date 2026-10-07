@@ -1,8 +1,8 @@
 """Private worker heartbeat; no network endpoint or secrets."""
 
 import os
-import tempfile
 import sys
+import tempfile
 import time
 from pathlib import Path
 

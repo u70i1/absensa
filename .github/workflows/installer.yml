@@ -13,6 +13,10 @@ jobs:
         with: {persist-credentials: false}
       - name: Test and lint scripts
         run: |
+          if git grep -n -I -E '^([<]{7} |[=]{7}$|[>]{7} )'; then
+            echo 'Unresolved merge conflict markers found.'
+            exit 1
+          fi
           python3 -m unittest discover -s deploy/installer -p 'test_*.py'
           python3 -m unittest discover -s deploy/windows -p 'test_*.py'
           bash -n install.sh

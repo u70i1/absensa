@@ -59,7 +59,7 @@ def main():
     for name in ("PostgreSQL", "Web", "Scheduler", "Backup", "WhatsApp", "Caddy"):
         if (
             subprocess.run(
-                ["sc.exe", "query", "Absensa" + name], capture_output=True
+                ["sc.exe", "query", "Absensa" + name], capture_output=True, check=False
             ).returncode
             != 1060
         ):

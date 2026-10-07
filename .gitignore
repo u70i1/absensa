@@ -26,3 +26,7 @@ dist/
 # Documentation environment and generated website
 /.venv-docs/
 /site/
+
+# Local WhatsApp browser cache and paired sessions
+services/whatsapp/.wwebjs_cache/
+services/whatsapp/.wwebjs_auth/

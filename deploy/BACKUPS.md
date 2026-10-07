@@ -1,6 +1,7 @@
 # Automated backups and offline recovery
 
-For the release installer, use the Indonesian [backup and recovery guide](README.md#7-cadangan).
+For the Linux release installer, use the Indonesian [backup and recovery guide](README.md#7-cadangan).
+For native Windows services, use the [Windows guide](windows/README.md#cadangan-dan-pemulihan).
 The commands below describe the legacy source deployment and application-only
 `.absbackup` format. Release installations additionally support encrypted full
 `.absfull` snapshots with WhatsApp, Caddy and deployment configuration.

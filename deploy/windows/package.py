@@ -159,6 +159,15 @@ def archive(root, output):
     return result
 
 
+def write_guide(root, version):
+    guide = (HERE / "README.md").read_text(encoding="utf-8")
+    guide = guide.replace(
+        "](VALIDATION.md)",
+        f"](https://github.com/u70i1/absensa/blob/{version}/deploy/windows/VALIDATION.md)",
+    )
+    (root / "PANDUAN.md").write_text(guide, encoding="utf-8")
+
+
 def build(args):
     if sys.platform != "win32" or sys.version_info[:2] != (3, 13):
         raise SystemExit("Build requires Windows amd64 and CPython 3.13")
@@ -212,7 +221,7 @@ def build(args):
     ):
         shutil.copyfile(HERE / name, root / name)
     shutil.copyfile(ROOT / "install.ps1", root / "install.ps1")
-    shutil.copyfile(HERE / "README.md", root / "PANDUAN.md")
+    write_guide(root, args.version)
     ignore = shutil.ignore_patterns(
         "__pycache__", "*.pyc", ".env", "node_modules", "photos", "backups", ".wwebjs*"
     )

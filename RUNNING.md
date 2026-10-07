@@ -4,8 +4,9 @@ This guide covers local development. School deployments should use the
 [release installer with HTTPS](deploy/README.md). Do not use the development
 HTTP configuration in production.
 
-These are developer instructions. For native Windows Server 2019/2022/2025 installations with bundled runtimes
+These are developer instructions. For native Windows Server installations with bundled runtimes
 and Windows services, use the [Windows deployment guide](deploy/windows/README.md).
+Windows 2022/2025 have native CI coverage; Server 2019 runtime validation remains pending.
 Production installation starts with one PowerShell command and requires no clone.
 
 Absensa has five running parts: PostgreSQL, FastAPI, the WhatsApp bridge,

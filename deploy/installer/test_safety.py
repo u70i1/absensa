@@ -469,6 +469,12 @@ class ReleaseTests(unittest.TestCase):
             self.assertIn(
                 "https://github.com/u70i1/absensa/blob/v1.2.3/deploy/BACKUPS.md", guide
             )
+            for name in ("README.md", "VALIDATION.md"):
+                self.assertNotIn(f"](windows/{name})", guide)
+                self.assertIn(
+                    f"https://github.com/u70i1/absensa/blob/v1.2.3/deploy/windows/{name}",
+                    guide,
+                )
             manifest = json.loads((destination / "release/release.json").read_text())
             self.assertEqual(manifest["version"], "v1.2.3")
             self.assertTrue(
@@ -497,7 +503,9 @@ class ReleaseTests(unittest.TestCase):
                 patch.object(
                     release,
                     "download",
-                    side_effect=lambda url, p, limit, data=data: p.write_text(json.dumps(data)),
+                    side_effect=lambda url, p, limit, data=data: p.write_text(
+                        json.dumps(data)
+                    ),
                 ),
                 self.assertRaises(release.InstallError),
             ):

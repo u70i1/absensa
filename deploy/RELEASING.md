@@ -4,32 +4,51 @@ The project's Git remote is `git@github.com:u70i1/absensa.git`; its discovered
 default branch is `refs/remotes/origin/main`. The installer pins this repository
 identity. Forks must update the verifier, workflows, and bootstrap URLs together.
 
-## Before the first release
+## Preparing v1.1.0
 
-1. Review and merge the native Windows changes into `main` after Linux and both
-   Windows installer jobs pass and the required Windows field tests are recorded.
-2. Make the repository public so Raw files, anonymous release downloads, and
-   public Sigstore attestations are available. Enable Actions with package,
-   attestation, and OIDC permissions scoped to the release workflow. Protect
-   workflow changes and release tags with rulesets and owner review. Never run
-   untrusted pull request code with release credentials.
-3. Allow the workflow to build the GHCR images `absensa-web`, `absensa-backup`,
-   `absensa-whatsapp`, and `absensa-caddy`. After their initial creation, set each
-   package's visibility to **public**. `GITHUB_TOKEN` is used only in Actions;
-   school installations must not require GHCR login or a personal access token.
-4. Choose a `vMAJOR.MINOR.PATCH` version, then create and push its tag on the
-   reviewed commit **after owner authorization**. The implementation work has
-   not pushed any changes.
-5. `release.yml` validates one tag, then independently builds `build-linux` and
-   `build-windows`. Linux retains digest-pinned GHCR images, BuildKit provenance,
-   SBOM and container smoke tests. Windows builds a ready-to-run ZIP on
-   `windows-2025` and runs native service/migration/TLS/backup/update tests.
-   The `release` job requires **both** jobs to succeed, re-verifies checksums and
-   attestations, then creates **one draft** GitHub Release. Installers ignore drafts.
-6. Check smoke test results, source commit metadata, public image access, and
-   anonymous downloads. Complete the release notes and publish the draft as a
-   stable release. Then test the Raw installation commands on a clean VM.
-   These code changes do not mean that a release has already been published.
+v1.0.0 is already published and remains immutable. v1.1.0 introduces the native
+Windows package alongside the existing Linux container deployment. Preparing a
+commit, creating a tag, creating a draft, and publishing are separate steps.
+
+1. Review the release-preparation commit on `main`, run the maintainer checks
+   below, and inspect `installer.yml` results for `safety`, `windows-2022` and
+   `windows-2025`. See [Windows evidence and limitations](windows/VALIDATION.md).
+2. Confirm the repository and existing GHCR packages (`absensa-web`,
+   `absensa-backup`, `absensa-whatsapp`, `absensa-caddy`) remain public. Retain
+   Actions package, attestation and OIDC permissions. Protect workflow changes
+   and release tags; never give untrusted pull requests release credentials.
+3. After reviewing the commit, the maintainer creates the next tag:
+
+   ```bash
+   git tag -a v1.1.0 -m "Absensa v1.1.0"
+   git push origin v1.1.0
+   ```
+
+   Confirm `HEAD` is the intended `main` commit first. Never move or recreate
+   `v1.0.0`. Pushing a tag triggers the release workflow even if the commit has
+   not yet been pushed as a branch; keep remote `main` synchronized through the
+   normal review process.
+4. `release.yml` validates the version and refuses a tag with an existing release
+   (including a draft) before building images. It then runs `build-linux` and
+   `build-windows`. Linux builds digest-pinned GHCR images with provenance/SBOMs
+   and runs its container smoke test. Windows builds the ready-to-run ZIP and
+   runs native package/service/migration/TLS/backup/restore/update drills on
+   `windows-2025`. Pre-tag installer CI covers both 2022 and 2025.
+5. The `release` job requires **both builds to succeed**, rechecks both checksum
+   files and all three attested subjects (Linux archive, Windows ZIP,
+   Windows bootstrap), then creates **one draft**. Installers ignore drafts and
+   prereleases.
+6. Before publishing, inspect the tag-run results, package metadata, notes,
+   provenance, public image access, and [Windows field gates](windows/VALIDATION.md).
+   Keep the release a draft while those gates remain open. Test anonymous asset
+   downloads and the public bootstrap after publication on clean native hosts;
+   no local VM or WSL is required. School installations need no GitHub/GHCR login.
+
+A tag run may be retried after a transient build failure while no release exists.
+Once a draft exists, review that artifact rather than rebuilding the same version.
+Never replace published tags, images, checksums or release assets; use a new
+version for corrections. A repository ruleset must prevent tag deletion/movement;
+the workflow cannot stop an owner from bypassing repository settings.
 
 Required assets:
 
@@ -71,7 +90,7 @@ Do not publish the draft until the [Windows field gates](windows/VALIDATION.md)
 are recorded, including Server 2019 PostgreSQL/Chromium startup and a reboot.
 Build success alone does not establish that a clean school machine works.
 
-The archive contains `manage.py`, `release.py`, `compose.yml`, `release.json`, and
+The Linux archive contains `manage.py`, `release.py`, `compose.yml`, `release.json`, and
 an operator guide. Application images are not built on school servers. Python
 packages follow the project's existing dependency pins; the existing Faker
 version range needs review if byte-for-byte reproducible builds are required.
@@ -100,6 +119,8 @@ schema or state format require an explicit, tested migrator before incrementing
 
 ```bash
 python3 -m unittest discover -s deploy/installer -p 'test_*.py'
+python3 -m unittest discover -s deploy/windows -p 'test_*.py'
+python3 -m unittest discover -s deploy -p 'test_*.py'
 bash -n install.sh
 shellcheck install.sh
 python3 deploy/installer/build_bootstrap.py
@@ -107,7 +128,10 @@ git diff --exit-code -- install.sh
 ```
 
 `install.sh` is generated from `bootstrap.sh.in` and `release.py`; do not edit the
-embedded verifier directly. Pull request CI runs PowerShell 5.1 validation and native package/service drills
+embedded verifier directly.
+`install.ps1` is maintained directly and copied byte-for-byte into the Windows
+ZIP and release assets by `deploy/windows/package.py`; it has no generator.
+Pull request CI runs PowerShell 5.1 validation and native package/service drills
 on Windows 2022 and 2025. Real Server 2019 remains an explicit field gate.
 Actions are pinned to reviewed commit SHAs. Dependabot tracks Actions and base
 images. Review dependency changes alongside build results; do not assume major
