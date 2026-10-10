@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim
+FROM node:25-bookworm-slim
 ENV NODE_ENV=production PUPPETEER_SKIP_DOWNLOAD=true \
     CHROME_PATH=/usr/bin/chromium BRIDGE_HOST=0.0.0.0 \
     WHATSAPP_AUTH_DIR=/app/.wwebjs_auth
