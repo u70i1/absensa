@@ -29,6 +29,7 @@ def load(name, filename):
 manage = load("windows_manage", "manage.py")
 package = load("windows_package", "package.py")
 smoke = load("windows_smoke", "smoke.py")
+runtime = load("windows_runtime", "runtime.py")
 
 
 class WindowsTests(unittest.TestCase):
@@ -61,6 +62,43 @@ class WindowsTests(unittest.TestCase):
             "initialized": True,
         }
         self.obj.save()
+
+    def test_service_interrupt_is_clean_but_crashes_propagate(self):
+        for role in ("scheduler", "backup", "caddy", "whatsapp"):
+            with (patch.object(sys, "argv", ["runtime", "--data", str(self.data), "--role", role]),
+                  patch.object(runtime, "run", side_effect=KeyboardInterrupt),
+                  contextlib.redirect_stdout(io.StringIO()) as output):
+                runtime.main()
+            self.assertIn("Service stop requested", output.getvalue())
+        with (patch.object(sys, "argv", ["runtime", "--data", str(self.data), "--role", "backup"]),
+              patch.object(runtime, "run", side_effect=RuntimeError("actual crash")),
+              self.assertRaisesRegex(RuntimeError, "actual crash")):
+            runtime.main()
+        with (patch.object(sys, "argv", ["runtime", "--data", str(self.data), "--role", "maintenance", "alembic"]),
+              patch.object(runtime, "run", side_effect=KeyboardInterrupt),
+              self.assertRaises(KeyboardInterrupt)):
+            runtime.main()
+
+    def test_child_interrupt_waits_for_graceful_shutdown(self):
+        for code, expected in ((0, 0), (0xC000013A, 0), (7, 7)):
+            child = Mock()
+            child.wait.side_effect = [KeyboardInterrupt, code]
+            with patch.object(runtime.subprocess, "Popen") as popen:
+                popen.return_value.__enter__.return_value = child
+                self.assertEqual(runtime.run_child(["fixture"], self.data), expected)
+            child.wait.assert_called_with(timeout=100)
+            child.terminate.assert_not_called()
+            child.kill.assert_not_called()
+
+    def test_child_shutdown_timeout_is_bounded_and_reported(self):
+        child = Mock()
+        child.wait.side_effect = [KeyboardInterrupt, subprocess.TimeoutExpired("fixture", 100), 0]
+        with (patch.object(runtime.subprocess, "Popen") as popen,
+              contextlib.redirect_stdout(io.StringIO()) as output):
+            popen.return_value.__enter__.return_value = child
+            self.assertEqual(runtime.run_child(["fixture"], self.data), 0)
+        child.terminate.assert_called_once()
+        self.assertIn("timed out", output.getvalue())
 
     def test_configuration_secrets_independent_and_secure_cookies(self):
         a = self.obj.config

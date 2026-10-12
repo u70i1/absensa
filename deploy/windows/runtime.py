@@ -50,6 +50,29 @@ def prepare(data, role="web"):
     return env
 
 
+def run_child(command, cwd):
+    # WinSW sends CTRL_C_EVENT to the console process tree before its 120s
+    # timeout. Give Caddy/Node time to flush and close their own resources.
+    with subprocess.Popen(command, cwd=cwd) as child:
+        try:
+            return child.wait()
+        except KeyboardInterrupt:
+            print("Service stop requested; waiting for child shutdown.", flush=True)
+            try:
+                code = child.wait(timeout=100)
+            except subprocess.TimeoutExpired:
+                print("Child shutdown timed out; terminating child.", flush=True)
+                child.terminate()
+                try:
+                    child.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait()
+                return 0
+            # STATUS_CONTROL_C_EXIT may be returned signed or unsigned on Windows.
+            return 0 if code in (0, -2, 0xC000013A, -1073741510) else code
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", type=Path, required=True)
@@ -60,6 +83,15 @@ def main():
     )
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args()
+    try:
+        run(args)
+    except KeyboardInterrupt:
+        if args.role == "maintenance":
+            raise
+        print(f"Service stop requested: {args.role}.", flush=True)
+
+
+def run(args):
     prepare(args.data, args.role)
     if args.role in {"whatsapp", "caddy"}:
         if args.role == "whatsapp":
@@ -78,7 +110,7 @@ def main():
                 "caddyfile",
             ]
             cwd = args.data / "caddy"
-        raise SystemExit(subprocess.call(command, cwd=cwd))
+        raise SystemExit(run_child(command, cwd))
     modules = {
         "web": "uvicorn",
         "scheduler": "app.jobs.whatsapp_notifications",
