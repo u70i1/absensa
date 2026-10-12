@@ -273,7 +273,8 @@ class Installation:
         return self.release / "python/python.exe"
 
     def run(
-        self, args, *, input=None, env=None, check=True, timeout=900, operation=None
+        self, args, *, input=None, env=None, check=True, timeout=900, operation=None,
+        expected_codes=(0,),
     ):
         result = subprocess.run(
             [str(a) for a in args],
@@ -286,7 +287,7 @@ class Installation:
             timeout=timeout,
             check=False,
         )
-        if result.returncode:
+        if result.returncode not in expected_codes:
             operation = operation or Path(args[0]).name
             # Log redacted diagnostics; process arguments may contain private paths.
             message = result.stdout + result.stderr
@@ -340,14 +341,16 @@ class Installation:
         )
 
     def exists(self, role):
-        result = self.sc("query", SERVICES[role], check=False)
+        result = self.sc("query", SERVICES[role], check=False, expected_codes=(0, 1060))
         if result.returncode not in (0, 1060):
             raise OperationError("Status layanan tidak dapat diperiksa.")
         return result.returncode == 0
 
     def running(self, role):
-        result = self.sc("query", SERVICES[role], check=False)
-        return bool(re.search(r":\s+4\s", result.stdout))
+        result = self.sc("query", SERVICES[role], check=False, expected_codes=(0, 1060))
+        if result.returncode not in (0, 1060):
+            raise OperationError("Status layanan tidak dapat diperiksa: " + SERVICES[role])
+        return result.returncode == 0 and bool(re.search(r":\s+4\s", result.stdout))
 
     def set_start(self, automatic):
         for role, name in SERVICES.items():
@@ -363,7 +366,7 @@ class Installation:
         for role in reversed(roles):
             if not self.exists(role):
                 continue
-            result = self.sc("stop", SERVICES[role], check=False)
+            result = self.sc("stop", SERVICES[role], check=False, expected_codes=(0, 1062))
             if result.returncode not in (0, 1062):
                 raise OperationError(
                     "Layanan tidak dapat dihentikan: " + SERVICES[role]

@@ -95,6 +95,35 @@ class WindowsTests(unittest.TestCase):
         for key in ("pg_password", "db_password", "bridge_token", "backup_key"):
             self.assertNotIn(self.obj.config[key], log)
 
+    def test_expected_scm_codes_do_not_create_error_logs(self):
+        missing = subprocess.CompletedProcess([], 1060, stdout="missing", stderr="")
+        stopped = subprocess.CompletedProcess([], 1062, stdout="stopped", stderr="")
+        query = subprocess.CompletedProcess([], 0, stdout="STATE : 1 STOPPED", stderr="")
+        with (patch.dict(manage.os.environ, {"SystemRoot": "C:/Windows"}),
+              patch.object(manage.subprocess, "run", side_effect=[missing, missing, stopped, query])):
+            self.assertFalse(self.obj.exists("web"))
+            self.assertFalse(self.obj.running("web"))
+            with patch.object(self.obj, "exists", return_value=True):
+                self.obj.stop(("web",))
+        self.assertFalse((self.data / "logs/operations.log").exists())
+
+    def test_unexpected_scm_codes_are_logged_and_fail(self):
+        (self.data / "logs").mkdir()
+        for method in (self.obj.exists, self.obj.running):
+            result = subprocess.CompletedProcess([], 5, stdout="Access denied", stderr="")
+            with (patch.dict(manage.os.environ, {"SystemRoot": "C:/Windows"}),
+                  patch.object(manage.subprocess, "run", return_value=result),
+                  self.assertRaises(manage.OperationError)):
+                method("web")
+        log = (self.data / "logs/operations.log").read_text()
+        self.assertIn("exit 5", log)
+        self.assertIn("Access denied", log)
+        # An expected status is scoped to its operation, not ignored globally.
+        result = subprocess.CompletedProcess([], 1062, stdout="unexpected", stderr="")
+        with (patch.object(manage.subprocess, "run", return_value=result),
+              self.assertRaises(manage.OperationError)):
+            self.obj.run(["sc.exe", "start", "AbsensaWeb"])
+
     def test_smoke_initial_failure_prints_only_operations_log_and_preserves_error(self):
         fixture = self.path / "Absensa Integration Test"
         (fixture / "logs").mkdir(parents=True)
