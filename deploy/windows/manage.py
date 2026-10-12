@@ -755,6 +755,11 @@ class Installation:
         self.app("alembic", "upgrade", "head")
 
     def admin(self, username=None):
+        self.guard()
+        if not self.state.get("initialized"):
+            raise OperationError("Instalasi belum selesai. Jalankan repair sebelum membuat administrator.")
+        self.start_services(("postgres",))
+        self.wait_database()
         count = self.pg(
             "psql",
             "-XAt",
@@ -925,6 +930,7 @@ class Installation:
                     self.diagnostic(f"Finalization cleanup failed: {type(exc).__name__}: {exc}")
             raise
         say(
+            f"Administrator pertama (jika belum ada): & '{self.root / 'absensa.ps1'}' admin\n"
             f"Absensa berhasil dipasang: {self.state['version']}\nBuka: {self.environment('web')['CORS_ORIGIN']}/admin\nPengelolaan: & '{self.root / 'absensa.ps1'}' status\nLog: {self.data / 'logs'}"
         )
 
@@ -1402,8 +1408,6 @@ def main():
                 ):
                     obj.complete()
             elif args.action == "admin":
-                obj.guard()
-                obj.start_services(("postgres",))
                 obj.admin()
             elif args.action == "logs":
                 role = args.arguments[0] if args.arguments else "web"

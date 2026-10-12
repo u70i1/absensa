@@ -218,3 +218,21 @@ memasang ulang versi yang tercatat dan menggunakan data/rahasia yang dipertahank
 5. Bila unduhan/attestation ditolak, periksa akses GitHub/Sigstore dan jam server.
    Jangan melewati checksum atau mematikan TLS. Rilis tanpa paket Windows lengkap
    tidak dapat dipasang melalui bootstrap baru.
+
+### Administrator pertama setelah perbaikan
+
+Instalasi baru menawarkan pembuatan administrator setelah seluruh pemeriksaan
+lulus. Jika instalasi terputus atau menggunakan `--no-admin`, jalankan di
+Windows PowerShell sebagai Administrator:
+
+```powershell
+& 'C:\Program Files\Absensa\absensa.ps1' repair
+& 'C:\Program Files\Absensa\absensa.ps1' admin
+```
+
+Perintah `admin` meminta nama dan sandi secara interaktif, memakai validasi dan
+hash sandi aplikasi, dan hanya membuat akun bila tabel administrator kosong.
+Akun yang sudah ada tidak diubah. `repair` tidak membuat atau mereset akun.
+Transaksi migrasi/pemulihan yang belum selesai tetap memblokir pembuatan akun;
+selesaikan pemulihan sesuai panduan. Jangan mengedit `state.json` untuk melewati
+perlindungan ini.

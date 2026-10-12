@@ -629,6 +629,48 @@ class WindowsTests(unittest.TestCase):
         self.assertIn("transaction", self.obj.state)
         self.assertEqual(self.obj.set_start.call_args.args, (False,))
 
+    def test_admin_bootstrap_after_repair_uses_existing_application(self):
+        self.obj.storage_check = Mock()
+        self.obj.start_services = Mock()
+        self.obj.wait_database = Mock()
+        self.obj.pg = Mock(return_value=SimpleNamespace(stdout="0\n"))
+        self.obj.app = Mock()
+        with patch.object(manage.getpass, "getpass", return_value="school-test-password"):
+            self.obj.admin("schooladmin")
+        self.obj.app.assert_called_once_with(
+            "scripts.create_admin", "--first-only", "--password-stdin", "schooladmin",
+            input="school-test-password\n")
+        self.obj.start_services.assert_called_once_with(("postgres",))
+        self.obj.wait_database.assert_called_once()
+        self.obj.pg.return_value.stdout = "1\n"
+        self.obj.app.reset_mock()
+        with patch.object(manage.getpass, "getpass") as password:
+            self.obj.admin("schooladmin")
+        password.assert_not_called()
+        self.obj.app.assert_not_called()
+
+    def test_admin_never_runs_during_migration_or_recovery(self):
+        self.obj.pg = Mock()
+        self.obj.start_services = Mock()
+        for phase in ("install", "migration", "repair", "finalize", "restore", "restored"):
+            self.obj.state["transaction"] = {"phase": phase}
+            with self.assertRaisesRegex(manage.OperationError, "repair"):
+                self.obj.admin("schooladmin")
+        self.obj.pg.assert_not_called()
+        self.obj.start_services.assert_not_called()
+
+    def test_admin_rejects_invalid_password_before_application_call(self):
+        self.obj.storage_check = Mock()
+        self.obj.start_services = Mock()
+        self.obj.wait_database = Mock()
+        self.obj.pg = Mock(return_value=SimpleNamespace(stdout="0"))
+        self.obj.app = Mock()
+        for passwords in (("short",), ("long-test-password", "different-test-password")):
+            with (patch.object(manage.getpass, "getpass", side_effect=passwords),
+                  self.assertRaisesRegex(manage.OperationError, "Sandi")):
+                self.obj.admin("schooladmin")
+        self.obj.app.assert_not_called()
+
     def test_reinstall_repairs_missing_binaries_without_rotating_secrets(self):
         from argparse import Namespace
 
