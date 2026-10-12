@@ -899,18 +899,31 @@ class Installation:
             say(self.redact("\n".join(log.read_text(encoding="utf-8", errors="replace").splitlines()[-30:])))
 
     def complete(self):
-        self.set_start(False)
+        # Keep a durable recovery journal until both health and SCM configuration
+        # succeed. A failed/partial automatic-start change must remain repairable.
+        self.state.setdefault("transaction", {"phase": "finalize"})
+        self.state["autostart"] = False
+        self.save()
+        pending = self.state.copy()
         try:
+            self.set_start(False)
             self.start_services()
             self.health()
-        except Exception:
-            self.stop(APPLICATION)
+            self.set_start(True)
+            self.state["initialized"] = True
+            self.state["autostart"] = True
+            self.state.pop("transaction", None)
+            self.save()
+        except (Exception, KeyboardInterrupt):
+            self.state = pending
+            # Cleanup must not hide the original health/SCM failure. The journal
+            # is still on disk if final publication failed.
+            for cleanup in (lambda: self.set_start(False), lambda: self.stop(APPLICATION)):
+                try:
+                    cleanup()
+                except Exception as exc:
+                    self.diagnostic(f"Finalization cleanup failed: {type(exc).__name__}: {exc}")
             raise
-        self.state["initialized"] = True
-        self.state["autostart"] = True
-        self.state.pop("transaction", None)
-        self.save()
-        self.set_start(True)
         say(
             f"Absensa berhasil dipasang: {self.state['version']}\nBuka: {self.environment('web')['CORS_ORIGIN']}/admin\nPengelolaan: & '{self.root / 'absensa.ps1'}' status\nLog: {self.data / 'logs'}"
         )
@@ -1038,6 +1051,10 @@ class Installation:
 
     def finish(self):
         self.storage_check()
+        self.state.setdefault("transaction", {"phase": "repair"})
+        self.state["autostart"] = False
+        self.save()
+        self.set_start(False)
         self.stop()
         self.configure()
         self.initialize_database()

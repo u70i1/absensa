@@ -553,8 +553,81 @@ class WindowsTests(unittest.TestCase):
         with self.assertRaises(manage.OperationError):
             self.obj.complete()
         self.obj.stop.assert_called_once_with(manage.APPLICATION)
-        self.obj.set_start.assert_called_once_with(False)
+        self.assertEqual([c.args for c in self.obj.set_start.call_args_list], [(False,), (False,)])
         self.assertEqual(self.obj.state["transaction"]["phase"], "migration")
+
+    def test_finalization_scm_failure_keeps_durable_journal_then_repair_succeeds(self):
+        self.obj.state.update(initialized=False, transaction={"phase": "install"})
+        self.obj.start_services = Mock()
+        self.obj.health = Mock()
+        self.obj.stop = Mock()
+        self.obj.set_start = Mock(side_effect=[None, manage.OperationError("SCM failed"), None])
+        with self.assertRaisesRegex(manage.OperationError, "SCM failed"):
+            self.obj.complete()
+        saved = json.loads(self.obj.state_path.read_text())
+        self.assertFalse(saved["initialized"])
+        self.assertFalse(saved["autostart"])
+        self.assertEqual(saved["transaction"], {"phase": "install"})
+        self.obj.stop.assert_called_once_with(manage.APPLICATION)
+        self.obj.set_start = Mock()
+        self.obj.complete()
+        saved = json.loads(self.obj.state_path.read_text())
+        self.assertTrue(saved["initialized"] and saved["autostart"])
+        self.assertNotIn("transaction", saved)
+
+    def test_finish_orders_migration_health_startup_and_preserves_data(self):
+        self.obj.state.update(initialized=False, transaction={"phase": "install"})
+        precious = self.data / "school-data"
+        precious.write_bytes(b"existing school data")
+        config = self.obj.config.copy()
+        events = []
+        for name in ("stop", "configure", "initialize_database", "register", "create_database", "migrate", "start_services", "health"):
+            setattr(self.obj, name, Mock(side_effect=lambda *a, name=name: events.append(name)))
+        def startup(automatic):
+            events.append("auto" if automatic else "manual")
+            self.assertIn("transaction", json.loads(self.obj.state_path.read_text()))
+        self.obj.set_start = startup
+        with patch.object(manage, "RELEASE", self.obj.release):
+            self.obj.repair()
+            self.obj.storage_check = Mock()
+            self.obj.repair()
+        self.assertEqual(events.count("migrate"), 2)
+        self.assertLess(events.index("migrate"), events.index("health"))
+        self.assertLess(events.index("health"), events.index("auto"))
+        self.assertEqual(precious.read_bytes(), b"existing school data")
+        self.assertEqual(config, self.obj.config)
+        self.assertNotIn("transaction", json.loads(self.obj.state_path.read_text()))
+
+    def test_failed_health_and_failed_cleanup_preserve_original_error(self):
+        self.obj.state.update(initialized=False, transaction={"phase": "install"})
+        self.obj.set_start = Mock()
+        self.obj.start_services = Mock()
+        self.obj.health = Mock(side_effect=manage.OperationError("TLS failed"))
+        self.obj.stop = Mock(side_effect=manage.OperationError("stop failed"))
+        with self.assertRaisesRegex(manage.OperationError, "TLS failed"):
+            self.obj.complete()
+        saved = json.loads(self.obj.state_path.read_text())
+        self.assertFalse(saved["initialized"])
+        self.assertIn("transaction", saved)
+        self.assertNotIn((True,), [call.args for call in self.obj.set_start.call_args_list])
+        self.assertIn("stop failed", (self.data / "logs/operations.log").read_text())
+
+    def test_final_state_write_failure_disables_auto_and_keeps_journal(self):
+        self.obj.start_services = Mock()
+        self.obj.health = Mock()
+        self.obj.set_start = Mock()
+        self.obj.stop = Mock()
+        save = self.obj.save
+        def failed_save():
+            if "transaction" not in self.obj.state:
+                raise OSError("disk full")
+            save()
+        self.obj.save = failed_save
+        with self.assertRaisesRegex(OSError, "disk full"):
+            self.obj.complete()
+        self.assertIn("transaction", json.loads(self.obj.state_path.read_text()))
+        self.assertIn("transaction", self.obj.state)
+        self.assertEqual(self.obj.set_start.call_args.args, (False,))
 
     def test_reinstall_repairs_missing_binaries_without_rotating_secrets(self):
         from argparse import Namespace
