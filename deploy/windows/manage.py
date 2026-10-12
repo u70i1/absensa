@@ -289,26 +289,27 @@ class Installation:
         )
         if result.returncode not in expected_codes:
             operation = operation or Path(args[0]).name
-            # Log redacted diagnostics; process arguments may contain private paths.
-            message = result.stdout + result.stderr
-            for key in (
-                "pg_password",
-                "db_password",
-                "bridge_token",
-                "backup_key",
-                "cf_token",
-            ):
-                if self.config and self.config.get(key):
-                    message = message.replace(self.config[key], "[RAHASIA]")
-            with (self.data / "logs/operations.log").open("a", encoding="utf-8") as log:
-                log.write(
-                    f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {operation}: exit {result.returncode}\n{message}\n"
-                )
+            self.diagnostic(f"{operation}: exit {result.returncode}\n{result.stdout}{result.stderr}")
             if check:
                 raise OperationError(
                     f"Operasi {operation} gagal. Periksa {self.data / 'logs/operations.log'}."
                 )
         return result
+
+    def redact(self, message):
+        for key in ("pg_password", "db_password", "bridge_token", "backup_key", "cf_token"):
+            if self.config and self.config.get(key):
+                message = message.replace(self.config[key], "[RAHASIA]")
+        # Also redact connection URLs if a driver includes one in an exception.
+        return re.sub(r"(://)[^/\s@]+@", r"\1[RAHASIA]@", message)
+
+    def diagnostic(self, message):
+        message = self.redact(message)
+        directory = self.data / "logs"
+        directory.mkdir(exist_ok=True)
+        with (directory / "operations.log").open("a", encoding="utf-8") as log:
+            log.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {message}\n")
+        return message
 
     def host(self, action, **values):
         command = [
@@ -785,51 +786,117 @@ class Installation:
         )
         say("Administrator siap.")
 
-    def health(self):
-        say("Memeriksa kesehatan layanan...")
+    @property
+    def ca_path(self):
+        return self.data / "caddy" / self.config["caddy_tree"] / "caddy/pki/authorities/local/root.crt"
+
+    def health_failures(self):
+        """One diagnostic pass; independent checks still run after a TLS failure."""
+        failures = []
         c = self.config
-        ca = (
-            self.data
-            / "caddy"
-            / c["caddy_tree"]
-            / "caddy/pki/authorities/local/root.crt"
-        )
-        for _ in range(90):
+
+        def check(component, action):
             try:
-                context = ssl.create_default_context(
-                    cafile=str(ca) if c["tls"] == "internal" else None
-                )
-                status, body = https_health(c["host"], c["https_port"], context)
-                ok = status == 200 and body.get("ok") is True
-                if ok and all(self.running(role) for role in SERVICES):
-                    for role in ("scheduler", "backup"):
-                        stamp = (
-                            self.data / "health" / role / f"absensa-{role}.heartbeat"
-                        )
-                        if not stamp.exists() or time.time() - stamp.stat().st_mtime > (
-                            3900 if role == "backup" else 300
-                        ):
-                            raise OSError("Worker belum siap")
-                    bridge = http.client.HTTPConnection(
-                        "127.0.0.1", c["bridge_port"], timeout=5
-                    )
-                    bridge.request("GET", "/health")
-                    if bridge.getresponse().status != 200:
-                        raise OSError("WhatsApp belum siap")
-                    bridge.close()
-                    if c["tls"] == "internal":
-                        shutil.copyfile(ca, self.data / "root-ca.crt")
-                        cert = ssl.PEM_cert_to_DER_cert(ca.read_text())
-                        say(
-                            f"CA perangkat LAN: {self.data / 'root-ca.crt'}\nSHA-256: {hashlib.sha256(cert).hexdigest()}"
-                        )
-                    return
-            except (OSError, ValueError, ssl.SSLError, http.client.HTTPException):
-                pass
-            time.sleep(2)
+                action()
+            except (OSError, ValueError, http.client.HTTPException, OperationError,
+                    subprocess.SubprocessError) as exc:
+                if isinstance(exc, ssl.SSLCertVerificationError):
+                    reason = "certificate verification failed"
+                elif isinstance(exc, ssl.SSLError):
+                    reason = "TLS handshake failed"
+                else:
+                    reason = "failed"
+                failures.append(self.redact(f"{component}: {reason}: {type(exc).__name__}: {exc}"))
+
+        def https():
+            context = ssl.create_default_context(
+                cafile=str(self.ca_path) if c["tls"] == "internal" else None
+            )
+            status, body = https_health(c["host"], c["https_port"], context)
+            if status != 200:
+                raise OperationError(f"HTTPS /health returned unexpected status {status}")
+            if not isinstance(body, dict) or body.get("ok") is not True:
+                raise OperationError("HTTPS /health returned unhealthy body")
+
+        def database():
+            result = self.pg("psql", "-XAt", "-v", "ON_ERROR_STOP=1", "-c", "SELECT 1",
+                             database=c["database"])
+            if result.stdout.strip() != "1":
+                raise OperationError("Database health check returned unexpected result")
+
+        def service(role):
+            if not self.running(role):
+                raise OperationError(SERVICES[role] + " service stopped or not installed")
+
+        def heartbeat(role):
+            stamp = self.data / "health" / role / f"absensa-{role}.heartbeat"
+            if not stamp.exists():
+                raise OperationError(role + " heartbeat missing")
+            age = time.time() - stamp.stat().st_mtime
+            if age < -60 or age > (3900 if role == "backup" else 300):
+                raise OperationError(f"{role} heartbeat stale or clock incorrect (age {age:.0f}s)")
+
+        def whatsapp():
+            bridge = http.client.HTTPConnection("127.0.0.1", c["bridge_port"], timeout=5)
+            try:
+                bridge.request("GET", "/health")
+                response = bridge.getresponse()
+                if response.status != 200:
+                    raise OperationError(f"WhatsApp /health returned unexpected status {response.status}")
+                body = json.loads(response.read())
+                if not isinstance(body, dict) or body.get("ok") is not True:
+                    raise OperationError("WhatsApp /health returned unhealthy body")
+            finally:
+                bridge.close()
+
+        check(f"HTTPS {c['host']}:{c['https_port']}", https)
+        check(f"Database 127.0.0.1:{c['pg_port']}", database)
+        for role in SERVICES:
+            check(SERVICES[role], lambda role=role: service(role))
+        for role in ("scheduler", "backup"):
+            check(role, lambda role=role: heartbeat(role))
+        check(f"WhatsApp 127.0.0.1:{c['bridge_port']}", whatsapp)
+        return failures
+
+    def health(self, attempts=90, interval=2):
+        say("Memeriksa kesehatan layanan...")
+        started = time.monotonic()
+        for attempt in range(1, attempts + 1):
+            failures = self.health_failures()
+            elapsed = time.monotonic() - started
+            if not failures:
+                if self.config["tls"] == "internal":
+                    shutil.copyfile(self.ca_path, self.data / "root-ca.crt")
+                    cert = ssl.PEM_cert_to_DER_cert(self.ca_path.read_text())
+                    say(f"CA perangkat LAN: {self.data / 'root-ca.crt'}\nSHA-256: {hashlib.sha256(cert).hexdigest()}")
+                self.diagnostic(f"Health OK after {elapsed:.1f}s ({attempt} attempts)")
+                return
+            phase = "FINAL FAILURE" if attempt == attempts else "RETRY"
+            for failure in failures:
+                say(self.diagnostic(f"Health {phase} {attempt}/{attempts}, {elapsed:.1f}s: {failure}"))
+            if attempt < attempts:
+                time.sleep(interval)
         raise OperationError(
-            "Pemeriksaan HTTPS/database/worker gagal. Periksa log, DNS, token DNS dan jam server; jangan abaikan verifikasi TLS."
+            f"Pemeriksaan kesehatan gagal: {'; '.join(failures)}. "
+            f"Periksa {self.data / 'logs/operations.log'}; jangan abaikan verifikasi TLS."
         )
+
+    def status(self):
+        say("Versi: " + (self.state["version"] if self.state else "belum terpasang"))
+        say("Tahap: " + str((self.state or {}).get("transaction", "siap" if self.state else "belum lengkap")))
+        say("Startup otomatis tercatat: " + str((self.state or {}).get("autostart", False)))
+        if self.config:
+            failures = self.health_failures()
+            for failure in failures:
+                say(failure)
+            if not failures:
+                say("Semua pemeriksaan kesehatan lulus.")
+        else:
+            say("Konfigurasi belum tersedia. Jalankan kembali installer.")
+        log = self.data / "logs/operations.log"
+        if log.exists():
+            say("Diagnostik terakhir (termasuk kegagalan sebelum layanan dihentikan):")
+            say(self.redact("\n".join(log.read_text(encoding="utf-8", errors="replace").splitlines()[-30:])))
 
     def complete(self):
         self.set_start(False)
@@ -1282,10 +1349,7 @@ def main():
             if args.action == "install":
                 install(obj, args.source, args)
             elif args.action == "status":
-                say("Versi: " + obj.state["version"])
-                say("Tahap: " + str(obj.state.get("transaction", "siap")))
-                for role, name in SERVICES.items():
-                    say(name + ": " + ("berjalan" if obj.running(role) else "berhenti"))
+                obj.status()
             elif args.action == "finish":
                 obj.finish()
             elif args.action == "repair":

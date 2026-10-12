@@ -4,6 +4,8 @@ import contextlib
 import importlib.util
 import io
 import json
+import ssl
+import os
 import subprocess
 import sys
 import tempfile
@@ -462,6 +464,83 @@ class WindowsTests(unittest.TestCase):
         self.assertEqual(len(granted), 5)
         self.assertEqual(revoked, list(reversed(granted)))
         self.assertFalse((self.data / "config/initdb.password").exists())
+
+    def health_fixture(self):
+        self.obj.pg = Mock(return_value=SimpleNamespace(stdout="1\n"))
+        self.obj.running = Mock(return_value=True)
+        for role in ("scheduler", "backup"):
+            directory = self.data / "health" / role
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / f"absensa-{role}.heartbeat").touch()
+        bridge = Mock()
+        bridge.getresponse.return_value.status = 200
+        bridge.getresponse.return_value.read.return_value = b'{"ok":true}'
+        self.addCleanup(patch.stopall)
+        patch.object(manage.ssl, "create_default_context").start()
+        patch.object(manage.http.client, "HTTPConnection", return_value=bridge).start()
+        probe = patch.object(manage, "https_health", return_value=(200, {"ok": True})).start()
+        return probe, bridge
+
+    def test_health_diagnostics_collect_independent_failures_and_redact(self):
+        probe, bridge = self.health_fixture()
+        probe.side_effect = ssl.SSLError("alert internal error " + self.obj.config["db_password"])
+        self.obj.pg.side_effect = OSError("connection refused")
+        self.obj.running.side_effect = lambda role: role != "scheduler"
+        (self.data / "health/scheduler/absensa-scheduler.heartbeat").unlink()
+        os.utime(self.data / "health/backup/absensa-backup.heartbeat", (1, 1))
+        bridge.request.side_effect = ConnectionRefusedError("bridge refused")
+        failures = "\n".join(self.obj.health_failures())
+        for expected in ("TLS handshake failed", "Database 127.0.0.1", "connection refused",
+                         "AbsensaScheduler service stopped", "scheduler heartbeat missing",
+                         "backup heartbeat stale", "WhatsApp 127.0.0.1", "bridge refused"):
+            self.assertIn(expected, failures)
+        self.assertNotIn(self.obj.config["db_password"], failures)
+        bridge.close.assert_called_once()
+
+    def test_health_distinguishes_certificate_status_and_payload_errors(self):
+        probe, bridge = self.health_fixture()
+        probe.side_effect = ssl.SSLCertVerificationError("IP mismatch")
+        self.assertIn("certificate verification failed", "\n".join(self.obj.health_failures()))
+        probe.side_effect = None
+        for status, body, expected in ((503, {"ok": False}, "unexpected status 503"),
+                                       (200, [], "unhealthy body")):
+            probe.return_value = (status, body)
+            self.assertIn(expected, "\n".join(self.obj.health_failures()))
+        probe.return_value = (200, {"ok": True})
+        bridge.getresponse.return_value.status = 502
+        self.assertIn("WhatsApp /health returned unexpected status 502", "\n".join(self.obj.health_failures()))
+
+    def test_health_retries_and_preserves_final_diagnostics(self):
+        self.obj.health_failures = Mock(return_value=["HTTPS TLS handshake failed: fixture"])
+        with (patch.object(manage.time, "sleep") as sleep,
+              contextlib.redirect_stdout(io.StringIO()),
+              self.assertRaisesRegex(manage.OperationError, "handshake")):
+            self.obj.health(attempts=2)
+        sleep.assert_called_once_with(2)
+        log = (self.data / "logs/operations.log").read_text()
+        self.assertIn("RETRY 1/2", log)
+        self.assertIn("FINAL FAILURE 2/2", log)
+        self.obj.state["transaction"] = {"phase": "install"}
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.obj.status()
+        self.assertIn("install", output.getvalue())
+        self.assertIn("FINAL FAILURE", output.getvalue())
+
+    def test_health_recovers_from_transient_failure(self):
+        self.obj.config["tls"] = "cloudflare"
+        self.obj.health_failures = Mock(side_effect=[["temporary"], []])
+        with (patch.object(manage.time, "sleep"), contextlib.redirect_stdout(io.StringIO())):
+            self.obj.health(attempts=2)
+        log = (self.data / "logs/operations.log").read_text()
+        self.assertIn("Health OK", log)
+        self.assertNotIn("FINAL FAILURE", log)
+
+    def test_status_without_state_is_read_only(self):
+        self.obj.state = self.obj.config = None
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            self.obj.status()
+        self.assertIn("belum terpasang", output.getvalue())
 
     def test_failed_service_start_keeps_journal_and_stops_partial_start(self):
         self.obj.state["transaction"] = {"phase": "migration", "backup": "safe.absfull"}
