@@ -8,7 +8,7 @@ irm https://raw.githubusercontent.com/u70i1/absensa/main/install.ps1 | iex
 
 Perintah ini memerlukan **rilis stabil Windows lengkap yang telah diterbitkan**.
 Paket native Windows diperkenalkan pada v1.1.0; v1.0.0 hanya menyediakan Linux.
-Menyiapkan v1.1.0 atau membuat draft belum membuat paket tersedia bagi installer.
+Menyiapkan v1.1.1 atau membuat draft belum membuat paket tersedia bagi installer.
 Bootstrap dari `main` hanya memilih rilis dan memverifikasinya. Aplikasi, runtime,
 dan pengelola berasal dari satu tag stabil `vMAJOR.MINOR.PATCH`, sama dengan Linux.
 Tidak perlu Git, Python, Node, PostgreSQL, Docker, WSL, atau VM di server sekolah.
@@ -37,8 +37,9 @@ jam server yang benar. Paket membawa browser sehingga unduhan besar; cadangan
 membutuhkan ruang tambahan. Internet diperlukan untuk GitHub, sumber GitHub CLI,
 Sigstore saat instalasi/update, WhatsApp, dan DNS Cloudflare jika digunakan.
 
-**Status validasi:** build paket dan uji layanan native pada Windows Server
-2022/2025 telah lulus di GitHub Actions; tautan run dan batas cakupannya ada di
+**Status validasi:** rilis sebelumnya memiliki build paket dan uji layanan native
+Windows Server 2022/2025 yang lulus di GitHub Actions. Perubahan v1.1.1 masih
+memerlukan pengulangan uji native; tautan run dan batas cakupannya ada di
 [VALIDATION.md](VALIDATION.md). Server 2019 diterima oleh bootstrap, tetapi
 **belum tervalidasi saat runtime** dan tidak memiliki runner dalam matriks CI.
 Uji PostgreSQL, Chrome, migrasi, dan pemulihan pada mesin Server 2019 nyata

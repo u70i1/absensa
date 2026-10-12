@@ -1,5 +1,95 @@
 # Native Windows validation record
 
+## v1.1.1 preparation — 2026-10-12
+
+Branch: `fix/windows-v1.1.1-installation`, based on clean `main` at `274ce14`,
+which contains v1.1.0 (`c0132a5`) and the subsequent bootstrap fix. Each problem
+was tested and committed separately. No push, PR, tag, release or artifact
+publication was performed. Version metadata remains tag-driven; packagers take
+`v1.1.1` to produce their manifests. No database migration, runtime dependency
+pin, Linux deployment code, or state format version was changed.
+
+### Findings and fixes
+
+| Finding | Resolution/evidence |
+| --- | --- |
+| The old IP probe connected to loopback while Python omitted SNI for the IP literal. Caddy could not select the configured IP certificate from that destination. | Reproduced with real Caddy 2.11.6; direct-IP probe works, DNS still uses loopback/SNI. Wrong CA and wrong IP SAN remain rejected. |
+| Health errors were swallowed until a generic timeout. | Independent HTTPS, database, SCM, heartbeat and bridge checks; redacted exception details, retry/final markers, elapsed time and retained operations log. Non-JSON HTTP errors retain their status. Database probe has a 15-second process timeout. |
+| Finalization cleared its journal before enabling automatic startup; ordinary repair could migrate without first creating a journal. | Journal precedes maintenance and survives health/SCM/state-publication failures; automatic startup and CA export must succeed before final state is saved. Cleanup preserves the original failure. |
+| Admin was blocked by the unfinished transaction, as intended. The existing first-only bootstrap already handled password hashing and duplicates. | Guard is now inside the admin method, database readiness is awaited, and completion prints the supported admin command. No admin is created/reset by repair. |
+| v1.1.0's bundled repair cannot obtain the corrected v1.1.1 code while unfinished. | With user approval, explicit `-Version v1.1.1` bootstrap recovery accepts only uninitialized v1.1.0 `install` transactions. Verified target code is staged before journal selection; previous binaries/data/secrets remain. Other recovery gates remain intact. |
+| The command wrapper logged any nonzero SCM status, including expected conditions. | Query permits 1060 and stop permits 1062, scoped per operation. Unexpected failures remain logged and fatal. |
+| Runtime/worker entry points let KeyboardInterrupt escape during service stop. | Windows runtime catches only expected interrupts; subprocesses get bounded shutdown time. Other exceptions and abnormal exit codes propagate. Real WinSW delivery remains a native test gate. |
+| BOM-prefixed JSON was rejected by UTF-8 JSON parsing; other malformed data produced generic errors. | UTF-8 BOM accepted, precise safe errors for encoding/JSON/missing fields/types/journals, no replacement secrets. Atomic writes remain BOM-free. This was a troubleshooting resilience issue, not proof of an original installer BOM defect. |
+| Input validation checked host syntax, but not assignment to a local interface. | Read-only network diagnostics include active virtual interfaces, DNS, DHCP and firewall profiles; existing port-conflict checks remain. Network misconfiguration itself is not classified as an application defect. |
+
+### Checks executed locally
+
+- `CADDY_BINARY=/tmp/absensa-v111-caddy python3 -m unittest discover -s deploy/windows -p 'test_*.py'`:
+  **65 passed**, including the real Caddy test (no skips). CPython 3.14/Linux.
+  Caddy 2.11.6 was extracted from an existing local image, matching the release
+  Caddy version. The test uses a separate loopback address `127.0.0.2`, temporary
+  CA storage and an ephemeral port; it does not install trust anchors.
+- Linux installer safety suite: **36 passed**; deployment setup suite: **4 passed**.
+  Generated `install.sh` remains byte-for-byte unchanged.
+- Application `test_installer_bootstrap.py`, `test_admin_auth.py`, `test_health.py`:
+  **9 passed**, using a disposable PostgreSQL 18.4 container with no published
+  ports. Includes real migrations, password hashing, duplicate protection, login
+  and database-backed health. No school database was accessed.
+- PowerShell **7.5/Linux** bootstrap fixtures passed: syntax of all Windows scripts,
+  recovery gates, read-only Hyper-V/DHCP/profile fixture, checksum/tamper rejection,
+  archive paths, native DLL naming and build-source fallback. This is not
+  PowerShell 5.1 or actual Windows networking/SCM execution.
+- Ruff lint and formatting, actionlint, ShellCheck, `bash -n`, strict MkDocs build,
+  and `git diff --check` passed.
+- v1.1.1 package fixture round-trip checks manifest version, guide links,
+  ZIP file inventory hashes and Windows checksum entries. This verifies packaging
+  logic, **not a newly built native Windows distribution**.
+
+The native smoke scenario now selects an active IPv4 (including vEthernet),
+interrupts initial finalization, verifies the install journal and stopped apps,
+repairs using real services/migrations, checks a database sentinel and exported CA,
+creates the first admin, then verifies repeated repair/bootstrap preserves its
+hash and data. Existing backup/restore/update and SCM Auto checks remain.
+The fixture and its interruption hook have local regression coverage; the whole
+scenario has **not run on Windows for this branch**. Prior CI runs below validate
+older commits only. No new Actions run was triggered because the branch was not
+pushed.
+
+### Required native acceptance before publication
+
+1. Run the package build and full updated smoke on Windows 2022 and 2025 with
+   Windows PowerShell 5.1. Check archive inventory/attestation in the normal
+   release workflow; local fixtures cannot validate the real packaged binaries.
+2. On a clean Server 2019 (17763) host, use a confirmed static/reserved LAN IPv4,
+   `tls internal`, HTTPS **8443**, web **18088**, bridge **13001**. Confirm migrations,
+   six services, verified HTTPS, database and both heartbeats pass. State must be
+   initialized with no transaction; SCM must report Auto for all six services.
+3. Create the first administrator, distribute only the CA certificate with a
+   verified certificate fingerprint, and log in to `/admin` from a LAN client.
+   Repeat with a DNS name whose A record resolves to the server. Verify wrong
+   CA/name still fails. Check Hyper-V vEthernet and Public-profile warnings.
+4. Stop services through WinSW and check graceful shutdown/no misleading
+   KeyboardInterrupt traceback or orphan Caddy/Node/Chromium. Exercise a genuine
+   crash separately and ensure its error/restart is still visible.
+5. Reboot the server and verify services start before desktop login; open the
+   dashboard from LAN, check workers, PostgreSQL and WhatsApp/Chromium operation.
+6. Interrupt installation after migrations; run `repair`, retain sentinel school
+   data/photos/secrets, create admin if missing, repeat repair and compare the
+   existing admin hash. Deliberately fail TLS/health and verify Manual startup,
+   retained transaction/logs and blocked admin bootstrap.
+7. Exercise the specifically approved failed **v1.1.0 → v1.1.1** install recovery
+   through verified release bootstrap when artifacts become available. Ensure
+   healthy installations and migration/restore transactions cannot use this
+   exception. Normal healthy v1.1.0 update retains its mandatory backup path.
+
+Remaining limits: no Server 2019 runtime, reboot, LAN-client trust or native
+WinSW/PowerShell 5.1 evidence was available here. Public downloads/provenance
+for v1.1.1 cannot be exercised before publication. Existing Cloudflare renewal,
+WhatsApp pairing/reconnect and cross-platform restore field gates still apply.
+Partial initdb directories and malformed/missing configuration remain fail-closed;
+this release does not attempt speculative data repair or regenerate secrets.
+
 ## Follow-up: CI port conflict and missing artifacts
 
 A subsequent Windows 2022 smoke run reported TCP 55438 unavailable before the

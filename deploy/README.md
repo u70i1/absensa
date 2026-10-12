@@ -6,7 +6,8 @@ dengan instalasi sekolah. Installer tidak memerlukan Git, Node.js, Python paket
 aplikasi, PostgreSQL, atau Chromium di komputer sekolah; Linux memakai image; Windows Server memakai paket runtime native.
 Python standar di Linux hanya dipakai untuk pengelolaan instalasi.
 
-**Status distribusi:** v1.1.0 menambahkan paket Windows native pada jalur Linux
+**Status distribusi:** v1.1.1 sedang disiapkan untuk memperbaiki instalasi dan
+pemulihan Windows. v1.1.0 menambahkan paket Windows native pada jalur Linux
 yang sudah diterbitkan melalui v1.0.0. Bootstrap Windows memerlukan rilis stabil
 lengkap v1.1.0 atau lebih baru; draft belum dapat dipasang. Installer berhenti
 jika paket platform belum tersedia dan tidak beralih ke kode pengembangan.

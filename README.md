@@ -1,7 +1,7 @@
 # Absensa - School Attendance System
 
-Version 1.1.0 is being prepared, introducing native Windows Server deployment.
-The published v1.0.0 release remains unchanged.
+Version 1.1.1 is being prepared with Windows installation, TLS health-check,
+and recovery fixes. Existing published releases remain unchanged.
 
 Untuk pemasangan di sekolah, baca [panduan instalasi lengkap berbahasa Indonesia](deploy/README.md).
 Installer menyediakan rilis terverifikasi, HTTPS, cadangan, pemulihan, pembaruan,
@@ -39,7 +39,7 @@ menyediakan paket Linux.
 **Maintainer note:** The installer requires a published stable release and public
 image access. See the [release checklist](deploy/RELEASING.md) and
 [validation results](deploy/INSTALLER-VALIDATION.md) before using these commands
-for a school installation. Preparing v1.1.0 does not publish the release.
+for a school installation. Preparing v1.1.1 does not publish the release.
 
 For local development, see [Run Absensa locally](RUNNING.md).
 

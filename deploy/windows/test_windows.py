@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import ssl
+import zipfile
 import os
 import subprocess
 import sys
@@ -36,11 +37,11 @@ class WindowsTests(unittest.TestCase):
     def test_packaged_guide_links_to_its_release(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            package.write_guide(root, "v1.1.0")
+            package.write_guide(root, "v1.1.1")
             guide = (root / "PANDUAN.md").read_text(encoding="utf-8")
             self.assertNotIn("](VALIDATION.md)", guide)
             self.assertIn(
-                "](https://github.com/u70i1/absensa/blob/v1.1.0/deploy/windows/VALIDATION.md)",
+                "](https://github.com/u70i1/absensa/blob/v1.1.1/deploy/windows/VALIDATION.md)",
                 guide,
             )
 
@@ -1105,6 +1106,33 @@ class WindowsTests(unittest.TestCase):
         (self.root / "web/.env").write_text("secret")
         with self.assertRaisesRegex(ValueError, "secret"):
             package.validate(self.root)
+
+    def test_v111_package_archive_inventory_roundtrip(self):
+        payload = self.path / "payload"
+        output = self.path / "output"
+        output.mkdir()
+        for name in package.REQUIRED:
+            path = payload / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"fixture runtime")
+        (payload / "release.json").write_text(
+            json.dumps({"version": "v1.1.1", "format": 1})
+        )
+        package.write_guide(payload, "v1.1.1")
+        archive = package.archive(payload, output)
+        with zipfile.ZipFile(archive) as bundle:
+            inventory = json.loads(bundle.read("files.sha256.json"))
+            self.assertEqual(
+                json.loads(bundle.read("release.json"))["version"], "v1.1.1"
+            )
+            for name, digest in inventory.items():
+                self.assertEqual(
+                    manage.hashlib.sha256(bundle.read(name)).hexdigest(), digest
+                )
+            self.assertIn(b"v1.1.1", bundle.read("PANDUAN.md"))
+        sums = (output / "SHA256SUMS.windows").read_text()
+        self.assertIn(package.digest(archive) + "  absensa-windows-amd64.zip", sums)
+        self.assertIn(package.digest(output / "install.ps1") + "  install.ps1", sums)
 
     def test_native_preflight_reports_versioned_cairo_without_loader_alias(self):
         native = self.path / "Native DLLs with spaces"

@@ -1,53 +1,54 @@
-# Absensa v1.1.0
+# Absensa v1.1.1
 
-Rilis ini memperkenalkan deployment native Windows Server bersama jalur
-Linux amd64 berbasis container yang sudah tersedia pada v1.0.0.
-Tag dan artefak v1.0.0 tetap dipertahankan.
+Rilis perbaikan instalasi dan pemulihan Windows. Jalur Linux, format konfigurasi,
+PostgreSQL mayor 18, dan skema database tetap kompatibel; tidak ada migrasi baru.
+Tag serta artefak rilis sebelumnya tidak diubah.
 
-## Perubahan utama
+## Perbaikan
 
-- Paket `absensa-windows-amd64.zip` siap pakai dengan CPython, Node.js,
-  PostgreSQL 18, Chrome for Testing, Caddy/Cloudflare, WinSW, Cairo dan libarchive.
-  Server tidak memerlukan Python, Node.js atau PostgreSQL terpisah, WSL,
-  Docker Desktop, VM, maupun compiler.
-- Bootstrap PowerShell 5.1 memverifikasi SHA-256 dan provenance GitHub untuk tag
-  rilis yang sama dengan Linux. Paket menjalankan enam layanan native dengan
-  akun virtual terpisah, binary di `C:\Program Files\Absensa` dan data privat
-  di `C:\ProgramData\Absensa`.
-- Pengelolaan Windows mencakup HTTPS CA lokal atau Cloudflare DNS-01, migrasi,
-  cadangan terenkripsi, pemulihan database/foto ke penyimpanan baru, pembaruan
-  dengan cadangan wajib, perbaikan, dan uninstall yang mempertahankan data.
-- Workflow rilis membangun dan menguji kedua platform, memverifikasi checksum
-  dan provenance, lalu membuat satu **draft** untuk ditinjau pengelola.
-  Kontrak checksum/provenance Linux tetap kompatibel dengan installer lama.
+- Probe HTTPS untuk IPv4 menghubungi alamat yang dikonfigurasi, sehingga Caddy
+  `tls internal` dapat memilih sertifikat IP tanpa SNI. Probe DNS tetap menuju
+  loopback. Verifikasi CA, nama/IP sertifikat, dan TLS tetap wajib.
+- Finalisasi mempertahankan jurnal sampai migrasi, health check, ekspor CA lokal,
+  dan pengaturan startup otomatis berhasil. Kegagalan tetap menghentikan aplikasi
+  dan dapat dilanjutkan dengan `repair` tanpa membuat ulang data sekolah.
+- Bootstrap v1.1.1 dengan `-Version v1.1.1` dapat memulihkan instalasi v1.1.0 yang
+  belum initialized dan masih pada transaksi `install`, setelah verifikasi paket.
+  Pengecualian ini tidak berlaku pada migrasi/restore terhenti atau instalasi sehat.
+- `admin` tersedia setelah repair berhasil, memakai validasi dan hash aplikasi,
+  dan mempertahankan akun yang sudah ada. Instalasi baru tetap menawarkan akun pertama.
+- Diagnostik menyebut komponen, alamat/port, exception tersamarkan, percobaan dan
+  waktu berlalu. `status` membantu pemeriksaan instalasi belum selesai; kegagalan
+  tetap tercatat setelah layanan dihentikan.
+- Respons SCM 1060 ketika memeriksa layanan yang belum terpasang dan 1062 ketika
+  menghentikan layanan yang sudah berhenti tidak lagi dicatat sebagai error.
+- Interrupt penghentian layanan ditangani tanpa traceback yang menyesatkan;
+  exception lain dan exit abnormal tetap dilaporkan.
+- JSON UTF-8 dengan BOM diterima. JSON/encoding/field/jurnal yang rusak menghasilkan
+  pesan pemulihan yang jelas; penulisan tetap atomik dan rahasia tidak dibuat ulang.
+- Diagnostik LAN meliputi IPv4 aktif (termasuk Hyper-V), DNS, DHCP, dan profil
+  firewall. Tidak ada perubahan adapter, firewall, DNS, atau trust store otomatis
+  oleh pemeriksaan ini. Panduan menjelaskan IP tetap, distribusi CA dan akses klien.
 
-## Pemasangan dan batas validasi
+## Pemakaian dan validasi
 
-Ikuti [panduan pemasangan](https://github.com/u70i1/absensa/blob/v1.1.0/deploy/README.md)
-atau [panduan Windows](https://github.com/u70i1/absensa/blob/v1.1.0/deploy/windows/README.md).
-Paket Windows baru dapat dipasang setelah v1.1.0 diterbitkan sebagai rilis stabil;
-bootstrap tidak menggunakan draft atau kode aplikasi dari `main`.
+Ikuti [panduan Windows](https://github.com/u70i1/absensa/blob/v1.1.1/deploy/windows/README.md)
+dan [catatan validasi](https://github.com/u70i1/absensa/blob/v1.1.1/deploy/windows/VALIDATION.md).
+Setelah repair berhasil, buat administrator pertama melalui PowerShell Administrator:
 
-Build paket dan drill layanan native telah lulus di GitHub Actions Windows
-Server 2022 dan 2025. Server 2019 diterima oleh bootstrap tetapi **belum
-tervalidasi saat runtime**; tidak ada job Server 2019 pada matriks CI.
-Reboot tanpa login, pairing/reconnect WhatsApp, Cloudflare issuance/renewal,
-dan pemulihan lintas platform tetap memerlukan bukti lapangan. Lihat
-[catatan validasi dan syarat publikasi](https://github.com/u70i1/absensa/blob/v1.1.0/deploy/windows/VALIDATION.md).
+```powershell
+& 'C:\Program Files\Absensa\absensa.ps1' admin
+```
 
-Pembaruan Windows diuji menggunakan paket kandidat lokal di runner. Karena
-v1.0.0 tidak memiliki paket Windows, belum ada bukti upgrade Windows dari
-rilis stabil sebelumnya. Unduhan publik dan attestation paket v1.1.0 diperiksa
-pada workflow tag dan setelah publikasi; keduanya tidak disimulasikan sebagai
-bukti instalasi publik yang sudah selesai.
+Uji lokal mencakup Caddy nyata, penolakan CA/nama sertifikat yang salah, transaksi,
+SCM simulasi, JSON/BOM, dan bootstrap/password hash aplikasi dengan PostgreSQL nyata.
+Pengujian lokal Linux **tidak membuktikan kompatibilitas Windows Server 2019**.
+Build paket Windows dan smoke test native 2022/2025 harus diulang untuk commit ini.
+Server 2019 tetap memerlukan instalasi IPv4 tetap dengan port 8443, repair,
+login dashboard dari LAN, stop/start dan reboot tanpa login, serta uji runtime
+PostgreSQL/Chromium pada mesin asli. Bukti CI rilis sebelumnya bukan bukti v1.1.1.
 
-Jalur Linux tetap memakai Docker Engine/Compose dan image digest terverifikasi.
-Instalasi source/Compose lama tidak diadopsi otomatis. Cadangkan data dan ikuti
-[panduan pemulihan](https://github.com/u70i1/absensa/blob/v1.1.0/deploy/BACKUPS.md)
-sebelum migrasi. Peningkatan mayor PostgreSQL memerlukan prosedur tersendiri.
-Konfigurasi deployment dan sesi WhatsApp tidak otomatis dikonversi lintas OS.
-
-Artefak: `absensa-linux-amd64.tar.gz`, `absensa-windows-amd64.zip`, `install.ps1`,
-`SHA256SUMS`, `SHA256SUMS.windows`, `provenance.jsonl`, dan
-`provenance-windows.jsonl`. `SHA256SUMS` hanya memuat arsip Linux;
-`SHA256SUMS.windows` memuat ZIP Windows dan bootstrap.
+Versi ini baru disiapkan; belum ditag, dipush, atau diterbitkan. Bootstrap hanya
+menerima rilis stabil lengkap yang telah diterbitkan, bukan draft.
+Artefak tetap `absensa-linux-amd64.tar.gz`, `absensa-windows-amd64.zip`, `install.ps1`,
+`SHA256SUMS`, `SHA256SUMS.windows`, `provenance.jsonl`, `provenance-windows.jsonl`.
