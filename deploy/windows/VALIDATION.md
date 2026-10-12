@@ -1,5 +1,54 @@
 # Native Windows validation record
 
+## Deeper regression pass — 2026-10-12
+
+Following the initial preparation, additional failure injection reproduced and
+fixed two edge cases, each with a failing-before/passing-after regression:
+
+- `642a8c1`: if SCM cleanup failed and `operations.log` was also unwritable,
+  diagnostic logging could skip the remaining shutdown and mask the original
+  health error. Cleanup now continues and uses a redacted console fallback.
+- `a259e05`: a journal phase containing a JSON list/object raised `TypeError`
+  instead of the intended actionable recovery error. Phase types are now checked
+  before lookup. Invalid state is still rejected without rewriting it.
+
+Additional committed tests exercise real Caddy reverse proxy responses, failed
+finalization followed by successful recovery, the exported CA bytes/fingerprint,
+and persistence of both failure and success diagnostics. Only SCM and database
+calls are fixture adapters in that test; sockets, Caddy, TLS verification,
+HTTP responses, heartbeat files, atomic state writes and CA export are real.
+Two subprocess tests use actual POSIX process groups to verify child cleanup
+on interruption and preservation of genuine crash tracebacks/exit codes. They
+are explicitly skipped on Windows, where the native WinSW drill is required.
+
+Checks after these fixes:
+
+- **69 deployment tests passed with no skips on Python 3.14/Linux**, including
+  both real-Caddy scenarios and real-process tests.
+- **The same 69 tests passed with no skips on Python 3.12/Linux** using an
+  isolated cached container. Neither interpreter run proves embedded CPython
+  3.13 or Windows console/SCM compatibility.
+- **Full application suite: 672 passed, 5 skipped**, using the backup image's
+  PostgreSQL 18 client tools and a disposable database with no published port.
+  Includes encrypted database/photo backup and real restoration. The five skips
+  are two browser modules plus one browser test requiring `playwright`, and two
+  barcode-decoding cases requiring `zxingcpp`. Those optional dependencies were
+  unavailable; these skips are not presented as passes.
+- A targeted **33-test backup suite also passed**. The initial whole-application
+  run had 671 passes and one failure because the web image intentionally lacks
+  `pg_dump`; both the targeted and full reruns used the correct backup image.
+  No application change was needed for that test-environment failure.
+- **13 WhatsApp bridge tests passed**; **36 Linux installer** and **4 deployment
+  setup** tests passed. Generated `install.sh` is unchanged.
+- PowerShell 7.5/Linux bootstrap/network/build fixtures, Ruff lint/format,
+  actionlint, ShellCheck, strict MkDocs build and Git whitespace checks passed.
+
+The test session was interrupted by a host restart; lost process handles and
+`/tmp` fixtures were recreated and affected tests rerun. Interrupted results
+were not counted as passes. Test databases and containers are isolated from
+existing application services. No branch push or native CI run was performed.
+The Server 2019 acceptance checklist below remains outstanding.
+
 ## v1.1.1 preparation — 2026-10-12
 
 Branch: `fix/windows-v1.1.1-installation`, based on clean `main` at `274ce14`,
