@@ -135,6 +135,25 @@ def caddyfile(config):
     )
 
 
+def https_health(host, port, context):
+    # Python verifies IP SANs but omits SNI for IP literals. Caddy then selects
+    # its certificate using the connection's destination IP, not the HTTP Host.
+    # DNS names stay pinned to loopback: DNS cannot redirect this trusted probe.
+    try:
+        destination = str(ipaddress.IPv4Address(host))
+    except ipaddress.AddressValueError:
+        destination = "127.0.0.1"
+    connection = http.client.HTTPSConnection(host, port, context=context, timeout=5)
+    try:
+        with socket.create_connection((destination, port), timeout=5) as sock:
+            connection.sock = context.wrap_socket(sock, server_hostname=host)
+        connection.request("GET", "/health")
+        response = connection.getresponse()
+        return response.status, json.loads(response.read())
+    finally:
+        connection.close()
+
+
 def service_xml(role, release, data):
     root = ET.Element("service")
 
@@ -777,21 +796,8 @@ class Installation:
                 context = ssl.create_default_context(
                     cafile=str(ca) if c["tls"] == "internal" else None
                 )
-                connection = http.client.HTTPSConnection(
-                    c["host"], c["https_port"], context=context, timeout=5
-                )
-                # Connect locally while preserving certificate hostname/SNI verification.
-                connection.sock = context.wrap_socket(
-                    socket.create_connection(("127.0.0.1", c["https_port"]), timeout=5),
-                    server_hostname=c["host"],
-                )
-                connection.request("GET", "/health")
-                response = connection.getresponse()
-                ok = (
-                    response.status == 200
-                    and json.loads(response.read()).get("ok") is True
-                )
-                connection.close()
+                status, body = https_health(c["host"], c["https_port"], context)
+                ok = status == 200 and body.get("ok") is True
                 if ok and all(self.running(role) for role in SERVICES):
                     for role in ("scheduler", "backup"):
                         stamp = (
