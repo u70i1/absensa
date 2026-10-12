@@ -18,6 +18,14 @@ dan log di `C:\ProgramData\Absensa`. Ikuti pertanyaan installer untuk nama DNS/I
 port HTTPS, sertifikat, dan admin pertama. Jika memakai CA lokal, pasang sertifikat
 publik yang ditampilkan pada perangkat sekolah.
 
+Gunakan IP statis atau reservasi DHCP. Cocokkan alamat pada adapter aktif
+(termasuk vEthernet Hyper-V), DNS, port, dan profil firewall sebelum memasang.
+Buka alamat dengan port yang dipilih, misalnya `https://192.168.0.10:8443/admin`.
+
+Jika pemasangan terhenti, jalankan `repair` sampai berhasil, lalu `admin` untuk
+membuat akun pertama. Akun yang sudah ada tidak diubah. Jangan mengedit
+`state.json`; panduan Windows memuat jalur khusus pemulihan instalasi v1.1.0.
+
 Periksa layanan dan versi terpasang:
 
 ```powershell
