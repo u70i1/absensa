@@ -176,6 +176,8 @@ class WindowsTests(unittest.TestCase):
             None,
             {},
             {"phase": "unknown"},
+            {"phase": []},
+            {"phase": {}},
             {"phase": "backup", "resume": ["other"]},
         ):
             manage.write_json(

@@ -293,17 +293,20 @@ class Installation:
                     raise OperationError(f"{self.state_path}: {field} harus boolean.")
             if "transaction" in self.state:
                 transaction = self.state["transaction"]
-                if not isinstance(transaction, dict) or transaction.get(
-                    "phase"
-                ) not in {
-                    "install",
-                    "migration",
-                    "backup",
-                    "restore",
-                    "restored",
-                    "repair",
-                    "finalize",
-                }:
+                if (
+                    not isinstance(transaction, dict)
+                    or not isinstance(transaction.get("phase"), str)
+                    or transaction["phase"]
+                    not in {
+                        "install",
+                        "migration",
+                        "backup",
+                        "restore",
+                        "restored",
+                        "repair",
+                        "finalize",
+                    }
+                ):
                     raise OperationError(
                         f"{self.state_path}: transaction/phase tidak sah. Pulihkan jurnal yang valid."
                     )
