@@ -798,6 +798,15 @@ class WindowsTests(unittest.TestCase):
         self.assertIn("Network DNS school.test: 192.168.0.10", output.getvalue())
         self.assertNotIn("tidak cocok", output.getvalue())
 
+    def test_status_with_config_but_missing_state_does_not_probe_database(self):
+        self.obj.state = None
+        self.obj.network_preflight = Mock()
+        self.obj.health_failures = Mock()
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            self.obj.status()
+        self.assertIn("state instalasi belum tersedia", output.getvalue())
+        self.obj.health_failures.assert_not_called()
+
     def test_status_without_state_is_read_only(self):
         self.obj.state = self.obj.config = None
         with contextlib.redirect_stdout(io.StringIO()) as output:

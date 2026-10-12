@@ -178,7 +178,9 @@ def https_health(host, port, context):
             connection.sock = context.wrap_socket(sock, server_hostname=host)
         connection.request("GET", "/health")
         response = connection.getresponse()
-        return response.status, json.loads(response.read())
+        return response.status, json.loads(
+            response.read()
+        ) if response.status == 200 else None
     finally:
         connection.close()
 
@@ -770,7 +772,9 @@ class Installation:
         )
         say(report.stdout.strip())
 
-    def pg(self, tool, *args, database="postgres", check=True, input=None):
+    def pg(
+        self, tool, *args, database="postgres", check=True, input=None, timeout=3900
+    ):
         env = os.environ.copy()
         for key in list(env):
             if key.startswith("PG"):
@@ -788,7 +792,7 @@ class Installation:
             env=env,
             check=check,
             input=input,
-            timeout=3900,
+            timeout=timeout,
         )
 
     def initialize_database(self):
@@ -1010,6 +1014,7 @@ class Installation:
                 "-c",
                 "SELECT 1",
                 database=c["database"],
+                timeout=15,
             )
             if result.stdout.strip() != "1":
                 raise OperationError("Database health check returned unexpected result")
@@ -1169,7 +1174,13 @@ class Installation:
         )
         if self.config:
             self.network_preflight()
-            failures = self.health_failures()
+            failures = (
+                self.health_failures()
+                if self.state
+                else [
+                    "Konfigurasi ada tetapi state instalasi belum tersedia. Pulihkan identitas instalasi; jangan membuat ulang rahasia."
+                ]
+            )
             for failure in failures:
                 say(failure)
             if not failures:

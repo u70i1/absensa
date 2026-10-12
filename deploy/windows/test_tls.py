@@ -44,6 +44,23 @@ class ProbeTests(unittest.TestCase):
                 )
                 connection.close.assert_called_once()
 
+    def test_http_error_status_survives_non_json_body(self):
+        connection = Mock()
+        connection.getresponse.return_value.status = 502
+        connection.getresponse.return_value.read.return_value = (
+            b"<html>Bad gateway</html>"
+        )
+        with (
+            patch.object(manage.socket, "create_connection"),
+            patch.object(
+                manage.http.client, "HTTPSConnection", return_value=connection
+            ),
+        ):
+            self.assertEqual(
+                manage.https_health("school.test", 8443, Mock()), (502, None)
+            )
+        connection.close.assert_called_once()
+
     def test_handshake_failure_closes_connections(self):
         context = Mock()
         context.wrap_socket.side_effect = ssl.SSLError("handshake failed")
