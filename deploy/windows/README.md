@@ -236,3 +236,23 @@ Akun yang sudah ada tidak diubah. `repair` tidak membuat atau mereset akun.
 Transaksi migrasi/pemulihan yang belum selesai tetap memblokir pembuatan akun;
 selesaikan pemulihan sesuai panduan. Jangan mengedit `state.json` untuk melewati
 perlindungan ini.
+
+### Instalasi v1.1.0 terhenti pada pemeriksaan HTTPS
+
+Setelah v1.1.1 diterbitkan, gunakan bootstrap **v1.1.1** dan minta versi itu
+secara eksplisit. Di PowerShell Administrator, dari direktori unduhan:
+
+```powershell
+Invoke-WebRequest -UseBasicParsing 'https://github.com/u70i1/absensa/releases/download/v1.1.1/install.ps1' -OutFile install-v1.1.1.ps1
+.\install-v1.1.1.ps1 -Version v1.1.1
+```
+
+Bootstrap memverifikasi checksum dan provenance paket sebelum menjalankannya.
+Pengecualian perbaikan ini hanya menerima v1.1.0 yang belum `initialized` dan
+masih pada transaksi `install`. Data, konfigurasi, kunci, dan binary lama
+dipertahankan; jurnal memilih v1.1.1 sebelum migrasi/health check diulang.
+Jika proses kembali terputus setelah pemilihan versi, gunakan `absensa.ps1 repair`,
+lalu `absensa.ps1 admin`. Jangan mengubah jurnal secara manual. Instalasi yang
+sudah selesai tetap memakai `update`; transaksi migrasi atau restore yang
+terhenti memerlukan prosedur pemulihan yang sudah ada. Perintah unduhan di atas
+belum dapat digunakan sebelum rilis stabil diterbitkan.

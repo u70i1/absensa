@@ -765,6 +765,54 @@ class WindowsTests(unittest.TestCase):
                 self.obj.admin("schooladmin")
         self.obj.app.assert_not_called()
 
+    def test_verified_patch_recovers_only_unfinished_original_install(self):
+        source = self.path / "verified-patch"
+        source.mkdir()
+        manifest = dict(version="v1.1.1", format=1, platform="windows", architecture="amd64",
+                        postgres_major=18, upgrade_from_major=1)
+        (source / "release.json").write_text(json.dumps(manifest))
+        (source / "manage.py").write_text("# verified fixture")
+        self.obj.state.update(version="v1.1.0", initialized=False, transaction={"phase": "install"})
+        old = self.obj.release
+        old.mkdir(parents=True)
+        (old / "manage.py").write_text("# previous release")
+        school = self.data / "precious"
+        school.write_bytes(b"school data")
+        config = self.obj.config.copy()
+        self.obj.set_start = Mock()
+        self.obj.stop = Mock()
+        self.obj.recover_install(source, manifest)
+        saved = json.loads(self.obj.state_path.read_text())
+        self.assertEqual(saved["version"], "v1.1.1")
+        self.assertEqual(saved["transaction"]["previous"], "v1.1.0")
+        self.assertFalse(saved["initialized"])
+        self.assertFalse(saved["autostart"])
+        self.assertTrue((old / "manage.py").exists())
+        self.assertTrue((self.obj.release / "manage.py").exists())
+        self.assertEqual(school.read_bytes(), b"school data")
+        self.assertEqual(config, self.obj.config)
+        self.obj.resume_target = Mock()
+        self.obj.repair()
+        self.obj.resume_target.assert_called_once()
+
+    def test_patch_recovery_rejects_other_transactions_and_versions(self):
+        self.obj.set_start = Mock()
+        self.obj.adopt_release = Mock()
+        manifest = dict(version="v1.1.1", postgres_major=18, upgrade_from_major=1)
+        for initialized, phase, old, target in (
+            (True, "install", "v1.1.0", "v1.1.1"),
+            (False, "migration", "v1.1.0", "v1.1.1"),
+            (False, "restore", "v1.1.0", "v1.1.1"),
+            (False, "restored", "v1.1.0", "v1.1.1"),
+            (False, "install", "v1.1.1", "v1.1.0"),
+            (False, "install", "v1.1.0", "v1.2.0"),
+        ):
+            self.obj.state.update(initialized=initialized, version=old, transaction={"phase": phase})
+            with self.assertRaises(manage.OperationError):
+                self.obj.recover_install(self.path, dict(manifest, version=target))
+        self.obj.set_start.assert_not_called()
+        self.obj.adopt_release.assert_not_called()
+
     def test_reinstall_repairs_missing_binaries_without_rotating_secrets(self):
         from argparse import Namespace
 

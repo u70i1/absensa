@@ -1126,6 +1126,25 @@ class Installation:
         self.migrate()
         self.complete()
 
+    def recover_install(self, source, manifest):
+        # Explicit patch recovery for the v1.1.0 install-health failure only.
+        # The bootstrap verifies the release bytes/provenance before entry.
+        if not (
+            self.state["version"] == "v1.1.0" and manifest.get("version") == "v1.1.1"
+            and self.state.get("initialized") is False
+            and self.state.get("transaction", {}).get("phase") == "install"
+            and manifest.get("upgrade_from_major") == 1
+            and manifest.get("postgres_major") == 18
+        ):
+            raise OperationError("Perbaikan lintas versi hanya untuk instalasi v1.1.0 yang belum selesai ke v1.1.1; transaksi migrasi/pemulihan tidak boleh dilewati.")
+        self.set_start(False)
+        self.stop()
+        tag = self.adopt_release(source)
+        self.state["transaction"] = {"phase": "install", "previous": "v1.1.0", "target": tag}
+        self.state["version"] = tag
+        self.state["autostart"] = False
+        self.save()  # Keep old binaries; subsequent repair must use target code.
+
     def repair(self):
         transaction = self.state.get("transaction", {})
         if transaction.get("phase") == "restore":
@@ -1271,9 +1290,7 @@ def install(obj, source, args):
         )
         manifest = json.loads((source / "release.json").read_text())
         if manifest["version"] != obj.state["version"]:
-            raise OperationError(
-                "Perbaikan memerlukan artefak versi tersimpan; gunakan update untuk versi lain."
-            )
+            obj.recover_install(source, manifest)
         if not (obj.release / "manage.py").is_file():
             obj.set_start(False)
             obj.stop()
