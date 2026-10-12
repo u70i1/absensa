@@ -1227,9 +1227,16 @@ class Installation:
                 try:
                     cleanup()
                 except Exception as exc:
-                    self.diagnostic(
+                    message = self.redact(
                         f"Finalization cleanup failed: {type(exc).__name__}: {exc}"
                     )
+                    try:
+                        self.diagnostic(message)
+                    except OSError:
+                        # A full/unwritable log disk must not skip the remaining
+                        # cleanup or replace the original finalization failure.
+                        with contextlib.suppress(OSError):
+                            say("Log tidak dapat ditulis. " + message)
             raise
         say(
             f"Administrator pertama (jika belum ada): & '{self.root / 'absensa.ps1'}' admin\n"

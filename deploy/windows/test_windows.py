@@ -905,6 +905,32 @@ class WindowsTests(unittest.TestCase):
         )
         self.assertIn("stop failed", (self.data / "logs/operations.log").read_text())
 
+    def test_cleanup_log_failure_does_not_skip_shutdown_or_mask_health_error(self):
+        self.obj.state.update(initialized=False, transaction={"phase": "install"})
+        self.obj.start_services = Mock()
+        self.obj.health = Mock(
+            side_effect=manage.OperationError("original TLS failure")
+        )
+        self.obj.set_start = Mock(
+            side_effect=[
+                None,
+                OSError("SCM unavailable " + self.obj.config["db_password"]),
+            ]
+        )
+        self.obj.diagnostic = Mock(side_effect=OSError("log disk full"))
+        self.obj.stop = Mock()
+        with (
+            contextlib.redirect_stdout(io.StringIO()) as output,
+            self.assertRaisesRegex(manage.OperationError, "original TLS failure"),
+        ):
+            self.obj.complete()
+        self.assertIn("SCM unavailable", output.getvalue())
+        self.assertNotIn(self.obj.config["db_password"], output.getvalue())
+        self.obj.stop.assert_called_once_with(manage.APPLICATION)
+        saved = json.loads(self.obj.state_path.read_text())
+        self.assertFalse(saved["initialized"])
+        self.assertIn("transaction", saved)
+
     def test_final_state_write_failure_disables_auto_and_keeps_journal(self):
         self.obj.start_services = Mock()
         self.obj.health = Mock()
