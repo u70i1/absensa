@@ -943,11 +943,42 @@ class Installation:
             f"Periksa {self.data / 'logs/operations.log'}; jangan abaikan verifikasi TLS."
         )
 
+    def network_preflight(self, config=None):
+        """Read-only advice, including virtual interfaces; never changes routing/trust."""
+        c = config or self.config
+        try:
+            network = json.loads(self.host("network").stdout)
+            addresses = network["addresses"]
+            local = {item["address"] for item in addresses}
+            try:
+                ipaddress.IPv4Address(c["host"])
+                resolved = {c["host"]}
+            except ipaddress.AddressValueError:
+                try:
+                    resolved = {item[4][0] for item in socket.getaddrinfo(c["host"], c["https_port"], socket.AF_INET, socket.SOCK_STREAM)}
+                    say(self.diagnostic(f"Network DNS {c['host']}: {', '.join(sorted(resolved))}"))
+                except OSError as exc:
+                    resolved = set()
+                    say(self.diagnostic(f"Network WARNING DNS {c['host']}: {type(exc).__name__}: {exc}"))
+            if not resolved or not resolved.issubset(local):
+                say(self.diagnostic(f"Network WARNING: {c['host']} tidak cocok dengan IPv4 lokal aktif ({', '.join(sorted(local)) or 'tidak ditemukan'}). Periksa alamat/DNS sebelum mengakses dari LAN."))
+            for item in addresses:
+                if item["address"] in resolved:
+                    say(self.diagnostic(f"Network: {item['address']} pada {item['interface']}; DHCP {item['dhcp']}. Gunakan IP statis atau reservasi DHCP yang tetap."))
+            for profile in network["profiles"]:
+                say(self.diagnostic(f"Network profile: {profile['interface']} = {profile['category']}. Aturan Absensa hanya Domain/Private, sumber LocalSubnet, TCP {c['https_port']}."))
+            for profile in network["firewall"]:
+                say(self.diagnostic(f"Firewall {profile['name']}: enabled={profile['enabled']}"))
+            say("Uji akses HTTPS dari komputer LAN; pemeriksaan lokal tidak membuktikan akses firewall/VLAN klien.")
+        except (OperationError, OSError, ValueError, KeyError, TypeError) as exc:
+            say(self.diagnostic(f"Network WARNING: pemeriksaan tidak tersedia: {type(exc).__name__}: {exc}"))
+
     def status(self):
         say("Versi: " + (self.state["version"] if self.state else "belum terpasang"))
         say("Tahap: " + str((self.state or {}).get("transaction", "siap" if self.state else "belum lengkap")))
         say("Startup otomatis tercatat: " + str((self.state or {}).get("autostart", False)))
         if self.config:
+            self.network_preflight()
             failures = self.health_failures()
             for failure in failures:
                 say(failure)
@@ -1344,6 +1375,7 @@ def install(obj, source, args):
             raise OperationError("Pilih zona waktu 1, 2, atau 3.")
         zone = ("Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura")[int(selection) - 1]
     config = new_config(host, port, zone, mode, token)
+    obj.network_preflight(config)
     for candidate in (
         port,
         config["pg_port"],
@@ -1352,6 +1384,8 @@ def install(obj, source, args):
     ):
         with socket.socket() as sock:
             try:
+                if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
                 sock.bind(("0.0.0.0" if candidate == port else "127.0.0.1", candidate))
             except OSError as exc:
                 raise OperationError(

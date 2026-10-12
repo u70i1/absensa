@@ -605,6 +605,7 @@ class WindowsTests(unittest.TestCase):
         self.assertIn("WhatsApp /health returned unexpected status 502", "\n".join(self.obj.health_failures()))
 
     def test_health_retries_and_preserves_final_diagnostics(self):
+        self.obj.network_preflight = Mock()
         self.obj.health_failures = Mock(return_value=["HTTPS TLS handshake failed: fixture"])
         with (patch.object(manage.time, "sleep") as sleep,
               contextlib.redirect_stdout(io.StringIO()),
@@ -629,6 +630,34 @@ class WindowsTests(unittest.TestCase):
         log = (self.data / "logs/operations.log").read_text()
         self.assertIn("Health OK", log)
         self.assertNotIn("FINAL FAILURE", log)
+
+    def test_network_preflight_reports_virtual_interface_dhcp_dns_and_profiles(self):
+        network = dict(addresses=[dict(address="192.168.0.10", interface="vEthernet (LAN)", dhcp="Enabled")],
+                       profiles=[dict(interface="vEthernet (LAN)", category="Public")],
+                       firewall=[dict(name="Public", enabled=True)])
+        self.obj.host = Mock(return_value=SimpleNamespace(stdout=json.dumps(network)))
+        self.obj.config["host"] = "192.168.0.10"
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            self.obj.network_preflight()
+        self.assertIn("vEthernet", output.getvalue())
+        self.assertIn("reservasi DHCP", output.getvalue())
+        self.assertIn("Public", output.getvalue())
+        self.assertNotIn("WARNING", output.getvalue())
+        self.obj.host.assert_called_once_with("network")
+        self.obj.config["host"] = "192.168.1.10"
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            self.obj.network_preflight()
+        self.assertIn("tidak cocok", output.getvalue())
+        self.obj.config["host"] = "school.test"
+        with (patch.object(manage.socket, "getaddrinfo", side_effect=OSError("DNS unavailable")),
+              contextlib.redirect_stdout(io.StringIO()) as output):
+            self.obj.network_preflight()
+        self.assertIn("DNS unavailable", output.getvalue())
+        with (patch.object(manage.socket, "getaddrinfo", return_value=[(None, None, None, None, ("192.168.0.10", 443))]),
+              contextlib.redirect_stdout(io.StringIO()) as output):
+            self.obj.network_preflight()
+        self.assertIn("Network DNS school.test: 192.168.0.10", output.getvalue())
+        self.assertNotIn("tidak cocok", output.getvalue())
 
     def test_status_without_state_is_read_only(self):
         self.obj.state = self.obj.config = None
