@@ -252,6 +252,28 @@ class WindowsTests(unittest.TestCase):
             smoke.run_smoke()
         self.assertIs(caught.exception, error)
 
+    def test_native_smoke_selects_active_ipv4_without_assuming_physical_adapter(self):
+        network = {"addresses": [dict(address="127.0.0.1", interface="loopback"),
+                                 dict(address="169.254.1.2", interface="unconfigured"),
+                                 dict(address="192.168.0.10", interface="vEthernet")]}
+        self.assertEqual(smoke.fixture_address(network), "192.168.0.10")
+        with self.assertRaisesRegex(RuntimeError, "No active LAN IPv4"):
+            smoke.fixture_address({"addresses": network["addresses"][:2]})
+
+    def test_smoke_interruption_hook_is_fixture_only_and_restored(self):
+        fixture = SimpleNamespace(new_config=manage.new_config, Installation=type("Installer", (), {"health": lambda self: None}),
+                                  OperationError=manage.OperationError)
+        original = fixture.Installation.health
+        def main():
+            with self.assertRaisesRegex(manage.OperationError, "simulated interruption"):
+                fixture.Installation().health()
+        fixture.main = main
+        with (patch.dict(sys.modules, {"manage": fixture}),
+              patch.dict(smoke.os.environ, {"ABSENSA_SMOKE_INTERRUPT_INSTALL": "1"}),
+              patch.object(sys, "argv", ["fixture", "{}", "install"])):
+            exec(smoke.INSTALL_FIXTURE, {})
+        self.assertIs(fixture.Installation.health, original)
+
     def test_smoke_ports_skip_busy_and_reserved_ports_and_release_probes(self):
         probes = []
 
