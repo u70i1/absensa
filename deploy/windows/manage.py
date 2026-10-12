@@ -63,6 +63,27 @@ def write_json(path, value):
     atomic(path, json.dumps(value, indent=2) + "\n")
 
 
+def read_json(path):
+    """Accept UTF-8 with/without BOM; never recover by inventing configuration."""
+    try:
+        value = json.loads(path.read_text(encoding="utf-8-sig"))
+    except UnicodeError:
+        raise OperationError(f"{path}: encoding harus UTF-8 (BOM diperbolehkan). Pulihkan salinan konfigurasi yang valid; jangan membuat rahasia baru.") from None
+    except json.JSONDecodeError as exc:
+        raise OperationError(f"{path}: JSON tidak sah pada baris {exc.lineno}, kolom {exc.colno}. Pulihkan salinan konfigurasi yang valid; jangan mengedit state untuk melewati repair.") from None
+    except OSError as exc:
+        raise OperationError(f"{path}: tidak dapat dibaca ({type(exc).__name__}); periksa file dan izin.") from None
+    if not isinstance(value, dict) or not value:
+        raise OperationError(f"{path}: objek JSON tidak kosong diperlukan.")
+    return value
+
+
+def require_fields(path, value, fields):
+    missing = sorted(set(fields) - value.keys())
+    if missing:
+        raise OperationError(f"{path}: field wajib tidak ada: {', '.join(missing)}. Pulihkan konfigurasi yang valid.")
+
+
 def validate_host(value):
     try:
         address = ipaddress.IPv4Address(value)
@@ -236,33 +257,69 @@ class Installation:
                 )
         self.state_path = self.data / "state.json"
         self.config_path = self.data / "config/installation.json"
-        self.state = (
-            json.loads(self.state_path.read_text(encoding="utf-8"))
-            if self.state_path.exists()
-            else None
-        )
-        self.config = (
-            json.loads(self.config_path.read_text(encoding="utf-8"))
-            if self.config_path.exists()
-            else None
-        )
-        if self.state:
+        self.state = read_json(self.state_path) if self.state_path.exists() else None
+        self.config = read_json(self.config_path) if self.config_path.exists() else None
+        if self.state is not None:
+            require_fields(self.state_path, self.state, ("format", "version", "root", "data", "initialized"))
+            if not isinstance(self.state["version"], str):
+                raise OperationError(f"{self.state_path}: version harus berupa teks tag rilis.")
             version(self.state["version"])
-            if (
-                self.state.get("format") != 1
-                or self.state.get("root") != str(self.root)
-                or self.state.get("data") != str(self.data)
+            if (self.state["format"] != 1 or self.state["root"] != str(self.root)
+                    or self.state["data"] != str(self.data)):
+                raise OperationError("Identitas instalasi berubah. Pulihkan konfigurasi; jangan pindahkan direktori secara manual.")
+            for field in ("initialized", "autostart", "uninstalled"):
+                if field in self.state and type(self.state[field]) is not bool:
+                    raise OperationError(f"{self.state_path}: {field} harus boolean.")
+            if "transaction" in self.state:
+                transaction = self.state["transaction"]
+                if not isinstance(transaction, dict) or transaction.get("phase") not in {
+                    "install", "migration", "backup", "restore", "restored", "repair", "finalize"
+                }:
+                    raise OperationError(f"{self.state_path}: transaction/phase tidak sah. Pulihkan jurnal yang valid.")
+                if transaction["phase"] == "backup" and (
+                    not isinstance(transaction.get("resume"), list)
+                    or any(role not in APPLICATION for role in transaction["resume"])
+                ):
+                    raise OperationError(f"{self.state_path}: transaction/resume tidak sah.")
+            if self.config is None:
+                raise OperationError(f"{self.config_path}: konfigurasi hilang; pulihkan salinan asli. Rahasia tidak dibuat ulang.")
+        if self.config is not None:
+            c = self.config
+            require_fields(self.config_path, c, (
+                "format", "host", "https_port", "tls", "timezone", "cf_token", "pg_port",
+                "web_port", "bridge_port", "pg_password", "db_password", "bridge_token",
+                "backup_key", "database", "photo_tree", "whatsapp_tree", "caddy_tree",
+            ))
+            text_fields = ("host", "tls", "timezone", "cf_token", "pg_password", "db_password",
+                           "bridge_token", "backup_key", "database", "photo_tree", "whatsapp_tree", "caddy_tree")
+            for field in text_fields:
+                if not isinstance(c[field], str):
+                    raise OperationError(f"{self.config_path}: {field} harus berupa teks.")
+            validate_host(c["host"])
+            ports = [c[field] for field in ("https_port", "pg_port", "web_port", "bridge_port")]
+            if (any(type(port) is not int or not 1 <= port <= 65535 for port in ports)
+                    or len(set(ports)) != 4):
+                raise OperationError(f"{self.config_path}: port harus integer 1–65535 dan berbeda.")
+            if (c["format"] != 1 or c["tls"] not in ("internal", "cloudflare")
+                    or c["timezone"] not in ("Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura")):
+                raise OperationError(f"{self.config_path}: format, tls, atau timezone tidak sah.")
+            if c["tls"] == "cloudflare" and (
+                re.fullmatch(r"[0-9.]+", c["host"])
+                or not re.fullmatch(r"[A-Za-z0-9_-]{20,256}", c["cf_token"])
             ):
-                raise OperationError(
-                    "Identitas instalasi berubah. Pulihkan konfigurasi; jangan pindahkan direktori secara manual."
-                )
-        if self.config:
-            validate_host(self.config["host"])
+                raise OperationError(f"{self.config_path}: Cloudflare memerlukan domain dan token DNS yang valid.")
             for name in ("database", "photo_tree", "whatsapp_tree", "caddy_tree"):
-                if not re.fullmatch(r"[a-z0-9_]+", self.config[name]):
-                    raise OperationError("Nama penyimpanan konfigurasi tidak sah.")
-            if len(base64.b64decode(self.config["backup_key"], validate=True)) != 32:
-                raise OperationError("Kunci pemulihan tidak sah.")
+                if not re.fullmatch(r"[a-z0-9_]+", c[name]):
+                    raise OperationError(f"{self.config_path}: nama penyimpanan {name} tidak sah.")
+            for field in ("pg_password", "db_password", "bridge_token"):
+                if not re.fullmatch(r"[a-f0-9]{64}", c[field]):
+                    raise OperationError(f"{self.config_path}: {field} tidak sah; pulihkan rahasia asli.")
+            try:
+                valid_key = len(base64.b64decode(c["backup_key"], validate=True)) == 32
+            except ValueError:
+                valid_key = False
+            if not valid_key:
+                raise OperationError(f"{self.config_path}: backup_key tidak sah; pulihkan kunci asli.")
 
     @property
     def release(self):
@@ -1053,7 +1110,7 @@ class Installation:
             ],
             timeout=3900,
         )
-        self.state = json.loads(self.state_path.read_text())
+        self.state = read_json(self.state_path)
 
     def finish(self):
         self.storage_check()
@@ -1107,8 +1164,8 @@ class Installation:
         old = self.config.copy()
         restored = stage / "config/installation.json"
         if restored.exists():
-            source_config = json.loads(restored.read_text())
-            source_state = json.loads((stage / "config/state.json").read_text())
+            source_config = read_json(restored)
+            source_state = read_json(stage / "config/state.json")
             if source_state["version"] != self.state["version"]:
                 raise OperationError(
                     "Untuk arsip lengkap, pasang versi sumber dahulu: "

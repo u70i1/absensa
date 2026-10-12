@@ -100,6 +100,62 @@ class WindowsTests(unittest.TestCase):
         child.terminate.assert_called_once()
         self.assertIn("timed out", output.getvalue())
 
+    def test_bom_configuration_is_read_without_changing_secrets(self):
+        for path, value in ((self.obj.state_path, self.obj.state), (self.obj.config_path, self.obj.config)):
+            path.write_text(json.dumps(value), encoding="utf-8-sig")
+        loaded = manage.Installation(self.root, self.data)
+        self.assertEqual(loaded.state, self.obj.state)
+        self.assertEqual(loaded.config, self.obj.config)
+        loaded.save()
+        self.assertFalse(self.obj.state_path.read_bytes().startswith(b"\xef\xbb\xbf"))
+
+    def test_malformed_json_encoding_and_missing_fields_are_actionable(self):
+        for raw, message in ((b'{"password":"PRIVATE",', "baris 1"),
+                             (b'\xff\xfeBAD', "encoding harus UTF-8"),
+                             (b'{}', "objek JSON"), (b'[]', "objek JSON"),
+                             (b'{"format":1}', "field wajib tidak ada")):
+            with self.subTest(raw=raw):
+                self.obj.config_path.write_bytes(raw)
+                with self.assertRaisesRegex(manage.OperationError, message) as error:
+                    manage.Installation(self.root, self.data)
+                self.assertIn(str(self.obj.config_path), str(error.exception))
+                self.assertNotIn("PRIVATE", str(error.exception))
+                self.assertEqual(self.obj.config_path.read_bytes(), raw)
+
+    def test_configuration_rejects_invalid_types_ports_keys_and_journals(self):
+        manage.write_json(self.obj.config_path, self.obj.config)
+        for field, value in (("https_port", True), ("https_port", 18088),
+                             ("host", []), ("backup_key", "PRIVATE"),
+                             ("database", "../other"), ("db_password", "PRIVATE")):
+            config = dict(self.obj.config, **{field: value})
+            manage.write_json(self.obj.config_path, config)
+            with self.assertRaises(manage.OperationError) as error:
+                manage.Installation(self.root, self.data)
+            self.assertNotIn("PRIVATE", str(error.exception))
+        manage.write_json(self.obj.config_path, self.obj.config)
+        for transaction in (None, {}, {"phase": "unknown"}, {"phase": "backup", "resume": ["other"]}):
+            manage.write_json(self.obj.state_path, dict(self.obj.state, transaction=transaction))
+            with self.assertRaisesRegex(manage.OperationError, "transaction"):
+                manage.Installation(self.root, self.data)
+
+    def test_interrupted_atomic_write_preserves_authoritative_state(self):
+        before = self.obj.state_path.read_bytes()
+        with (patch("app.services.durable_file.publish", side_effect=OSError("interrupted")),
+              self.assertRaisesRegex(OSError, "interrupted")):
+            manage.write_json(self.obj.state_path, {"version": "v99.0.0"})
+        self.assertEqual(self.obj.state_path.read_bytes(), before)
+        manage.write_json(self.obj.config_path, self.obj.config)
+        loaded = manage.Installation(self.root, self.data)
+        self.assertEqual(loaded.state, self.obj.state)
+        self.assertTrue(list(self.data.glob("state.json.new-*")))
+
+    def test_missing_config_never_generates_replacement_secrets(self):
+        with (patch.object(manage, "new_config") as new,
+              self.assertRaisesRegex(manage.OperationError, "konfigurasi hilang")):
+            manage.Installation(self.root, self.data)
+        new.assert_not_called()
+        self.assertFalse(self.obj.config_path.exists())
+
     def test_configuration_secrets_independent_and_secure_cookies(self):
         a = self.obj.config
         b = manage.new_config("absensa.school.test")

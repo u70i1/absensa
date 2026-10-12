@@ -1,7 +1,6 @@
 """Release entry point. Only immutable code lives beside the embedded interpreter."""
 
 import argparse
-import json
 import os
 import runpy
 import subprocess
@@ -13,9 +12,9 @@ DLL_HANDLES = []
 
 
 def prepare(data, role="web"):
-    env = json.loads(
-        (Path(data) / "config" / f"{role}.json").read_text(encoding="utf-8")
-    )
+    from manage import read_json
+
+    env = read_json(Path(data) / "config" / f"{role}.json")
     # Discard inherited application configuration; the private file is authoritative.
     for key in list(os.environ):
         if key.startswith(
