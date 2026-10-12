@@ -68,11 +68,17 @@ def read_json(path):
     try:
         value = json.loads(path.read_text(encoding="utf-8-sig"))
     except UnicodeError:
-        raise OperationError(f"{path}: encoding harus UTF-8 (BOM diperbolehkan). Pulihkan salinan konfigurasi yang valid; jangan membuat rahasia baru.") from None
+        raise OperationError(
+            f"{path}: encoding harus UTF-8 (BOM diperbolehkan). Pulihkan salinan konfigurasi yang valid; jangan membuat rahasia baru."
+        ) from None
     except json.JSONDecodeError as exc:
-        raise OperationError(f"{path}: JSON tidak sah pada baris {exc.lineno}, kolom {exc.colno}. Pulihkan salinan konfigurasi yang valid; jangan mengedit state untuk melewati repair.") from None
+        raise OperationError(
+            f"{path}: JSON tidak sah pada baris {exc.lineno}, kolom {exc.colno}. Pulihkan salinan konfigurasi yang valid; jangan mengedit state untuk melewati repair."
+        ) from None
     except OSError as exc:
-        raise OperationError(f"{path}: tidak dapat dibaca ({type(exc).__name__}); periksa file dan izin.") from None
+        raise OperationError(
+            f"{path}: tidak dapat dibaca ({type(exc).__name__}); periksa file dan izin."
+        ) from None
     if not isinstance(value, dict) or not value:
         raise OperationError(f"{path}: objek JSON tidak kosong diperlukan.")
     return value
@@ -81,7 +87,9 @@ def read_json(path):
 def require_fields(path, value, fields):
     missing = sorted(set(fields) - value.keys())
     if missing:
-        raise OperationError(f"{path}: field wajib tidak ada: {', '.join(missing)}. Pulihkan konfigurasi yang valid.")
+        raise OperationError(
+            f"{path}: field wajib tidak ada: {', '.join(missing)}. Pulihkan konfigurasi yang valid."
+        )
 
 
 def validate_host(value):
@@ -260,66 +268,144 @@ class Installation:
         self.state = read_json(self.state_path) if self.state_path.exists() else None
         self.config = read_json(self.config_path) if self.config_path.exists() else None
         if self.state is not None:
-            require_fields(self.state_path, self.state, ("format", "version", "root", "data", "initialized"))
+            require_fields(
+                self.state_path,
+                self.state,
+                ("format", "version", "root", "data", "initialized"),
+            )
             if not isinstance(self.state["version"], str):
-                raise OperationError(f"{self.state_path}: version harus berupa teks tag rilis.")
+                raise OperationError(
+                    f"{self.state_path}: version harus berupa teks tag rilis."
+                )
             version(self.state["version"])
-            if (self.state["format"] != 1 or self.state["root"] != str(self.root)
-                    or self.state["data"] != str(self.data)):
-                raise OperationError("Identitas instalasi berubah. Pulihkan konfigurasi; jangan pindahkan direktori secara manual.")
+            if (
+                self.state["format"] != 1
+                or self.state["root"] != str(self.root)
+                or self.state["data"] != str(self.data)
+            ):
+                raise OperationError(
+                    "Identitas instalasi berubah. Pulihkan konfigurasi; jangan pindahkan direktori secara manual."
+                )
             for field in ("initialized", "autostart", "uninstalled"):
                 if field in self.state and type(self.state[field]) is not bool:
                     raise OperationError(f"{self.state_path}: {field} harus boolean.")
             if "transaction" in self.state:
                 transaction = self.state["transaction"]
-                if not isinstance(transaction, dict) or transaction.get("phase") not in {
-                    "install", "migration", "backup", "restore", "restored", "repair", "finalize"
+                if not isinstance(transaction, dict) or transaction.get(
+                    "phase"
+                ) not in {
+                    "install",
+                    "migration",
+                    "backup",
+                    "restore",
+                    "restored",
+                    "repair",
+                    "finalize",
                 }:
-                    raise OperationError(f"{self.state_path}: transaction/phase tidak sah. Pulihkan jurnal yang valid.")
+                    raise OperationError(
+                        f"{self.state_path}: transaction/phase tidak sah. Pulihkan jurnal yang valid."
+                    )
                 if transaction["phase"] == "backup" and (
                     not isinstance(transaction.get("resume"), list)
                     or any(role not in APPLICATION for role in transaction["resume"])
                 ):
-                    raise OperationError(f"{self.state_path}: transaction/resume tidak sah.")
+                    raise OperationError(
+                        f"{self.state_path}: transaction/resume tidak sah."
+                    )
             if self.config is None:
-                raise OperationError(f"{self.config_path}: konfigurasi hilang; pulihkan salinan asli. Rahasia tidak dibuat ulang.")
+                raise OperationError(
+                    f"{self.config_path}: konfigurasi hilang; pulihkan salinan asli. Rahasia tidak dibuat ulang."
+                )
         if self.config is not None:
             c = self.config
-            require_fields(self.config_path, c, (
-                "format", "host", "https_port", "tls", "timezone", "cf_token", "pg_port",
-                "web_port", "bridge_port", "pg_password", "db_password", "bridge_token",
-                "backup_key", "database", "photo_tree", "whatsapp_tree", "caddy_tree",
-            ))
-            text_fields = ("host", "tls", "timezone", "cf_token", "pg_password", "db_password",
-                           "bridge_token", "backup_key", "database", "photo_tree", "whatsapp_tree", "caddy_tree")
+            require_fields(
+                self.config_path,
+                c,
+                (
+                    "format",
+                    "host",
+                    "https_port",
+                    "tls",
+                    "timezone",
+                    "cf_token",
+                    "pg_port",
+                    "web_port",
+                    "bridge_port",
+                    "pg_password",
+                    "db_password",
+                    "bridge_token",
+                    "backup_key",
+                    "database",
+                    "photo_tree",
+                    "whatsapp_tree",
+                    "caddy_tree",
+                ),
+            )
+            text_fields = (
+                "host",
+                "tls",
+                "timezone",
+                "cf_token",
+                "pg_password",
+                "db_password",
+                "bridge_token",
+                "backup_key",
+                "database",
+                "photo_tree",
+                "whatsapp_tree",
+                "caddy_tree",
+            )
             for field in text_fields:
                 if not isinstance(c[field], str):
-                    raise OperationError(f"{self.config_path}: {field} harus berupa teks.")
+                    raise OperationError(
+                        f"{self.config_path}: {field} harus berupa teks."
+                    )
             validate_host(c["host"])
-            ports = [c[field] for field in ("https_port", "pg_port", "web_port", "bridge_port")]
-            if (any(type(port) is not int or not 1 <= port <= 65535 for port in ports)
-                    or len(set(ports)) != 4):
-                raise OperationError(f"{self.config_path}: port harus integer 1–65535 dan berbeda.")
-            if (c["format"] != 1 or c["tls"] not in ("internal", "cloudflare")
-                    or c["timezone"] not in ("Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura")):
-                raise OperationError(f"{self.config_path}: format, tls, atau timezone tidak sah.")
+            ports = [
+                c[field]
+                for field in ("https_port", "pg_port", "web_port", "bridge_port")
+            ]
+            if (
+                any(type(port) is not int or not 1 <= port <= 65535 for port in ports)
+                or len(set(ports)) != 4
+            ):
+                raise OperationError(
+                    f"{self.config_path}: port harus integer 1–65535 dan berbeda."
+                )
+            if (
+                c["format"] != 1
+                or c["tls"] not in ("internal", "cloudflare")
+                or c["timezone"]
+                not in ("Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura")
+            ):
+                raise OperationError(
+                    f"{self.config_path}: format, tls, atau timezone tidak sah."
+                )
             if c["tls"] == "cloudflare" and (
                 re.fullmatch(r"[0-9.]+", c["host"])
                 or not re.fullmatch(r"[A-Za-z0-9_-]{20,256}", c["cf_token"])
             ):
-                raise OperationError(f"{self.config_path}: Cloudflare memerlukan domain dan token DNS yang valid.")
+                raise OperationError(
+                    f"{self.config_path}: Cloudflare memerlukan domain dan token DNS yang valid."
+                )
             for name in ("database", "photo_tree", "whatsapp_tree", "caddy_tree"):
                 if not re.fullmatch(r"[a-z0-9_]+", c[name]):
-                    raise OperationError(f"{self.config_path}: nama penyimpanan {name} tidak sah.")
+                    raise OperationError(
+                        f"{self.config_path}: nama penyimpanan {name} tidak sah."
+                    )
             for field in ("pg_password", "db_password", "bridge_token"):
                 if not re.fullmatch(r"[a-f0-9]{64}", c[field]):
-                    raise OperationError(f"{self.config_path}: {field} tidak sah; pulihkan rahasia asli.")
+                    raise OperationError(
+                        f"{self.config_path}: {field} tidak sah; pulihkan rahasia asli."
+                    )
             try:
                 valid_key = len(base64.b64decode(c["backup_key"], validate=True)) == 32
             except ValueError:
                 valid_key = False
             if not valid_key:
-                raise OperationError(f"{self.config_path}: backup_key tidak sah; pulihkan kunci asli.")
+                raise OperationError(
+                    f"{self.config_path}: backup_key tidak sah; pulihkan kunci asli."
+                )
 
     @property
     def release(self):
@@ -330,7 +416,14 @@ class Installation:
         return self.release / "python/python.exe"
 
     def run(
-        self, args, *, input=None, env=None, check=True, timeout=900, operation=None,
+        self,
+        args,
+        *,
+        input=None,
+        env=None,
+        check=True,
+        timeout=900,
+        operation=None,
         expected_codes=(0,),
     ):
         result = subprocess.run(
@@ -346,7 +439,9 @@ class Installation:
         )
         if result.returncode not in expected_codes:
             operation = operation or Path(args[0]).name
-            self.diagnostic(f"{operation}: exit {result.returncode}\n{result.stdout}{result.stderr}")
+            self.diagnostic(
+                f"{operation}: exit {result.returncode}\n{result.stdout}{result.stderr}"
+            )
             if check:
                 raise OperationError(
                     f"Operasi {operation} gagal. Periksa {self.data / 'logs/operations.log'}."
@@ -354,7 +449,13 @@ class Installation:
         return result
 
     def redact(self, message):
-        for key in ("pg_password", "db_password", "bridge_token", "backup_key", "cf_token"):
+        for key in (
+            "pg_password",
+            "db_password",
+            "bridge_token",
+            "backup_key",
+            "cf_token",
+        ):
             if self.config and self.config.get(key):
                 message = message.replace(self.config[key], "[RAHASIA]")
         # Also redact connection URLs if a driver includes one in an exception.
@@ -407,7 +508,9 @@ class Installation:
     def running(self, role):
         result = self.sc("query", SERVICES[role], check=False, expected_codes=(0, 1060))
         if result.returncode not in (0, 1060):
-            raise OperationError("Status layanan tidak dapat diperiksa: " + SERVICES[role])
+            raise OperationError(
+                "Status layanan tidak dapat diperiksa: " + SERVICES[role]
+            )
         return result.returncode == 0 and bool(re.search(r":\s+4\s", result.stdout))
 
     def set_start(self, automatic):
@@ -424,7 +527,9 @@ class Installation:
         for role in reversed(roles):
             if not self.exists(role):
                 continue
-            result = self.sc("stop", SERVICES[role], check=False, expected_codes=(0, 1062))
+            result = self.sc(
+                "stop", SERVICES[role], check=False, expected_codes=(0, 1062)
+            )
             if result.returncode not in (0, 1062):
                 raise OperationError(
                     "Layanan tidak dapat dihentikan: " + SERVICES[role]
@@ -814,7 +919,9 @@ class Installation:
     def admin(self, username=None):
         self.guard()
         if not self.state.get("initialized"):
-            raise OperationError("Instalasi belum selesai. Jalankan repair sebelum membuat administrator.")
+            raise OperationError(
+                "Instalasi belum selesai. Jalankan repair sebelum membuat administrator."
+            )
         self.start_services(("postgres",))
         self.wait_database()
         count = self.pg(
@@ -850,7 +957,12 @@ class Installation:
 
     @property
     def ca_path(self):
-        return self.data / "caddy" / self.config["caddy_tree"] / "caddy/pki/authorities/local/root.crt"
+        return (
+            self.data
+            / "caddy"
+            / self.config["caddy_tree"]
+            / "caddy/pki/authorities/local/root.crt"
+        )
 
     def health_failures(self):
         """One diagnostic pass; independent checks still run after a TLS failure."""
@@ -860,15 +972,22 @@ class Installation:
         def check(component, action):
             try:
                 action()
-            except (OSError, ValueError, http.client.HTTPException, OperationError,
-                    subprocess.SubprocessError) as exc:
+            except (
+                OSError,
+                ValueError,
+                http.client.HTTPException,
+                OperationError,
+                subprocess.SubprocessError,
+            ) as exc:
                 if isinstance(exc, ssl.SSLCertVerificationError):
                     reason = "certificate verification failed"
                 elif isinstance(exc, ssl.SSLError):
                     reason = "TLS handshake failed"
                 else:
                     reason = "failed"
-                failures.append(self.redact(f"{component}: {reason}: {type(exc).__name__}: {exc}"))
+                failures.append(
+                    self.redact(f"{component}: {reason}: {type(exc).__name__}: {exc}")
+                )
 
         def https():
             context = ssl.create_default_context(
@@ -876,19 +995,30 @@ class Installation:
             )
             status, body = https_health(c["host"], c["https_port"], context)
             if status != 200:
-                raise OperationError(f"HTTPS /health returned unexpected status {status}")
+                raise OperationError(
+                    f"HTTPS /health returned unexpected status {status}"
+                )
             if not isinstance(body, dict) or body.get("ok") is not True:
                 raise OperationError("HTTPS /health returned unhealthy body")
 
         def database():
-            result = self.pg("psql", "-XAt", "-v", "ON_ERROR_STOP=1", "-c", "SELECT 1",
-                             database=c["database"])
+            result = self.pg(
+                "psql",
+                "-XAt",
+                "-v",
+                "ON_ERROR_STOP=1",
+                "-c",
+                "SELECT 1",
+                database=c["database"],
+            )
             if result.stdout.strip() != "1":
                 raise OperationError("Database health check returned unexpected result")
 
         def service(role):
             if not self.running(role):
-                raise OperationError(SERVICES[role] + " service stopped or not installed")
+                raise OperationError(
+                    SERVICES[role] + " service stopped or not installed"
+                )
 
         def heartbeat(role):
             stamp = self.data / "health" / role / f"absensa-{role}.heartbeat"
@@ -896,15 +1026,21 @@ class Installation:
                 raise OperationError(role + " heartbeat missing")
             age = time.time() - stamp.stat().st_mtime
             if age < -60 or age > (3900 if role == "backup" else 300):
-                raise OperationError(f"{role} heartbeat stale or clock incorrect (age {age:.0f}s)")
+                raise OperationError(
+                    f"{role} heartbeat stale or clock incorrect (age {age:.0f}s)"
+                )
 
         def whatsapp():
-            bridge = http.client.HTTPConnection("127.0.0.1", c["bridge_port"], timeout=5)
+            bridge = http.client.HTTPConnection(
+                "127.0.0.1", c["bridge_port"], timeout=5
+            )
             try:
                 bridge.request("GET", "/health")
                 response = bridge.getresponse()
                 if response.status != 200:
-                    raise OperationError(f"WhatsApp /health returned unexpected status {response.status}")
+                    raise OperationError(
+                        f"WhatsApp /health returned unexpected status {response.status}"
+                    )
                 body = json.loads(response.read())
                 if not isinstance(body, dict) or body.get("ok") is not True:
                     raise OperationError("WhatsApp /health returned unhealthy body")
@@ -930,12 +1066,18 @@ class Installation:
                 if self.config["tls"] == "internal":
                     shutil.copyfile(self.ca_path, self.data / "root-ca.crt")
                     cert = ssl.PEM_cert_to_DER_cert(self.ca_path.read_text())
-                    say(f"CA perangkat LAN: {self.data / 'root-ca.crt'}\nSHA-256: {hashlib.sha256(cert).hexdigest()}")
+                    say(
+                        f"CA perangkat LAN: {self.data / 'root-ca.crt'}\nSHA-256: {hashlib.sha256(cert).hexdigest()}"
+                    )
                 self.diagnostic(f"Health OK after {elapsed:.1f}s ({attempt} attempts)")
                 return
             phase = "FINAL FAILURE" if attempt == attempts else "RETRY"
             for failure in failures:
-                say(self.diagnostic(f"Health {phase} {attempt}/{attempts}, {elapsed:.1f}s: {failure}"))
+                say(
+                    self.diagnostic(
+                        f"Health {phase} {attempt}/{attempts}, {elapsed:.1f}s: {failure}"
+                    )
+                )
             if attempt < attempts:
                 time.sleep(interval)
         raise OperationError(
@@ -955,28 +1097,76 @@ class Installation:
                 resolved = {c["host"]}
             except ipaddress.AddressValueError:
                 try:
-                    resolved = {item[4][0] for item in socket.getaddrinfo(c["host"], c["https_port"], socket.AF_INET, socket.SOCK_STREAM)}
-                    say(self.diagnostic(f"Network DNS {c['host']}: {', '.join(sorted(resolved))}"))
+                    resolved = {
+                        item[4][0]
+                        for item in socket.getaddrinfo(
+                            c["host"],
+                            c["https_port"],
+                            socket.AF_INET,
+                            socket.SOCK_STREAM,
+                        )
+                    }
+                    say(
+                        self.diagnostic(
+                            f"Network DNS {c['host']}: {', '.join(sorted(resolved))}"
+                        )
+                    )
                 except OSError as exc:
                     resolved = set()
-                    say(self.diagnostic(f"Network WARNING DNS {c['host']}: {type(exc).__name__}: {exc}"))
+                    say(
+                        self.diagnostic(
+                            f"Network WARNING DNS {c['host']}: {type(exc).__name__}: {exc}"
+                        )
+                    )
             if not resolved or not resolved.issubset(local):
-                say(self.diagnostic(f"Network WARNING: {c['host']} tidak cocok dengan IPv4 lokal aktif ({', '.join(sorted(local)) or 'tidak ditemukan'}). Periksa alamat/DNS sebelum mengakses dari LAN."))
+                say(
+                    self.diagnostic(
+                        f"Network WARNING: {c['host']} tidak cocok dengan IPv4 lokal aktif ({', '.join(sorted(local)) or 'tidak ditemukan'}). Periksa alamat/DNS sebelum mengakses dari LAN."
+                    )
+                )
             for item in addresses:
                 if item["address"] in resolved:
-                    say(self.diagnostic(f"Network: {item['address']} pada {item['interface']}; DHCP {item['dhcp']}. Gunakan IP statis atau reservasi DHCP yang tetap."))
+                    say(
+                        self.diagnostic(
+                            f"Network: {item['address']} pada {item['interface']}; DHCP {item['dhcp']}. Gunakan IP statis atau reservasi DHCP yang tetap."
+                        )
+                    )
             for profile in network["profiles"]:
-                say(self.diagnostic(f"Network profile: {profile['interface']} = {profile['category']}. Aturan Absensa hanya Domain/Private, sumber LocalSubnet, TCP {c['https_port']}."))
+                say(
+                    self.diagnostic(
+                        f"Network profile: {profile['interface']} = {profile['category']}. Aturan Absensa hanya Domain/Private, sumber LocalSubnet, TCP {c['https_port']}."
+                    )
+                )
             for profile in network["firewall"]:
-                say(self.diagnostic(f"Firewall {profile['name']}: enabled={profile['enabled']}"))
-            say("Uji akses HTTPS dari komputer LAN; pemeriksaan lokal tidak membuktikan akses firewall/VLAN klien.")
+                say(
+                    self.diagnostic(
+                        f"Firewall {profile['name']}: enabled={profile['enabled']}"
+                    )
+                )
+            say(
+                "Uji akses HTTPS dari komputer LAN; pemeriksaan lokal tidak membuktikan akses firewall/VLAN klien."
+            )
         except (OperationError, OSError, ValueError, KeyError, TypeError) as exc:
-            say(self.diagnostic(f"Network WARNING: pemeriksaan tidak tersedia: {type(exc).__name__}: {exc}"))
+            say(
+                self.diagnostic(
+                    f"Network WARNING: pemeriksaan tidak tersedia: {type(exc).__name__}: {exc}"
+                )
+            )
 
     def status(self):
         say("Versi: " + (self.state["version"] if self.state else "belum terpasang"))
-        say("Tahap: " + str((self.state or {}).get("transaction", "siap" if self.state else "belum lengkap")))
-        say("Startup otomatis tercatat: " + str((self.state or {}).get("autostart", False)))
+        say(
+            "Tahap: "
+            + str(
+                (self.state or {}).get(
+                    "transaction", "siap" if self.state else "belum lengkap"
+                )
+            )
+        )
+        say(
+            "Startup otomatis tercatat: "
+            + str((self.state or {}).get("autostart", False))
+        )
         if self.config:
             self.network_preflight()
             failures = self.health_failures()
@@ -989,7 +1179,15 @@ class Installation:
         log = self.data / "logs/operations.log"
         if log.exists():
             say("Diagnostik terakhir (termasuk kegagalan sebelum layanan dihentikan):")
-            say(self.redact("\n".join(log.read_text(encoding="utf-8", errors="replace").splitlines()[-30:])))
+            say(
+                self.redact(
+                    "\n".join(
+                        log.read_text(encoding="utf-8", errors="replace").splitlines()[
+                            -30:
+                        ]
+                    )
+                )
+            )
 
     def complete(self):
         # Keep a durable recovery journal until both health and SCM configuration
@@ -1011,11 +1209,16 @@ class Installation:
             self.state = pending
             # Cleanup must not hide the original health/SCM failure. The journal
             # is still on disk if final publication failed.
-            for cleanup in (lambda: self.set_start(False), lambda: self.stop(APPLICATION)):
+            for cleanup in (
+                lambda: self.set_start(False),
+                lambda: self.stop(APPLICATION),
+            ):
                 try:
                     cleanup()
                 except Exception as exc:
-                    self.diagnostic(f"Finalization cleanup failed: {type(exc).__name__}: {exc}")
+                    self.diagnostic(
+                        f"Finalization cleanup failed: {type(exc).__name__}: {exc}"
+                    )
             raise
         say(
             f"Administrator pertama (jika belum ada): & '{self.root / 'absensa.ps1'}' admin\n"
@@ -1161,17 +1364,24 @@ class Installation:
         # Explicit patch recovery for the v1.1.0 install-health failure only.
         # The bootstrap verifies the release bytes/provenance before entry.
         if not (
-            self.state["version"] == "v1.1.0" and manifest.get("version") == "v1.1.1"
+            self.state["version"] == "v1.1.0"
+            and manifest.get("version") == "v1.1.1"
             and self.state.get("initialized") is False
             and self.state.get("transaction", {}).get("phase") == "install"
             and manifest.get("upgrade_from_major") == 1
             and manifest.get("postgres_major") == 18
         ):
-            raise OperationError("Perbaikan lintas versi hanya untuk instalasi v1.1.0 yang belum selesai ke v1.1.1; transaksi migrasi/pemulihan tidak boleh dilewati.")
+            raise OperationError(
+                "Perbaikan lintas versi hanya untuk instalasi v1.1.0 yang belum selesai ke v1.1.1; transaksi migrasi/pemulihan tidak boleh dilewati."
+            )
         self.set_start(False)
         self.stop()
         tag = self.adopt_release(source)
-        self.state["transaction"] = {"phase": "install", "previous": "v1.1.0", "target": tag}
+        self.state["transaction"] = {
+            "phase": "install",
+            "previous": "v1.1.0",
+            "target": tag,
+        }
         self.state["version"] = tag
         self.state["autostart"] = False
         self.save()  # Keep old binaries; subsequent repair must use target code.

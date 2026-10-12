@@ -50,7 +50,12 @@ def fixture_address(network):
     """Use an actual active IPv4, including Hyper-V virtual adapters."""
     for item in network["addresses"]:
         address = ipaddress.IPv4Address(item["address"])
-        if not (address.is_loopback or address.is_unspecified or address.is_multicast or address.is_link_local):
+        if not (
+            address.is_loopback
+            or address.is_unspecified
+            or address.is_multicast
+            or address.is_link_local
+        ):
             return str(address)
     raise RuntimeError("No active LAN IPv4 available for the native TLS fixture")
 
@@ -156,9 +161,19 @@ def main():
     python = package / "python/python.exe"
     ports = fixture_ports()
     print("Native smoke fixture ports: " + json.dumps(ports), flush=True)
-    network = json.loads(subprocess.check_output(
-        [str(shell), "-NoProfile", "-File", str(package / "host.ps1"), "-Action", "network"], text=True
-    ))
+    network = json.loads(
+        subprocess.check_output(
+            [
+                str(shell),
+                "-NoProfile",
+                "-File",
+                str(package / "host.ps1"),
+                "-Action",
+                "network",
+            ],
+            text=True,
+        )
+    )
     host = fixture_address(network)
     print("Native smoke fixture IPv4: " + host, flush=True)
     interrupted = subprocess.run(
@@ -200,21 +215,46 @@ def main():
         assert not any(obj.running(role) for role in manager.APPLICATION)
         original = obj.config.copy()
         # A real database sentinel must survive repair after failed finalization.
-        obj.pg("psql", "-X", "-v", "ON_ERROR_STOP=1", database=obj.config["database"],
-               input="CREATE TABLE native_install_recovery (value text); INSERT INTO native_install_recovery VALUES ('preserved'); ALTER TABLE native_install_recovery OWNER TO absensa;\n")
+        obj.pg(
+            "psql",
+            "-X",
+            "-v",
+            "ON_ERROR_STOP=1",
+            database=obj.config["database"],
+            input="CREATE TABLE native_install_recovery (value text); INSERT INTO native_install_recovery VALUES ('preserved'); ALTER TABLE native_install_recovery OWNER TO absensa;\n",
+        )
         obj.repair()
         obj = manager.Installation(root, data)
-        assert obj.state["initialized"] and obj.state["autostart"] and not obj.state.get("transaction")
+        assert (
+            obj.state["initialized"]
+            and obj.state["autostart"]
+            and not obj.state.get("transaction")
+        )
         assert all(obj.running(role) for role in manager.SERVICES)
         assert (data / "root-ca.crt").read_bytes() == obj.ca_path.read_bytes()
         assert obj.config == original
-        assert obj.pg("psql", "-XAt", "-c", "SELECT value FROM native_install_recovery",
-                      database=obj.config["database"]).stdout.strip() == "preserved"
-        with patch.object(manager.getpass, "getpass", return_value="native-smoke-admin-password"):
+        assert (
+            obj.pg(
+                "psql",
+                "-XAt",
+                "-c",
+                "SELECT value FROM native_install_recovery",
+                database=obj.config["database"],
+            ).stdout.strip()
+            == "preserved"
+        )
+        with patch.object(
+            manager.getpass, "getpass", return_value="native-smoke-admin-password"
+        ):
             obj.admin("native-admin")
         admin_query = "SELECT username || ':' || password_hash FROM admins"
-        admin_before = obj.pg("psql", "-XAt", "-c", admin_query, database=obj.config["database"]).stdout
-        assert admin_before.startswith("native-admin:") and "native-smoke-admin-password" not in admin_before
+        admin_before = obj.pg(
+            "psql", "-XAt", "-c", admin_query, database=obj.config["database"]
+        ).stdout
+        assert (
+            admin_before.startswith("native-admin:")
+            and "native-smoke-admin-password" not in admin_before
+        )
         # DLL loading, Cairo card primitives, archive import, timezone and image codecs.
         probe = """
 import io,sys,zipfile
@@ -295,9 +335,18 @@ assert read_archive(b.getvalue())[0][0][1] == b'archive DLL fixture'
         assert (
             obj.config == original and photo.read_bytes() == b"persistent photo fixture"
         )
-        with patch.object(manager.getpass, "getpass", side_effect=AssertionError("Existing admin must not prompt")):
+        with patch.object(
+            manager.getpass,
+            "getpass",
+            side_effect=AssertionError("Existing admin must not prompt"),
+        ):
             obj.admin("another-admin")
-        assert obj.pg("psql", "-XAt", "-c", admin_query, database=obj.config["database"]).stdout == admin_before
+        assert (
+            obj.pg(
+                "psql", "-XAt", "-c", admin_query, database=obj.config["database"]
+            ).stdout
+            == admin_before
+        )
         full = obj.snapshot()
         assert full.is_file() and full.stat().st_size > 100
         obj.stop()

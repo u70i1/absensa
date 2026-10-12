@@ -65,18 +65,39 @@ class WindowsTests(unittest.TestCase):
 
     def test_service_interrupt_is_clean_but_crashes_propagate(self):
         for role in ("scheduler", "backup", "caddy", "whatsapp"):
-            with (patch.object(sys, "argv", ["runtime", "--data", str(self.data), "--role", role]),
-                  patch.object(runtime, "run", side_effect=KeyboardInterrupt),
-                  contextlib.redirect_stdout(io.StringIO()) as output):
+            with (
+                patch.object(
+                    sys, "argv", ["runtime", "--data", str(self.data), "--role", role]
+                ),
+                patch.object(runtime, "run", side_effect=KeyboardInterrupt),
+                contextlib.redirect_stdout(io.StringIO()) as output,
+            ):
                 runtime.main()
             self.assertIn("Service stop requested", output.getvalue())
-        with (patch.object(sys, "argv", ["runtime", "--data", str(self.data), "--role", "backup"]),
-              patch.object(runtime, "run", side_effect=RuntimeError("actual crash")),
-              self.assertRaisesRegex(RuntimeError, "actual crash")):
+        with (
+            patch.object(
+                sys, "argv", ["runtime", "--data", str(self.data), "--role", "backup"]
+            ),
+            patch.object(runtime, "run", side_effect=RuntimeError("actual crash")),
+            self.assertRaisesRegex(RuntimeError, "actual crash"),
+        ):
             runtime.main()
-        with (patch.object(sys, "argv", ["runtime", "--data", str(self.data), "--role", "maintenance", "alembic"]),
-              patch.object(runtime, "run", side_effect=KeyboardInterrupt),
-              self.assertRaises(KeyboardInterrupt)):
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "runtime",
+                    "--data",
+                    str(self.data),
+                    "--role",
+                    "maintenance",
+                    "alembic",
+                ],
+            ),
+            patch.object(runtime, "run", side_effect=KeyboardInterrupt),
+            self.assertRaises(KeyboardInterrupt),
+        ):
             runtime.main()
 
     def test_child_interrupt_waits_for_graceful_shutdown(self):
@@ -92,16 +113,25 @@ class WindowsTests(unittest.TestCase):
 
     def test_child_shutdown_timeout_is_bounded_and_reported(self):
         child = Mock()
-        child.wait.side_effect = [KeyboardInterrupt, subprocess.TimeoutExpired("fixture", 100), 0]
-        with (patch.object(runtime.subprocess, "Popen") as popen,
-              contextlib.redirect_stdout(io.StringIO()) as output):
+        child.wait.side_effect = [
+            KeyboardInterrupt,
+            subprocess.TimeoutExpired("fixture", 100),
+            0,
+        ]
+        with (
+            patch.object(runtime.subprocess, "Popen") as popen,
+            contextlib.redirect_stdout(io.StringIO()) as output,
+        ):
             popen.return_value.__enter__.return_value = child
             self.assertEqual(runtime.run_child(["fixture"], self.data), 0)
         child.terminate.assert_called_once()
         self.assertIn("timed out", output.getvalue())
 
     def test_bom_configuration_is_read_without_changing_secrets(self):
-        for path, value in ((self.obj.state_path, self.obj.state), (self.obj.config_path, self.obj.config)):
+        for path, value in (
+            (self.obj.state_path, self.obj.state),
+            (self.obj.config_path, self.obj.config),
+        ):
             path.write_text(json.dumps(value), encoding="utf-8-sig")
         loaded = manage.Installation(self.root, self.data)
         self.assertEqual(loaded.state, self.obj.state)
@@ -110,10 +140,13 @@ class WindowsTests(unittest.TestCase):
         self.assertFalse(self.obj.state_path.read_bytes().startswith(b"\xef\xbb\xbf"))
 
     def test_malformed_json_encoding_and_missing_fields_are_actionable(self):
-        for raw, message in ((b'{"password":"PRIVATE",', "baris 1"),
-                             (b'\xff\xfeBAD', "encoding harus UTF-8"),
-                             (b'{}', "objek JSON"), (b'[]', "objek JSON"),
-                             (b'{"format":1}', "field wajib tidak ada")):
+        for raw, message in (
+            (b'{"password":"PRIVATE",', "baris 1"),
+            (b"\xff\xfeBAD", "encoding harus UTF-8"),
+            (b"{}", "objek JSON"),
+            (b"[]", "objek JSON"),
+            (b'{"format":1}', "field wajib tidak ada"),
+        ):
             with self.subTest(raw=raw):
                 self.obj.config_path.write_bytes(raw)
                 with self.assertRaisesRegex(manage.OperationError, message) as error:
@@ -124,24 +157,40 @@ class WindowsTests(unittest.TestCase):
 
     def test_configuration_rejects_invalid_types_ports_keys_and_journals(self):
         manage.write_json(self.obj.config_path, self.obj.config)
-        for field, value in (("https_port", True), ("https_port", 18088),
-                             ("host", []), ("backup_key", "PRIVATE"),
-                             ("database", "../other"), ("db_password", "PRIVATE")):
+        for field, value in (
+            ("https_port", True),
+            ("https_port", 18088),
+            ("host", []),
+            ("backup_key", "PRIVATE"),
+            ("database", "../other"),
+            ("db_password", "PRIVATE"),
+        ):
             config = dict(self.obj.config, **{field: value})
             manage.write_json(self.obj.config_path, config)
             with self.assertRaises(manage.OperationError) as error:
                 manage.Installation(self.root, self.data)
             self.assertNotIn("PRIVATE", str(error.exception))
         manage.write_json(self.obj.config_path, self.obj.config)
-        for transaction in (None, {}, {"phase": "unknown"}, {"phase": "backup", "resume": ["other"]}):
-            manage.write_json(self.obj.state_path, dict(self.obj.state, transaction=transaction))
+        for transaction in (
+            None,
+            {},
+            {"phase": "unknown"},
+            {"phase": "backup", "resume": ["other"]},
+        ):
+            manage.write_json(
+                self.obj.state_path, dict(self.obj.state, transaction=transaction)
+            )
             with self.assertRaisesRegex(manage.OperationError, "transaction"):
                 manage.Installation(self.root, self.data)
 
     def test_interrupted_atomic_write_preserves_authoritative_state(self):
         before = self.obj.state_path.read_bytes()
-        with (patch("app.services.durable_file.publish", side_effect=OSError("interrupted")),
-              self.assertRaisesRegex(OSError, "interrupted")):
+        with (
+            patch(
+                "app.services.durable_file.publish", side_effect=OSError("interrupted")
+            ),
+            self.assertRaisesRegex(OSError, "interrupted"),
+        ):
             manage.write_json(self.obj.state_path, {"version": "v99.0.0"})
         self.assertEqual(self.obj.state_path.read_bytes(), before)
         manage.write_json(self.obj.config_path, self.obj.config)
@@ -150,8 +199,10 @@ class WindowsTests(unittest.TestCase):
         self.assertTrue(list(self.data.glob("state.json.new-*")))
 
     def test_missing_config_never_generates_replacement_secrets(self):
-        with (patch.object(manage, "new_config") as new,
-              self.assertRaisesRegex(manage.OperationError, "konfigurasi hilang")):
+        with (
+            patch.object(manage, "new_config") as new,
+            self.assertRaisesRegex(manage.OperationError, "konfigurasi hilang"),
+        ):
             manage.Installation(self.root, self.data)
         new.assert_not_called()
         self.assertFalse(self.obj.config_path.exists())
@@ -194,9 +245,15 @@ class WindowsTests(unittest.TestCase):
     def test_expected_scm_codes_do_not_create_error_logs(self):
         missing = subprocess.CompletedProcess([], 1060, stdout="missing", stderr="")
         stopped = subprocess.CompletedProcess([], 1062, stdout="stopped", stderr="")
-        query = subprocess.CompletedProcess([], 0, stdout="STATE : 1 STOPPED", stderr="")
-        with (patch.dict(manage.os.environ, {"SystemRoot": "C:/Windows"}),
-              patch.object(manage.subprocess, "run", side_effect=[missing, missing, stopped, query])):
+        query = subprocess.CompletedProcess(
+            [], 0, stdout="STATE : 1 STOPPED", stderr=""
+        )
+        with (
+            patch.dict(manage.os.environ, {"SystemRoot": "C:/Windows"}),
+            patch.object(
+                manage.subprocess, "run", side_effect=[missing, missing, stopped, query]
+            ),
+        ):
             self.assertFalse(self.obj.exists("web"))
             self.assertFalse(self.obj.running("web"))
             with patch.object(self.obj, "exists", return_value=True):
@@ -206,18 +263,24 @@ class WindowsTests(unittest.TestCase):
     def test_unexpected_scm_codes_are_logged_and_fail(self):
         (self.data / "logs").mkdir()
         for method in (self.obj.exists, self.obj.running):
-            result = subprocess.CompletedProcess([], 5, stdout="Access denied", stderr="")
-            with (patch.dict(manage.os.environ, {"SystemRoot": "C:/Windows"}),
-                  patch.object(manage.subprocess, "run", return_value=result),
-                  self.assertRaises(manage.OperationError)):
+            result = subprocess.CompletedProcess(
+                [], 5, stdout="Access denied", stderr=""
+            )
+            with (
+                patch.dict(manage.os.environ, {"SystemRoot": "C:/Windows"}),
+                patch.object(manage.subprocess, "run", return_value=result),
+                self.assertRaises(manage.OperationError),
+            ):
                 method("web")
         log = (self.data / "logs/operations.log").read_text()
         self.assertIn("exit 5", log)
         self.assertIn("Access denied", log)
         # An expected status is scoped to its operation, not ignored globally.
         result = subprocess.CompletedProcess([], 1062, stdout="unexpected", stderr="")
-        with (patch.object(manage.subprocess, "run", return_value=result),
-              self.assertRaises(manage.OperationError)):
+        with (
+            patch.object(manage.subprocess, "run", return_value=result),
+            self.assertRaises(manage.OperationError),
+        ):
             self.obj.run(["sc.exe", "start", "AbsensaWeb"])
 
     def test_smoke_initial_failure_prints_only_operations_log_and_preserves_error(self):
@@ -253,24 +316,37 @@ class WindowsTests(unittest.TestCase):
         self.assertIs(caught.exception, error)
 
     def test_native_smoke_selects_active_ipv4_without_assuming_physical_adapter(self):
-        network = {"addresses": [dict(address="127.0.0.1", interface="loopback"),
-                                 dict(address="169.254.1.2", interface="unconfigured"),
-                                 dict(address="192.168.0.10", interface="vEthernet")]}
+        network = {
+            "addresses": [
+                dict(address="127.0.0.1", interface="loopback"),
+                dict(address="169.254.1.2", interface="unconfigured"),
+                dict(address="192.168.0.10", interface="vEthernet"),
+            ]
+        }
         self.assertEqual(smoke.fixture_address(network), "192.168.0.10")
         with self.assertRaisesRegex(RuntimeError, "No active LAN IPv4"):
             smoke.fixture_address({"addresses": network["addresses"][:2]})
 
     def test_smoke_interruption_hook_is_fixture_only_and_restored(self):
-        fixture = SimpleNamespace(new_config=manage.new_config, Installation=type("Installer", (), {"health": lambda self: None}),
-                                  OperationError=manage.OperationError)
+        fixture = SimpleNamespace(
+            new_config=manage.new_config,
+            Installation=type("Installer", (), {"health": lambda self: None}),
+            OperationError=manage.OperationError,
+        )
         original = fixture.Installation.health
+
         def main():
-            with self.assertRaisesRegex(manage.OperationError, "simulated interruption"):
+            with self.assertRaisesRegex(
+                manage.OperationError, "simulated interruption"
+            ):
                 fixture.Installation().health()
+
         fixture.main = main
-        with (patch.dict(sys.modules, {"manage": fixture}),
-              patch.dict(smoke.os.environ, {"ABSENSA_SMOKE_INTERRUPT_INSTALL": "1"}),
-              patch.object(sys, "argv", ["fixture", "{}", "install"])):
+        with (
+            patch.dict(sys.modules, {"manage": fixture}),
+            patch.dict(smoke.os.environ, {"ABSENSA_SMOKE_INTERRUPT_INSTALL": "1"}),
+            patch.object(sys, "argv", ["fixture", "{}", "install"]),
+        ):
             exec(smoke.INSTALL_FIXTURE, {})
         self.assertIs(fixture.Installation.health, original)
 
@@ -594,21 +670,32 @@ class WindowsTests(unittest.TestCase):
         self.addCleanup(patch.stopall)
         patch.object(manage.ssl, "create_default_context").start()
         patch.object(manage.http.client, "HTTPConnection", return_value=bridge).start()
-        probe = patch.object(manage, "https_health", return_value=(200, {"ok": True})).start()
+        probe = patch.object(
+            manage, "https_health", return_value=(200, {"ok": True})
+        ).start()
         return probe, bridge
 
     def test_health_diagnostics_collect_independent_failures_and_redact(self):
         probe, bridge = self.health_fixture()
-        probe.side_effect = ssl.SSLError("alert internal error " + self.obj.config["db_password"])
+        probe.side_effect = ssl.SSLError(
+            "alert internal error " + self.obj.config["db_password"]
+        )
         self.obj.pg.side_effect = OSError("connection refused")
         self.obj.running.side_effect = lambda role: role != "scheduler"
         (self.data / "health/scheduler/absensa-scheduler.heartbeat").unlink()
         os.utime(self.data / "health/backup/absensa-backup.heartbeat", (1, 1))
         bridge.request.side_effect = ConnectionRefusedError("bridge refused")
         failures = "\n".join(self.obj.health_failures())
-        for expected in ("TLS handshake failed", "Database 127.0.0.1", "connection refused",
-                         "AbsensaScheduler service stopped", "scheduler heartbeat missing",
-                         "backup heartbeat stale", "WhatsApp 127.0.0.1", "bridge refused"):
+        for expected in (
+            "TLS handshake failed",
+            "Database 127.0.0.1",
+            "connection refused",
+            "AbsensaScheduler service stopped",
+            "scheduler heartbeat missing",
+            "backup heartbeat stale",
+            "WhatsApp 127.0.0.1",
+            "bridge refused",
+        ):
             self.assertIn(expected, failures)
         self.assertNotIn(self.obj.config["db_password"], failures)
         bridge.close.assert_called_once()
@@ -616,22 +703,33 @@ class WindowsTests(unittest.TestCase):
     def test_health_distinguishes_certificate_status_and_payload_errors(self):
         probe, bridge = self.health_fixture()
         probe.side_effect = ssl.SSLCertVerificationError("IP mismatch")
-        self.assertIn("certificate verification failed", "\n".join(self.obj.health_failures()))
+        self.assertIn(
+            "certificate verification failed", "\n".join(self.obj.health_failures())
+        )
         probe.side_effect = None
-        for status, body, expected in ((503, {"ok": False}, "unexpected status 503"),
-                                       (200, [], "unhealthy body")):
+        for status, body, expected in (
+            (503, {"ok": False}, "unexpected status 503"),
+            (200, [], "unhealthy body"),
+        ):
             probe.return_value = (status, body)
             self.assertIn(expected, "\n".join(self.obj.health_failures()))
         probe.return_value = (200, {"ok": True})
         bridge.getresponse.return_value.status = 502
-        self.assertIn("WhatsApp /health returned unexpected status 502", "\n".join(self.obj.health_failures()))
+        self.assertIn(
+            "WhatsApp /health returned unexpected status 502",
+            "\n".join(self.obj.health_failures()),
+        )
 
     def test_health_retries_and_preserves_final_diagnostics(self):
         self.obj.network_preflight = Mock()
-        self.obj.health_failures = Mock(return_value=["HTTPS TLS handshake failed: fixture"])
-        with (patch.object(manage.time, "sleep") as sleep,
-              contextlib.redirect_stdout(io.StringIO()),
-              self.assertRaisesRegex(manage.OperationError, "handshake")):
+        self.obj.health_failures = Mock(
+            return_value=["HTTPS TLS handshake failed: fixture"]
+        )
+        with (
+            patch.object(manage.time, "sleep") as sleep,
+            contextlib.redirect_stdout(io.StringIO()),
+            self.assertRaisesRegex(manage.OperationError, "handshake"),
+        ):
             self.obj.health(attempts=2)
         sleep.assert_called_once_with(2)
         log = (self.data / "logs/operations.log").read_text()
@@ -647,16 +745,25 @@ class WindowsTests(unittest.TestCase):
     def test_health_recovers_from_transient_failure(self):
         self.obj.config["tls"] = "cloudflare"
         self.obj.health_failures = Mock(side_effect=[["temporary"], []])
-        with (patch.object(manage.time, "sleep"), contextlib.redirect_stdout(io.StringIO())):
+        with (
+            patch.object(manage.time, "sleep"),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
             self.obj.health(attempts=2)
         log = (self.data / "logs/operations.log").read_text()
         self.assertIn("Health OK", log)
         self.assertNotIn("FINAL FAILURE", log)
 
     def test_network_preflight_reports_virtual_interface_dhcp_dns_and_profiles(self):
-        network = dict(addresses=[dict(address="192.168.0.10", interface="vEthernet (LAN)", dhcp="Enabled")],
-                       profiles=[dict(interface="vEthernet (LAN)", category="Public")],
-                       firewall=[dict(name="Public", enabled=True)])
+        network = dict(
+            addresses=[
+                dict(
+                    address="192.168.0.10", interface="vEthernet (LAN)", dhcp="Enabled"
+                )
+            ],
+            profiles=[dict(interface="vEthernet (LAN)", category="Public")],
+            firewall=[dict(name="Public", enabled=True)],
+        )
         self.obj.host = Mock(return_value=SimpleNamespace(stdout=json.dumps(network)))
         self.obj.config["host"] = "192.168.0.10"
         with contextlib.redirect_stdout(io.StringIO()) as output:
@@ -671,12 +778,22 @@ class WindowsTests(unittest.TestCase):
             self.obj.network_preflight()
         self.assertIn("tidak cocok", output.getvalue())
         self.obj.config["host"] = "school.test"
-        with (patch.object(manage.socket, "getaddrinfo", side_effect=OSError("DNS unavailable")),
-              contextlib.redirect_stdout(io.StringIO()) as output):
+        with (
+            patch.object(
+                manage.socket, "getaddrinfo", side_effect=OSError("DNS unavailable")
+            ),
+            contextlib.redirect_stdout(io.StringIO()) as output,
+        ):
             self.obj.network_preflight()
         self.assertIn("DNS unavailable", output.getvalue())
-        with (patch.object(manage.socket, "getaddrinfo", return_value=[(None, None, None, None, ("192.168.0.10", 443))]),
-              contextlib.redirect_stdout(io.StringIO()) as output):
+        with (
+            patch.object(
+                manage.socket,
+                "getaddrinfo",
+                return_value=[(None, None, None, None, ("192.168.0.10", 443))],
+            ),
+            contextlib.redirect_stdout(io.StringIO()) as output,
+        ):
             self.obj.network_preflight()
         self.assertIn("Network DNS school.test: 192.168.0.10", output.getvalue())
         self.assertNotIn("tidak cocok", output.getvalue())
@@ -698,7 +815,9 @@ class WindowsTests(unittest.TestCase):
         with self.assertRaises(manage.OperationError):
             self.obj.complete()
         self.obj.stop.assert_called_once_with(manage.APPLICATION)
-        self.assertEqual([c.args for c in self.obj.set_start.call_args_list], [(False,), (False,)])
+        self.assertEqual(
+            [c.args for c in self.obj.set_start.call_args_list], [(False,), (False,)]
+        )
         self.assertEqual(self.obj.state["transaction"]["phase"], "migration")
 
     def test_finalization_scm_failure_keeps_durable_journal_then_repair_succeeds(self):
@@ -706,7 +825,9 @@ class WindowsTests(unittest.TestCase):
         self.obj.start_services = Mock()
         self.obj.health = Mock()
         self.obj.stop = Mock()
-        self.obj.set_start = Mock(side_effect=[None, manage.OperationError("SCM failed"), None])
+        self.obj.set_start = Mock(
+            side_effect=[None, manage.OperationError("SCM failed"), None]
+        )
         with self.assertRaisesRegex(manage.OperationError, "SCM failed"):
             self.obj.complete()
         saved = json.loads(self.obj.state_path.read_text())
@@ -726,11 +847,26 @@ class WindowsTests(unittest.TestCase):
         precious.write_bytes(b"existing school data")
         config = self.obj.config.copy()
         events = []
-        for name in ("stop", "configure", "initialize_database", "register", "create_database", "migrate", "start_services", "health"):
-            setattr(self.obj, name, Mock(side_effect=lambda *a, name=name: events.append(name)))
+        for name in (
+            "stop",
+            "configure",
+            "initialize_database",
+            "register",
+            "create_database",
+            "migrate",
+            "start_services",
+            "health",
+        ):
+            setattr(
+                self.obj,
+                name,
+                Mock(side_effect=lambda *a, name=name: events.append(name)),
+            )
+
         def startup(automatic):
             events.append("auto" if automatic else "manual")
             self.assertIn("transaction", json.loads(self.obj.state_path.read_text()))
+
         self.obj.set_start = startup
         with patch.object(manage, "RELEASE", self.obj.release):
             self.obj.repair()
@@ -754,7 +890,9 @@ class WindowsTests(unittest.TestCase):
         saved = json.loads(self.obj.state_path.read_text())
         self.assertFalse(saved["initialized"])
         self.assertIn("transaction", saved)
-        self.assertNotIn((True,), [call.args for call in self.obj.set_start.call_args_list])
+        self.assertNotIn(
+            (True,), [call.args for call in self.obj.set_start.call_args_list]
+        )
         self.assertIn("stop failed", (self.data / "logs/operations.log").read_text())
 
     def test_final_state_write_failure_disables_auto_and_keeps_journal(self):
@@ -763,10 +901,12 @@ class WindowsTests(unittest.TestCase):
         self.obj.set_start = Mock()
         self.obj.stop = Mock()
         save = self.obj.save
+
         def failed_save():
             if "transaction" not in self.obj.state:
                 raise OSError("disk full")
             save()
+
         self.obj.save = failed_save
         with self.assertRaisesRegex(OSError, "disk full"):
             self.obj.complete()
@@ -780,11 +920,17 @@ class WindowsTests(unittest.TestCase):
         self.obj.wait_database = Mock()
         self.obj.pg = Mock(return_value=SimpleNamespace(stdout="0\n"))
         self.obj.app = Mock()
-        with patch.object(manage.getpass, "getpass", return_value="school-test-password"):
+        with patch.object(
+            manage.getpass, "getpass", return_value="school-test-password"
+        ):
             self.obj.admin("schooladmin")
         self.obj.app.assert_called_once_with(
-            "scripts.create_admin", "--first-only", "--password-stdin", "schooladmin",
-            input="school-test-password\n")
+            "scripts.create_admin",
+            "--first-only",
+            "--password-stdin",
+            "schooladmin",
+            input="school-test-password\n",
+        )
         self.obj.start_services.assert_called_once_with(("postgres",))
         self.obj.wait_database.assert_called_once()
         self.obj.pg.return_value.stdout = "1\n"
@@ -797,7 +943,14 @@ class WindowsTests(unittest.TestCase):
     def test_admin_never_runs_during_migration_or_recovery(self):
         self.obj.pg = Mock()
         self.obj.start_services = Mock()
-        for phase in ("install", "migration", "repair", "finalize", "restore", "restored"):
+        for phase in (
+            "install",
+            "migration",
+            "repair",
+            "finalize",
+            "restore",
+            "restored",
+        ):
             self.obj.state["transaction"] = {"phase": phase}
             with self.assertRaisesRegex(manage.OperationError, "repair"):
                 self.obj.admin("schooladmin")
@@ -810,20 +963,33 @@ class WindowsTests(unittest.TestCase):
         self.obj.wait_database = Mock()
         self.obj.pg = Mock(return_value=SimpleNamespace(stdout="0"))
         self.obj.app = Mock()
-        for passwords in (("short",), ("long-test-password", "different-test-password")):
-            with (patch.object(manage.getpass, "getpass", side_effect=passwords),
-                  self.assertRaisesRegex(manage.OperationError, "Sandi")):
+        for passwords in (
+            ("short",),
+            ("long-test-password", "different-test-password"),
+        ):
+            with (
+                patch.object(manage.getpass, "getpass", side_effect=passwords),
+                self.assertRaisesRegex(manage.OperationError, "Sandi"),
+            ):
                 self.obj.admin("schooladmin")
         self.obj.app.assert_not_called()
 
     def test_verified_patch_recovers_only_unfinished_original_install(self):
         source = self.path / "verified-patch"
         source.mkdir()
-        manifest = dict(version="v1.1.1", format=1, platform="windows", architecture="amd64",
-                        postgres_major=18, upgrade_from_major=1)
+        manifest = dict(
+            version="v1.1.1",
+            format=1,
+            platform="windows",
+            architecture="amd64",
+            postgres_major=18,
+            upgrade_from_major=1,
+        )
         (source / "release.json").write_text(json.dumps(manifest))
         (source / "manage.py").write_text("# verified fixture")
-        self.obj.state.update(version="v1.1.0", initialized=False, transaction={"phase": "install"})
+        self.obj.state.update(
+            version="v1.1.0", initialized=False, transaction={"phase": "install"}
+        )
         old = self.obj.release
         old.mkdir(parents=True)
         (old / "manage.py").write_text("# previous release")
@@ -858,7 +1024,9 @@ class WindowsTests(unittest.TestCase):
             (False, "install", "v1.1.1", "v1.1.0"),
             (False, "install", "v1.1.0", "v1.2.0"),
         ):
-            self.obj.state.update(initialized=initialized, version=old, transaction={"phase": phase})
+            self.obj.state.update(
+                initialized=initialized, version=old, transaction={"phase": phase}
+            )
             with self.assertRaises(manage.OperationError):
                 self.obj.recover_install(self.path, dict(manifest, version=target))
         self.obj.set_start.assert_not_called()
