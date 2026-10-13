@@ -1,5 +1,17 @@
 # Memasang Absensa
 
+Pemasangan dilakukan oleh petugas IT pada **komputer server sekolah**. Setelah
+selesai, guru dan petugas presensi cukup membuka alamat aplikasi melalui browser.
+Pilih petunjuk sesuai sistem operasi server di bawah.
+
+## Meminta bantuan pemasangan
+
+Sekolah yang membutuhkan bantuan dapat mengirim email ke
+[kontakabsensa@gmail.com](mailto:kontakabsensa@gmail.com) dengan subjek
+**Permintaan Pemasangan Absensa**. Sertakan nama sekolah, kota/kabupaten,
+kontak penanggung jawab, dan keterangan komputer yang tersedia. Jika belum tahu
+spesifikasi komputer, cukup jelaskan kondisi sekolah.
+
 ## Windows Server
 
 Buka **Windows PowerShell 64-bit sebagai Administrator**, lalu jalankan:

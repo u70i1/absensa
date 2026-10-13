@@ -4,6 +4,10 @@ This guide covers local development. School deployments should use the
 [release installer with HTTPS](deploy/README.md). Do not use the development
 HTTP configuration in production.
 
+For feature implementation details and the application layout, see
+[DEVELOPMENT.md](DEVELOPMENT.md). Planned work is tracked in
+[ROADMAP.md](ROADMAP.md).
+
 These are developer instructions. For native Windows Server installations with bundled runtimes
 and Windows services, use the [Windows deployment guide](deploy/windows/README.md).
 Windows 2022/2025 have native CI coverage; Server 2019 runtime validation remains pending.

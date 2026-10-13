@@ -41,7 +41,8 @@ dan [deploy/BACKUPS.md](deploy/BACKUPS.md). Situs ini ditujukan untuk pengguna
 aplikasi, dengan jalur belajar administrator dan operator.
 
 Kerangka mengikuti halaman aplikasi yang sudah terhubung ke navigasi. Log
-Presensi sudah tersedia meskipun bagian lama README menyebutnya placeholder.
+Presensi sudah tersedia. Detail implementasi dari README dipindahkan ke
+[DEVELOPMENT.md](DEVELOPMENT.md), dan daftar pekerjaan ke [ROADMAP.md](ROADMAP.md).
 Riwayat operator yang terlihat adalah Riwayat Scan Hari Ini; endpoint lama tidak
 menjadi panduan tombol yang tidak tersedia. Pencatatan terbatas pada siswa aktif,
 satu kali per hari menurut zona waktu sekolah. Pengelolaan admin dan pemulihan
