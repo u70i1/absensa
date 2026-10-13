@@ -63,6 +63,35 @@ def write_json(path, value):
     atomic(path, json.dumps(value, indent=2) + "\n")
 
 
+def read_json(path):
+    """Accept UTF-8 with/without BOM; never recover by inventing configuration."""
+    try:
+        value = json.loads(path.read_text(encoding="utf-8-sig"))
+    except UnicodeError:
+        raise OperationError(
+            f"{path}: encoding harus UTF-8 (BOM diperbolehkan). Pulihkan salinan konfigurasi yang valid; jangan membuat rahasia baru."
+        ) from None
+    except json.JSONDecodeError as exc:
+        raise OperationError(
+            f"{path}: JSON tidak sah pada baris {exc.lineno}, kolom {exc.colno}. Pulihkan salinan konfigurasi yang valid; jangan mengedit state untuk melewati repair."
+        ) from None
+    except OSError as exc:
+        raise OperationError(
+            f"{path}: tidak dapat dibaca ({type(exc).__name__}); periksa file dan izin."
+        ) from None
+    if not isinstance(value, dict) or not value:
+        raise OperationError(f"{path}: objek JSON tidak kosong diperlukan.")
+    return value
+
+
+def require_fields(path, value, fields):
+    missing = sorted(set(fields) - value.keys())
+    if missing:
+        raise OperationError(
+            f"{path}: field wajib tidak ada: {', '.join(missing)}. Pulihkan konfigurasi yang valid."
+        )
+
+
 def validate_host(value):
     try:
         address = ipaddress.IPv4Address(value)
@@ -133,6 +162,27 @@ def caddyfile(config):
         "    header Strict-Transport-Security max-age=31536000\n"
         f"    reverse_proxy 127.0.0.1:{config['web_port']}\n}}\n"
     )
+
+
+def https_health(host, port, context):
+    # Python verifies IP SANs but omits SNI for IP literals. Caddy then selects
+    # its certificate using the connection's destination IP, not the HTTP Host.
+    # DNS names stay pinned to loopback: DNS cannot redirect this trusted probe.
+    try:
+        destination = str(ipaddress.IPv4Address(host))
+    except ipaddress.AddressValueError:
+        destination = "127.0.0.1"
+    connection = http.client.HTTPSConnection(host, port, context=context, timeout=5)
+    try:
+        with socket.create_connection((destination, port), timeout=5) as sock:
+            connection.sock = context.wrap_socket(sock, server_hostname=host)
+        connection.request("GET", "/health")
+        response = connection.getresponse()
+        return response.status, json.loads(
+            response.read()
+        ) if response.status == 200 else None
+    finally:
+        connection.close()
 
 
 def service_xml(role, release, data):
@@ -217,33 +267,150 @@ class Installation:
                 )
         self.state_path = self.data / "state.json"
         self.config_path = self.data / "config/installation.json"
-        self.state = (
-            json.loads(self.state_path.read_text(encoding="utf-8"))
-            if self.state_path.exists()
-            else None
-        )
-        self.config = (
-            json.loads(self.config_path.read_text(encoding="utf-8"))
-            if self.config_path.exists()
-            else None
-        )
-        if self.state:
+        self.state = read_json(self.state_path) if self.state_path.exists() else None
+        self.config = read_json(self.config_path) if self.config_path.exists() else None
+        if self.state is not None:
+            require_fields(
+                self.state_path,
+                self.state,
+                ("format", "version", "root", "data", "initialized"),
+            )
+            if not isinstance(self.state["version"], str):
+                raise OperationError(
+                    f"{self.state_path}: version harus berupa teks tag rilis."
+                )
             version(self.state["version"])
             if (
-                self.state.get("format") != 1
-                or self.state.get("root") != str(self.root)
-                or self.state.get("data") != str(self.data)
+                self.state["format"] != 1
+                or self.state["root"] != str(self.root)
+                or self.state["data"] != str(self.data)
             ):
                 raise OperationError(
                     "Identitas instalasi berubah. Pulihkan konfigurasi; jangan pindahkan direktori secara manual."
                 )
-        if self.config:
-            validate_host(self.config["host"])
+            for field in ("initialized", "autostart", "uninstalled"):
+                if field in self.state and type(self.state[field]) is not bool:
+                    raise OperationError(f"{self.state_path}: {field} harus boolean.")
+            if "transaction" in self.state:
+                transaction = self.state["transaction"]
+                if (
+                    not isinstance(transaction, dict)
+                    or not isinstance(transaction.get("phase"), str)
+                    or transaction["phase"]
+                    not in {
+                        "install",
+                        "migration",
+                        "backup",
+                        "restore",
+                        "restored",
+                        "repair",
+                        "finalize",
+                    }
+                ):
+                    raise OperationError(
+                        f"{self.state_path}: transaction/phase tidak sah. Pulihkan jurnal yang valid."
+                    )
+                if transaction["phase"] == "backup" and (
+                    not isinstance(transaction.get("resume"), list)
+                    or any(role not in APPLICATION for role in transaction["resume"])
+                ):
+                    raise OperationError(
+                        f"{self.state_path}: transaction/resume tidak sah."
+                    )
+            if self.config is None:
+                raise OperationError(
+                    f"{self.config_path}: konfigurasi hilang; pulihkan salinan asli. Rahasia tidak dibuat ulang."
+                )
+        if self.config is not None:
+            c = self.config
+            require_fields(
+                self.config_path,
+                c,
+                (
+                    "format",
+                    "host",
+                    "https_port",
+                    "tls",
+                    "timezone",
+                    "cf_token",
+                    "pg_port",
+                    "web_port",
+                    "bridge_port",
+                    "pg_password",
+                    "db_password",
+                    "bridge_token",
+                    "backup_key",
+                    "database",
+                    "photo_tree",
+                    "whatsapp_tree",
+                    "caddy_tree",
+                ),
+            )
+            text_fields = (
+                "host",
+                "tls",
+                "timezone",
+                "cf_token",
+                "pg_password",
+                "db_password",
+                "bridge_token",
+                "backup_key",
+                "database",
+                "photo_tree",
+                "whatsapp_tree",
+                "caddy_tree",
+            )
+            for field in text_fields:
+                if not isinstance(c[field], str):
+                    raise OperationError(
+                        f"{self.config_path}: {field} harus berupa teks."
+                    )
+            validate_host(c["host"])
+            ports = [
+                c[field]
+                for field in ("https_port", "pg_port", "web_port", "bridge_port")
+            ]
+            if (
+                any(type(port) is not int or not 1 <= port <= 65535 for port in ports)
+                or len(set(ports)) != 4
+            ):
+                raise OperationError(
+                    f"{self.config_path}: port harus integer 1–65535 dan berbeda."
+                )
+            if (
+                c["format"] != 1
+                or c["tls"] not in ("internal", "cloudflare")
+                or c["timezone"]
+                not in ("Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura")
+            ):
+                raise OperationError(
+                    f"{self.config_path}: format, tls, atau timezone tidak sah."
+                )
+            if c["tls"] == "cloudflare" and (
+                re.fullmatch(r"[0-9.]+", c["host"])
+                or not re.fullmatch(r"[A-Za-z0-9_-]{20,256}", c["cf_token"])
+            ):
+                raise OperationError(
+                    f"{self.config_path}: Cloudflare memerlukan domain dan token DNS yang valid."
+                )
             for name in ("database", "photo_tree", "whatsapp_tree", "caddy_tree"):
-                if not re.fullmatch(r"[a-z0-9_]+", self.config[name]):
-                    raise OperationError("Nama penyimpanan konfigurasi tidak sah.")
-            if len(base64.b64decode(self.config["backup_key"], validate=True)) != 32:
-                raise OperationError("Kunci pemulihan tidak sah.")
+                if not re.fullmatch(r"[a-z0-9_]+", c[name]):
+                    raise OperationError(
+                        f"{self.config_path}: nama penyimpanan {name} tidak sah."
+                    )
+            for field in ("pg_password", "db_password", "bridge_token"):
+                if not re.fullmatch(r"[a-f0-9]{64}", c[field]):
+                    raise OperationError(
+                        f"{self.config_path}: {field} tidak sah; pulihkan rahasia asli."
+                    )
+            try:
+                valid_key = len(base64.b64decode(c["backup_key"], validate=True)) == 32
+            except ValueError:
+                valid_key = False
+            if not valid_key:
+                raise OperationError(
+                    f"{self.config_path}: backup_key tidak sah; pulihkan kunci asli."
+                )
 
     @property
     def release(self):
@@ -254,7 +421,15 @@ class Installation:
         return self.release / "python/python.exe"
 
     def run(
-        self, args, *, input=None, env=None, check=True, timeout=900, operation=None
+        self,
+        args,
+        *,
+        input=None,
+        env=None,
+        check=True,
+        timeout=900,
+        operation=None,
+        expected_codes=(0,),
     ):
         result = subprocess.run(
             [str(a) for a in args],
@@ -267,28 +442,37 @@ class Installation:
             timeout=timeout,
             check=False,
         )
-        if result.returncode:
+        if result.returncode not in expected_codes:
             operation = operation or Path(args[0]).name
-            # Log redacted diagnostics; process arguments may contain private paths.
-            message = result.stdout + result.stderr
-            for key in (
-                "pg_password",
-                "db_password",
-                "bridge_token",
-                "backup_key",
-                "cf_token",
-            ):
-                if self.config and self.config.get(key):
-                    message = message.replace(self.config[key], "[RAHASIA]")
-            with (self.data / "logs/operations.log").open("a", encoding="utf-8") as log:
-                log.write(
-                    f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {operation}: exit {result.returncode}\n{message}\n"
-                )
+            self.diagnostic(
+                f"{operation}: exit {result.returncode}\n{result.stdout}{result.stderr}"
+            )
             if check:
                 raise OperationError(
                     f"Operasi {operation} gagal. Periksa {self.data / 'logs/operations.log'}."
                 )
         return result
+
+    def redact(self, message):
+        for key in (
+            "pg_password",
+            "db_password",
+            "bridge_token",
+            "backup_key",
+            "cf_token",
+        ):
+            if self.config and self.config.get(key):
+                message = message.replace(self.config[key], "[RAHASIA]")
+        # Also redact connection URLs if a driver includes one in an exception.
+        return re.sub(r"(://)[^/\s@]+@", r"\1[RAHASIA]@", message)
+
+    def diagnostic(self, message):
+        message = self.redact(message)
+        directory = self.data / "logs"
+        directory.mkdir(exist_ok=True)
+        with (directory / "operations.log").open("a", encoding="utf-8") as log:
+            log.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {message}\n")
+        return message
 
     def host(self, action, **values):
         command = [
@@ -321,14 +505,18 @@ class Installation:
         )
 
     def exists(self, role):
-        result = self.sc("query", SERVICES[role], check=False)
+        result = self.sc("query", SERVICES[role], check=False, expected_codes=(0, 1060))
         if result.returncode not in (0, 1060):
             raise OperationError("Status layanan tidak dapat diperiksa.")
         return result.returncode == 0
 
     def running(self, role):
-        result = self.sc("query", SERVICES[role], check=False)
-        return bool(re.search(r":\s+4\s", result.stdout))
+        result = self.sc("query", SERVICES[role], check=False, expected_codes=(0, 1060))
+        if result.returncode not in (0, 1060):
+            raise OperationError(
+                "Status layanan tidak dapat diperiksa: " + SERVICES[role]
+            )
+        return result.returncode == 0 and bool(re.search(r":\s+4\s", result.stdout))
 
     def set_start(self, automatic):
         for role, name in SERVICES.items():
@@ -344,7 +532,9 @@ class Installation:
         for role in reversed(roles):
             if not self.exists(role):
                 continue
-            result = self.sc("stop", SERVICES[role], check=False)
+            result = self.sc(
+                "stop", SERVICES[role], check=False, expected_codes=(0, 1062)
+            )
             if result.returncode not in (0, 1062):
                 raise OperationError(
                     "Layanan tidak dapat dihentikan: " + SERVICES[role]
@@ -585,7 +775,9 @@ class Installation:
         )
         say(report.stdout.strip())
 
-    def pg(self, tool, *args, database="postgres", check=True, input=None):
+    def pg(
+        self, tool, *args, database="postgres", check=True, input=None, timeout=3900
+    ):
         env = os.environ.copy()
         for key in list(env):
             if key.startswith("PG"):
@@ -603,7 +795,7 @@ class Installation:
             env=env,
             check=check,
             input=input,
-            timeout=3900,
+            timeout=timeout,
         )
 
     def initialize_database(self):
@@ -732,6 +924,13 @@ class Installation:
         self.app("alembic", "upgrade", "head")
 
     def admin(self, username=None):
+        self.guard()
+        if not self.state.get("initialized"):
+            raise OperationError(
+                "Instalasi belum selesai. Jalankan repair sebelum membuat administrator."
+            )
+        self.start_services(("postgres",))
+        self.wait_database()
         count = self.pg(
             "psql",
             "-XAt",
@@ -763,79 +962,287 @@ class Installation:
         )
         say("Administrator siap.")
 
-    def health(self):
-        say("Memeriksa kesehatan layanan...")
-        c = self.config
-        ca = (
+    @property
+    def ca_path(self):
+        return (
             self.data
             / "caddy"
-            / c["caddy_tree"]
+            / self.config["caddy_tree"]
             / "caddy/pki/authorities/local/root.crt"
         )
-        for _ in range(90):
+
+    def health_failures(self):
+        """One diagnostic pass; independent checks still run after a TLS failure."""
+        failures = []
+        c = self.config
+
+        def check(component, action):
             try:
-                context = ssl.create_default_context(
-                    cafile=str(ca) if c["tls"] == "internal" else None
+                action()
+            except (
+                OSError,
+                ValueError,
+                http.client.HTTPException,
+                OperationError,
+                subprocess.SubprocessError,
+            ) as exc:
+                if isinstance(exc, ssl.SSLCertVerificationError):
+                    reason = "certificate verification failed"
+                elif isinstance(exc, ssl.SSLError):
+                    reason = "TLS handshake failed"
+                else:
+                    reason = "failed"
+                failures.append(
+                    self.redact(f"{component}: {reason}: {type(exc).__name__}: {exc}")
                 )
-                connection = http.client.HTTPSConnection(
-                    c["host"], c["https_port"], context=context, timeout=5
+
+        def https():
+            context = ssl.create_default_context(
+                cafile=str(self.ca_path) if c["tls"] == "internal" else None
+            )
+            status, body = https_health(c["host"], c["https_port"], context)
+            if status != 200:
+                raise OperationError(
+                    f"HTTPS /health returned unexpected status {status}"
                 )
-                # Connect locally while preserving certificate hostname/SNI verification.
-                connection.sock = context.wrap_socket(
-                    socket.create_connection(("127.0.0.1", c["https_port"]), timeout=5),
-                    server_hostname=c["host"],
+            if not isinstance(body, dict) or body.get("ok") is not True:
+                raise OperationError("HTTPS /health returned unhealthy body")
+
+        def database():
+            result = self.pg(
+                "psql",
+                "-XAt",
+                "-v",
+                "ON_ERROR_STOP=1",
+                "-c",
+                "SELECT 1",
+                database=c["database"],
+                timeout=15,
+            )
+            if result.stdout.strip() != "1":
+                raise OperationError("Database health check returned unexpected result")
+
+        def service(role):
+            if not self.running(role):
+                raise OperationError(
+                    SERVICES[role] + " service stopped or not installed"
                 )
-                connection.request("GET", "/health")
-                response = connection.getresponse()
-                ok = (
-                    response.status == 200
-                    and json.loads(response.read()).get("ok") is True
+
+        def heartbeat(role):
+            stamp = self.data / "health" / role / f"absensa-{role}.heartbeat"
+            if not stamp.exists():
+                raise OperationError(role + " heartbeat missing")
+            age = time.time() - stamp.stat().st_mtime
+            if age < -60 or age > (3900 if role == "backup" else 300):
+                raise OperationError(
+                    f"{role} heartbeat stale or clock incorrect (age {age:.0f}s)"
                 )
-                connection.close()
-                if ok and all(self.running(role) for role in SERVICES):
-                    for role in ("scheduler", "backup"):
-                        stamp = (
-                            self.data / "health" / role / f"absensa-{role}.heartbeat"
-                        )
-                        if not stamp.exists() or time.time() - stamp.stat().st_mtime > (
-                            3900 if role == "backup" else 300
-                        ):
-                            raise OSError("Worker belum siap")
-                    bridge = http.client.HTTPConnection(
-                        "127.0.0.1", c["bridge_port"], timeout=5
+
+        def whatsapp():
+            bridge = http.client.HTTPConnection(
+                "127.0.0.1", c["bridge_port"], timeout=5
+            )
+            try:
+                bridge.request("GET", "/health")
+                response = bridge.getresponse()
+                if response.status != 200:
+                    raise OperationError(
+                        f"WhatsApp /health returned unexpected status {response.status}"
                     )
-                    bridge.request("GET", "/health")
-                    if bridge.getresponse().status != 200:
-                        raise OSError("WhatsApp belum siap")
-                    bridge.close()
-                    if c["tls"] == "internal":
-                        shutil.copyfile(ca, self.data / "root-ca.crt")
-                        cert = ssl.PEM_cert_to_DER_cert(ca.read_text())
-                        say(
-                            f"CA perangkat LAN: {self.data / 'root-ca.crt'}\nSHA-256: {hashlib.sha256(cert).hexdigest()}"
-                        )
-                    return
-            except (OSError, ValueError, ssl.SSLError, http.client.HTTPException):
-                pass
-            time.sleep(2)
+                body = json.loads(response.read())
+                if not isinstance(body, dict) or body.get("ok") is not True:
+                    raise OperationError("WhatsApp /health returned unhealthy body")
+            finally:
+                bridge.close()
+
+        check(f"HTTPS {c['host']}:{c['https_port']}", https)
+        check(f"Database 127.0.0.1:{c['pg_port']}", database)
+        for role in SERVICES:
+            check(SERVICES[role], lambda role=role: service(role))
+        for role in ("scheduler", "backup"):
+            check(role, lambda role=role: heartbeat(role))
+        check(f"WhatsApp 127.0.0.1:{c['bridge_port']}", whatsapp)
+        return failures
+
+    def health(self, attempts=90, interval=2):
+        say("Memeriksa kesehatan layanan...")
+        started = time.monotonic()
+        for attempt in range(1, attempts + 1):
+            failures = self.health_failures()
+            elapsed = time.monotonic() - started
+            if not failures:
+                if self.config["tls"] == "internal":
+                    shutil.copyfile(self.ca_path, self.data / "root-ca.crt")
+                    cert = ssl.PEM_cert_to_DER_cert(self.ca_path.read_text())
+                    say(
+                        f"CA perangkat LAN: {self.data / 'root-ca.crt'}\nSHA-256: {hashlib.sha256(cert).hexdigest()}"
+                    )
+                self.diagnostic(f"Health OK after {elapsed:.1f}s ({attempt} attempts)")
+                return
+            phase = "FINAL FAILURE" if attempt == attempts else "RETRY"
+            for failure in failures:
+                say(
+                    self.diagnostic(
+                        f"Health {phase} {attempt}/{attempts}, {elapsed:.1f}s: {failure}"
+                    )
+                )
+            if attempt < attempts:
+                time.sleep(interval)
         raise OperationError(
-            "Pemeriksaan HTTPS/database/worker gagal. Periksa log, DNS, token DNS dan jam server; jangan abaikan verifikasi TLS."
+            f"Pemeriksaan kesehatan gagal: {'; '.join(failures)}. "
+            f"Periksa {self.data / 'logs/operations.log'}; jangan abaikan verifikasi TLS."
         )
 
-    def complete(self):
-        self.set_start(False)
+    def network_preflight(self, config=None):
+        """Read-only advice, including virtual interfaces; never changes routing/trust."""
+        c = config or self.config
         try:
+            network = json.loads(self.host("network").stdout)
+            addresses = network["addresses"]
+            local = {item["address"] for item in addresses}
+            try:
+                ipaddress.IPv4Address(c["host"])
+                resolved = {c["host"]}
+            except ipaddress.AddressValueError:
+                try:
+                    resolved = {
+                        item[4][0]
+                        for item in socket.getaddrinfo(
+                            c["host"],
+                            c["https_port"],
+                            socket.AF_INET,
+                            socket.SOCK_STREAM,
+                        )
+                    }
+                    say(
+                        self.diagnostic(
+                            f"Network DNS {c['host']}: {', '.join(sorted(resolved))}"
+                        )
+                    )
+                except OSError as exc:
+                    resolved = set()
+                    say(
+                        self.diagnostic(
+                            f"Network WARNING DNS {c['host']}: {type(exc).__name__}: {exc}"
+                        )
+                    )
+            if not resolved or not resolved.issubset(local):
+                say(
+                    self.diagnostic(
+                        f"Network WARNING: {c['host']} tidak cocok dengan IPv4 lokal aktif ({', '.join(sorted(local)) or 'tidak ditemukan'}). Periksa alamat/DNS sebelum mengakses dari LAN."
+                    )
+                )
+            for item in addresses:
+                if item["address"] in resolved:
+                    say(
+                        self.diagnostic(
+                            f"Network: {item['address']} pada {item['interface']}; DHCP {item['dhcp']}. Gunakan IP statis atau reservasi DHCP yang tetap."
+                        )
+                    )
+            for profile in network["profiles"]:
+                say(
+                    self.diagnostic(
+                        f"Network profile: {profile['interface']} = {profile['category']}. Aturan Absensa hanya Domain/Private, sumber LocalSubnet, TCP {c['https_port']}."
+                    )
+                )
+            for profile in network["firewall"]:
+                say(
+                    self.diagnostic(
+                        f"Firewall {profile['name']}: enabled={profile['enabled']}"
+                    )
+                )
+            say(
+                "Uji akses HTTPS dari komputer LAN; pemeriksaan lokal tidak membuktikan akses firewall/VLAN klien."
+            )
+        except (OperationError, OSError, ValueError, KeyError, TypeError) as exc:
+            say(
+                self.diagnostic(
+                    f"Network WARNING: pemeriksaan tidak tersedia: {type(exc).__name__}: {exc}"
+                )
+            )
+
+    def status(self):
+        say("Versi: " + (self.state["version"] if self.state else "belum terpasang"))
+        say(
+            "Tahap: "
+            + str(
+                (self.state or {}).get(
+                    "transaction", "siap" if self.state else "belum lengkap"
+                )
+            )
+        )
+        say(
+            "Startup otomatis tercatat: "
+            + str((self.state or {}).get("autostart", False))
+        )
+        if self.config:
+            self.network_preflight()
+            failures = (
+                self.health_failures()
+                if self.state
+                else [
+                    "Konfigurasi ada tetapi state instalasi belum tersedia. Pulihkan identitas instalasi; jangan membuat ulang rahasia."
+                ]
+            )
+            for failure in failures:
+                say(failure)
+            if not failures:
+                say("Semua pemeriksaan kesehatan lulus.")
+        else:
+            say("Konfigurasi belum tersedia. Jalankan kembali installer.")
+        log = self.data / "logs/operations.log"
+        if log.exists():
+            say("Diagnostik terakhir (termasuk kegagalan sebelum layanan dihentikan):")
+            say(
+                self.redact(
+                    "\n".join(
+                        log.read_text(encoding="utf-8", errors="replace").splitlines()[
+                            -30:
+                        ]
+                    )
+                )
+            )
+
+    def complete(self):
+        # Keep a durable recovery journal until both health and SCM configuration
+        # succeed. A failed/partial automatic-start change must remain repairable.
+        self.state.setdefault("transaction", {"phase": "finalize"})
+        self.state["autostart"] = False
+        self.save()
+        pending = self.state.copy()
+        try:
+            self.set_start(False)
             self.start_services()
             self.health()
-        except Exception:
-            self.stop(APPLICATION)
+            self.set_start(True)
+            self.state["initialized"] = True
+            self.state["autostart"] = True
+            self.state.pop("transaction", None)
+            self.save()
+        except (Exception, KeyboardInterrupt):
+            self.state = pending
+            # Cleanup must not hide the original health/SCM failure. The journal
+            # is still on disk if final publication failed.
+            for cleanup in (
+                lambda: self.set_start(False),
+                lambda: self.stop(APPLICATION),
+            ):
+                try:
+                    cleanup()
+                except Exception as exc:
+                    message = self.redact(
+                        f"Finalization cleanup failed: {type(exc).__name__}: {exc}"
+                    )
+                    try:
+                        self.diagnostic(message)
+                    except OSError:
+                        # A full/unwritable log disk must not skip the remaining
+                        # cleanup or replace the original finalization failure.
+                        with contextlib.suppress(OSError):
+                            say("Log tidak dapat ditulis. " + message)
             raise
-        self.state["initialized"] = True
-        self.state["autostart"] = True
-        self.state.pop("transaction", None)
-        self.save()
-        self.set_start(True)
         say(
+            f"Administrator pertama (jika belum ada): & '{self.root / 'absensa.ps1'}' admin\n"
             f"Absensa berhasil dipasang: {self.state['version']}\nBuka: {self.environment('web')['CORS_ORIGIN']}/admin\nPengelolaan: & '{self.root / 'absensa.ps1'}' status\nLog: {self.data / 'logs'}"
         )
 
@@ -958,10 +1365,14 @@ class Installation:
             ],
             timeout=3900,
         )
-        self.state = json.loads(self.state_path.read_text())
+        self.state = read_json(self.state_path)
 
     def finish(self):
         self.storage_check()
+        self.state.setdefault("transaction", {"phase": "repair"})
+        self.state["autostart"] = False
+        self.save()
+        self.set_start(False)
         self.stop()
         self.configure()
         self.initialize_database()
@@ -969,6 +1380,32 @@ class Installation:
         self.create_database()
         self.migrate()
         self.complete()
+
+    def recover_install(self, source, manifest):
+        # Explicit patch recovery for the v1.1.0 install-health failure only.
+        # The bootstrap verifies the release bytes/provenance before entry.
+        if not (
+            self.state["version"] == "v1.1.0"
+            and manifest.get("version") == "v1.1.1"
+            and self.state.get("initialized") is False
+            and self.state.get("transaction", {}).get("phase") == "install"
+            and manifest.get("upgrade_from_major") == 1
+            and manifest.get("postgres_major") == 18
+        ):
+            raise OperationError(
+                "Perbaikan lintas versi hanya untuk instalasi v1.1.0 yang belum selesai ke v1.1.1; transaksi migrasi/pemulihan tidak boleh dilewati."
+            )
+        self.set_start(False)
+        self.stop()
+        tag = self.adopt_release(source)
+        self.state["transaction"] = {
+            "phase": "install",
+            "previous": "v1.1.0",
+            "target": tag,
+        }
+        self.state["version"] = tag
+        self.state["autostart"] = False
+        self.save()  # Keep old binaries; subsequent repair must use target code.
 
     def repair(self):
         transaction = self.state.get("transaction", {})
@@ -1008,8 +1445,8 @@ class Installation:
         old = self.config.copy()
         restored = stage / "config/installation.json"
         if restored.exists():
-            source_config = json.loads(restored.read_text())
-            source_state = json.loads((stage / "config/state.json").read_text())
+            source_config = read_json(restored)
+            source_state = read_json(stage / "config/state.json")
             if source_state["version"] != self.state["version"]:
                 raise OperationError(
                     "Untuk arsip lengkap, pasang versi sumber dahulu: "
@@ -1115,9 +1552,7 @@ def install(obj, source, args):
         )
         manifest = json.loads((source / "release.json").read_text())
         if manifest["version"] != obj.state["version"]:
-            raise OperationError(
-                "Perbaikan memerlukan artefak versi tersimpan; gunakan update untuk versi lain."
-            )
+            obj.recover_install(source, manifest)
         if not (obj.release / "manage.py").is_file():
             obj.set_start(False)
             obj.stop()
@@ -1171,6 +1606,7 @@ def install(obj, source, args):
             raise OperationError("Pilih zona waktu 1, 2, atau 3.")
         zone = ("Asia/Jakarta", "Asia/Makassar", "Asia/Jayapura")[int(selection) - 1]
     config = new_config(host, port, zone, mode, token)
+    obj.network_preflight(config)
     for candidate in (
         port,
         config["pg_port"],
@@ -1179,6 +1615,8 @@ def install(obj, source, args):
     ):
         with socket.socket() as sock:
             try:
+                if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
                 sock.bind(("0.0.0.0" if candidate == port else "127.0.0.1", candidate))
             except OSError as exc:
                 raise OperationError(
@@ -1273,10 +1711,7 @@ def main():
             if args.action == "install":
                 install(obj, args.source, args)
             elif args.action == "status":
-                say("Versi: " + obj.state["version"])
-                say("Tahap: " + str(obj.state.get("transaction", "siap")))
-                for role, name in SERVICES.items():
-                    say(name + ": " + ("berjalan" if obj.running(role) else "berhenti"))
+                obj.status()
             elif args.action == "finish":
                 obj.finish()
             elif args.action == "repair":
@@ -1312,8 +1747,6 @@ def main():
                 ):
                     obj.complete()
             elif args.action == "admin":
-                obj.guard()
-                obj.start_services(("postgres",))
                 obj.admin()
             elif args.action == "logs":
                 role = args.arguments[0] if args.arguments else "web"

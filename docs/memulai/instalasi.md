@@ -1,5 +1,17 @@
 # Memasang Absensa
 
+Pemasangan dilakukan oleh petugas IT pada **komputer server sekolah**. Setelah
+selesai, guru dan petugas presensi cukup membuka alamat aplikasi melalui browser.
+Pilih petunjuk sesuai sistem operasi server di bawah.
+
+## Meminta bantuan pemasangan
+
+Sekolah yang membutuhkan bantuan dapat mengirim email ke
+[kontakabsensa@gmail.com](mailto:kontakabsensa@gmail.com) dengan subjek
+**Permintaan Pemasangan Absensa**. Sertakan nama sekolah, kota/kabupaten,
+kontak penanggung jawab, dan keterangan komputer yang tersedia. Jika belum tahu
+spesifikasi komputer, cukup jelaskan kondisi sekolah.
+
 ## Windows Server
 
 Buka **Windows PowerShell 64-bit sebagai Administrator**, lalu jalankan:
@@ -17,6 +29,14 @@ Binary disimpan di `C:\Program Files\Absensa`; data, foto, konfigurasi, cadangan
 dan log di `C:\ProgramData\Absensa`. Ikuti pertanyaan installer untuk nama DNS/IP,
 port HTTPS, sertifikat, dan admin pertama. Jika memakai CA lokal, pasang sertifikat
 publik yang ditampilkan pada perangkat sekolah.
+
+Gunakan IP statis atau reservasi DHCP. Cocokkan alamat pada adapter aktif
+(termasuk vEthernet Hyper-V), DNS, port, dan profil firewall sebelum memasang.
+Buka alamat dengan port yang dipilih, misalnya `https://192.168.0.10:8443/admin`.
+
+Jika pemasangan terhenti, jalankan `repair` sampai berhasil, lalu `admin` untuk
+membuat akun pertama. Akun yang sudah ada tidak diubah. Jangan mengedit
+`state.json`; panduan Windows memuat jalur khusus pemulihan instalasi v1.1.0.
 
 Periksa layanan dan versi terpasang:
 

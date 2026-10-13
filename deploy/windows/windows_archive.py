@@ -31,7 +31,9 @@ def snapshot(destination, data):
         if backup is None:
             raise ValueError("Cadangan database belum tersedia")
         source = Path(settings.backups_dir) / (backup.id + ".absbackup")
-    config = json.loads((data / "config/installation.json").read_text())
+    config = json.loads(
+        (data / "config/installation.json").read_text(encoding="utf-8-sig")
+    )
     key = encryption_key()
     verify_archive(source, key)
     partial = destination.with_suffix(".partial")

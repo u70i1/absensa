@@ -5,6 +5,7 @@ school servers. Exercises actual SCM identities, packaged runtimes, TLS and Post
 """
 
 import argparse
+import ipaddress
 import contextlib
 import importlib.util
 import json
@@ -20,7 +21,7 @@ from unittest.mock import patch
 # Only the CI install process overrides defaults. The verified package and its
 # production CLI are unchanged; later repair/update processes read saved config.
 INSTALL_FIXTURE = """
-import json, sys
+import json, os, sys
 import manage
 ports = json.loads(sys.argv[1])
 original = manage.new_config
@@ -30,11 +31,33 @@ def fixture_config(*args, **kwargs):
     return config
 sys.argv = ["manage.py", *sys.argv[2:]]
 manage.new_config = fixture_config
+original_health = None
+if os.environ.get("ABSENSA_SMOKE_INTERRUPT_INSTALL") == "1":
+    original_health = manage.Installation.health
+    def interrupted_health(self):
+        raise manage.OperationError("simulated interruption before finalization")
+    manage.Installation.health = interrupted_health
 try:
     manage.main()
 finally:
     manage.new_config = original
+    if original_health is not None:
+        manage.Installation.health = original_health
 """
+
+
+def fixture_address(network):
+    """Use an actual active IPv4, including Hyper-V virtual adapters."""
+    for item in network["addresses"]:
+        address = ipaddress.IPv4Address(item["address"])
+        if not (
+            address.is_loopback
+            or address.is_unspecified
+            or address.is_multicast
+            or address.is_link_local
+        ):
+            return str(address)
+    raise RuntimeError("No active LAN IPv4 available for the native TLS fixture")
 
 
 def fixture_ports():
@@ -138,18 +161,33 @@ def main():
     python = package / "python/python.exe"
     ports = fixture_ports()
     print("Native smoke fixture ports: " + json.dumps(ports), flush=True)
-    check(
+    network = json.loads(
+        subprocess.check_output(
+            [
+                str(shell),
+                "-NoProfile",
+                "-File",
+                str(package / "host.ps1"),
+                "-Action",
+                "network",
+            ],
+            text=True,
+        )
+    )
+    host = fixture_address(network)
+    print("Native smoke fixture IPv4: " + host, flush=True)
+    interrupted = subprocess.run(
         [
-            python,
+            str(python),
             "-c",
             INSTALL_FIXTURE,
             json.dumps(ports),
             "--root",
-            root,
+            str(root),
             "--data",
-            data,
+            str(data),
             "--hostname",
-            "absensa.test",
+            host,
             "--port",
             str(ports["https_port"]),
             "--tls",
@@ -158,8 +196,11 @@ def main():
             "Asia/Jakarta",
             "--no-admin",
             "install",
-        ]
+        ],
+        env=dict(os.environ, ABSENSA_SMOKE_INTERRUPT_INSTALL="1"),
+        check=False,
     )
+    assert interrupted.returncode != 0, "Fixture interruption did not fail closed"
     spec = importlib.util.spec_from_file_location(
         "native_manage", package / "manage.py"
     )
@@ -169,8 +210,51 @@ def main():
     sys.path.insert(0, str(package / "web"))
     obj = manager.Installation(root, data)
     try:
-        assert all(obj.running(role) for role in manager.SERVICES)
+        assert obj.state["transaction"]["phase"] == "install"
+        assert obj.state["initialized"] is False and obj.state["autostart"] is False
+        assert not any(obj.running(role) for role in manager.APPLICATION)
         original = obj.config.copy()
+        # A real database sentinel must survive repair after failed finalization.
+        obj.pg(
+            "psql",
+            "-X",
+            "-v",
+            "ON_ERROR_STOP=1",
+            database=obj.config["database"],
+            input="CREATE TABLE native_install_recovery (value text); INSERT INTO native_install_recovery VALUES ('preserved'); ALTER TABLE native_install_recovery OWNER TO absensa;\n",
+        )
+        obj.repair()
+        obj = manager.Installation(root, data)
+        assert (
+            obj.state["initialized"]
+            and obj.state["autostart"]
+            and not obj.state.get("transaction")
+        )
+        assert all(obj.running(role) for role in manager.SERVICES)
+        assert (data / "root-ca.crt").read_bytes() == obj.ca_path.read_bytes()
+        assert obj.config == original
+        assert (
+            obj.pg(
+                "psql",
+                "-XAt",
+                "-c",
+                "SELECT value FROM native_install_recovery",
+                database=obj.config["database"],
+            ).stdout.strip()
+            == "preserved"
+        )
+        with patch.object(
+            manager.getpass, "getpass", return_value="native-smoke-admin-password"
+        ):
+            obj.admin("native-admin")
+        admin_query = "SELECT username || ':' || password_hash FROM admins"
+        admin_before = obj.pg(
+            "psql", "-XAt", "-c", admin_query, database=obj.config["database"]
+        ).stdout
+        assert (
+            admin_before.startswith("native-admin:")
+            and "native-smoke-admin-password" not in admin_before
+        )
         # DLL loading, Cairo card primitives, archive import, timezone and image codecs.
         probe = """
 import io,sys,zipfile
@@ -250,6 +334,18 @@ assert read_archive(b.getvalue())[0][0][1] == b'archive DLL fixture'
         obj = manager.Installation(root, data)
         assert (
             obj.config == original and photo.read_bytes() == b"persistent photo fixture"
+        )
+        with patch.object(
+            manager.getpass,
+            "getpass",
+            side_effect=AssertionError("Existing admin must not prompt"),
+        ):
+            obj.admin("another-admin")
+        assert (
+            obj.pg(
+                "psql", "-XAt", "-c", admin_query, database=obj.config["database"]
+            ).stdout
+            == admin_before
         )
         full = obj.snapshot()
         assert full.is_file() and full.stat().st_size > 100

@@ -1,7 +1,7 @@
 # Native host operations. Invoked with argument arrays; never evaluates downloaded strings.
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory=$true)][ValidateSet('private','grant','grant-installer','revoke-installer','service','firewall','unfirewall','platform')][string]$Action,
+    [Parameter(Mandatory=$true)][ValidateSet('private','grant','grant-installer','revoke-installer','service','firewall','unfirewall','platform','network')][string]$Action,
     [string]$Path, [string]$Name, [string]$Rights = 'ReadAndExecute',
     [int]$Port = 443, [string]$Address = 'LocalSubnet'
 )
@@ -15,6 +15,22 @@ if ($Action -eq 'platform') {
     if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         throw 'Buka Windows PowerShell sebagai Administrator.'
     }
+} elseif ($Action -eq 'network') {
+    # Include virtual interfaces (e.g. Hyper-V vEthernet); no adapter changes.
+    $interfaces = @(Get-NetIPInterface -AddressFamily IPv4 | Where-Object ConnectionState -eq 'Connected')
+    $addresses = @(foreach ($interface in $interfaces) {
+        Get-NetIPAddress -InterfaceIndex $interface.InterfaceIndex -AddressFamily IPv4 |
+            Where-Object AddressState -eq 'Preferred' | ForEach-Object {
+                [PSCustomObject]@{ address=$_.IPAddress; interface=$interface.InterfaceAlias; dhcp=[string]$interface.Dhcp }
+            }
+    })
+    $profiles = @(Get-NetConnectionProfile | ForEach-Object {
+        [PSCustomObject]@{ interface=$_.InterfaceAlias; category=[string]$_.NetworkCategory }
+    })
+    $firewall = @(Get-NetFirewallProfile | ForEach-Object {
+        [PSCustomObject]@{ name=[string]$_.Name; enabled=[bool]$_.Enabled }
+    })
+    [PSCustomObject]@{ addresses=$addresses; profiles=$profiles; firewall=$firewall } | ConvertTo-Json -Depth 4 -Compress
 } elseif ($Action -eq 'private') {
     $item = Get-Item -LiteralPath $Path
     if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Jalur tautan tidak diizinkan.' }

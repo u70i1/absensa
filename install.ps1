@@ -106,6 +106,13 @@ function Test-AbsensaChecksum {
     if ($matchesFound.Count -ne 1 -or (Get-FileHash -LiteralPath $Archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $matchesFound[0].Substring(0,64)) { throw 'SHA-256 rilis tidak cocok. Tidak ada kode unduhan yang dijalankan.' }
 }
 
+function Test-AbsensaInstallRecovery {
+    param($Saved, [string]$RequestedVersion)
+    return ($Saved.version -eq 'v1.1.0' -and $RequestedVersion -eq 'v1.1.1' -and
+        $Saved.initialized -is [bool] -and $Saved.initialized -eq $false -and
+        $Saved.transaction.phase -eq 'install')
+}
+
 function Install-AbsensaRelease {
     param([string]$RequestedVersion, [string]$DownloadDirectory)
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -119,16 +126,17 @@ function Install-AbsensaRelease {
         if ($saved.format -ne 1 -or $saved.root -ne $root -or $saved.data -ne $data -or $saved.version -notmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Identitas instalasi tidak sah. Pulihkan state.json asli.' }
         $launcher = Join-Path $root 'absensa.ps1'
         $manager = Join-Path $root "releases\$($saved.version)\manage.py"
-        if ((Test-Path -LiteralPath $launcher) -and (Test-Path -LiteralPath $manager) -and $saved.uninstalled -ne $true) {
+        $recoverInstall = Test-AbsensaInstallRecovery $saved $RequestedVersion
+        if (-not $recoverInstall -and (Test-Path -LiteralPath $launcher) -and (Test-Path -LiteralPath $manager) -and $saved.uninstalled -ne $true) {
             Write-Host 'Instalasi ditemukan. Memeriksa/memperbaiki versi yang tersimpan...'
             & $launcher repair
             & $launcher admin
             return
         }
         # Reinstall binaries at the recorded version; no implicit upgrade/secret rotation.
-        $RequestedVersion = $saved.version
+        if (-not $recoverInstall) { $RequestedVersion = $saved.version }
         $recoverBinary = $true
-        Write-Host "Memulihkan binary versi tersimpan $RequestedVersion. Data sekolah dipertahankan."
+        Write-Host "Memulihkan instalasi dengan rilis terverifikasi $RequestedVersion. Data sekolah dipertahankan."
     }
     if (-not $DownloadDirectory) {
         if (-not $recoverBinary) {

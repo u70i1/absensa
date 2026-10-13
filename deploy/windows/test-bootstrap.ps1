@@ -12,6 +12,17 @@ foreach ($case in @(@(1,26100,'AMD64',$true),@(3,14393,'AMD64',$true),@(3,17763,
     try { Assert-AbsensaPlatform ([PSCustomObject]@{ ProductType=$case[0]; BuildNumber=$case[1] }) $case[2] $case[3] } catch { $rejected = $true }
     if (-not $rejected) { throw 'Platform unsupported was accepted.' }
 }
+$saved = [PSCustomObject]@{ version='v1.1.0'; initialized=$false; transaction=[PSCustomObject]@{phase='install'} }
+if (-not (Test-AbsensaInstallRecovery $saved 'v1.1.1')) { throw 'Unfinished install recovery was rejected.' }
+foreach ($phase in @('migration','restore','restored','backup')) {
+    $saved.transaction.phase = $phase
+    if (Test-AbsensaInstallRecovery $saved 'v1.1.1') { throw 'Unsafe transaction recovery accepted.' }
+}
+$saved.transaction.phase = 'install'
+$saved.initialized = $true
+if (Test-AbsensaInstallRecovery $saved 'v1.1.1') { throw 'Initialized installation recovery accepted.' }
+$saved.initialized = $false
+if (Test-AbsensaInstallRecovery $saved 'v1.2.0') { throw 'Unreviewed version recovery accepted.' }
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('absensa-package-tests-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($temp) | Out-Null
 Add-Type -AssemblyName System.IO.Compression
@@ -51,6 +62,7 @@ try {
         try { Expand-AbsensaZip $archive (Join-Path $temp ([Guid]::NewGuid().ToString('N'))) } catch { $rejected = $true }
         if (-not $rejected) { throw "Unsafe ZIP entry accepted: $name" }
     }
+    & (Join-Path $PSScriptRoot 'test-network.ps1')
     & (Join-Path $PSScriptRoot 'test-build-source.ps1')
     & (Join-Path $PSScriptRoot 'test-build-libraries.ps1')
     Write-Host 'Bootstrap syntax, Server build gates, checksum, valid ZIP extraction and unsafe archive tests passed.'

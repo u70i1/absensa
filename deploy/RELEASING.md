@@ -4,11 +4,18 @@ The project's Git remote is `git@github.com:u70i1/absensa.git`; its discovered
 default branch is `refs/remotes/origin/main`. The installer pins this repository
 identity. Forks must update the verifier, workflows, and bootstrap URLs together.
 
-## Preparing v1.1.0
+## Preparing v1.1.1
 
-v1.0.0 is already published and remains immutable. v1.1.0 introduces the native
-Windows package alongside the existing Linux container deployment. Preparing a
+v1.0.0 and v1.1.0 remain immutable. v1.1.1 fixes Windows installation and
+recovery, preserving the Linux deployment and database schema. Preparing a
 commit, creating a tag, creating a draft, and publishing are separate steps.
+
+Version metadata follows the existing tag-driven convention: both packagers
+receive `v1.1.1` and generate `release.json` from that input. There is no root
+VERSION file to bump, and the WhatsApp bridge package has its own version.
+This preparation creates no tag, release, PR, or published artifacts. Record
+fresh Windows 2022/2025 CI and the Server 2019 IPv4:8443/reboot field drill before
+executing the maintainer publishing steps below.
 
 1. Review the release-preparation commit on `main`, run the maintainer checks
    below, and inspect `installer.yml` results for `safety`, `windows-2022` and
@@ -20,12 +27,12 @@ commit, creating a tag, creating a draft, and publishing are separate steps.
 3. After reviewing the commit, the maintainer creates the next tag:
 
    ```bash
-   git tag -a v1.1.0 -m "Absensa v1.1.0"
-   git push origin v1.1.0
+   git tag -a v1.1.1 -m "Absensa v1.1.1"
+   git push origin v1.1.1
    ```
 
    Confirm `HEAD` is the intended `main` commit first. Never move or recreate
-   `v1.0.0`. Pushing a tag triggers the release workflow even if the commit has
+   `v1.0.0` or `v1.1.0`. Pushing a tag triggers the release workflow even if the commit has
    not yet been pushed as a branch; keep remote `main` synchronized through the
    normal review process.
 4. `release.yml` validates the version and refuses a tag with an existing release

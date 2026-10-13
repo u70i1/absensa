@@ -8,7 +8,7 @@ irm https://raw.githubusercontent.com/u70i1/absensa/main/install.ps1 | iex
 
 Perintah ini memerlukan **rilis stabil Windows lengkap yang telah diterbitkan**.
 Paket native Windows diperkenalkan pada v1.1.0; v1.0.0 hanya menyediakan Linux.
-Menyiapkan v1.1.0 atau membuat draft belum membuat paket tersedia bagi installer.
+Menyiapkan v1.1.1 atau membuat draft belum membuat paket tersedia bagi installer.
 Bootstrap dari `main` hanya memilih rilis dan memverifikasinya. Aplikasi, runtime,
 dan pengelola berasal dari satu tag stabil `vMAJOR.MINOR.PATCH`, sama dengan Linux.
 Tidak perlu Git, Python, Node, PostgreSQL, Docker, WSL, atau VM di server sekolah.
@@ -37,8 +37,9 @@ jam server yang benar. Paket membawa browser sehingga unduhan besar; cadangan
 membutuhkan ruang tambahan. Internet diperlukan untuk GitHub, sumber GitHub CLI,
 Sigstore saat instalasi/update, WhatsApp, dan DNS Cloudflare jika digunakan.
 
-**Status validasi:** build paket dan uji layanan native pada Windows Server
-2022/2025 telah lulus di GitHub Actions; tautan run dan batas cakupannya ada di
+**Status validasi:** rilis sebelumnya memiliki build paket dan uji layanan native
+Windows Server 2022/2025 yang lulus di GitHub Actions. Perubahan v1.1.1 masih
+memerlukan pengulangan uji native; tautan run dan batas cakupannya ada di
 [VALIDATION.md](VALIDATION.md). Server 2019 diterima oleh bootstrap, tetapi
 **belum tervalidasi saat runtime** dan tidak memiliki runner dalam matriks CI.
 Uji PostgreSQL, Chrome, migrasi, dan pemulihan pada mesin Server 2019 nyata
@@ -98,6 +99,67 @@ Zone:Zone:Read untuk zona sekolah. Nama DNS harus menuju IP LAN sekolah untuk
 klien LAN. Konfigurasi reverse proxy luar belum menjadi pilihan wizard Windows;
 backend Linux tetap mempertahankan mode proxy yang sudah ada.
 
+### Menetapkan alamat server sebelum instalasi
+
+1. Minta petugas jaringan menentukan alamat tetap, subnet/prefix, gateway, dan
+   DNS sekolah. Contoh `192.168.0.10` hanya berlaku bila alamat itu tersedia pada
+   subnet server; jangan memasukkan `192.168.1.10` ketika server masih memakai
+   `192.168.0.162` tanpa menyiapkan jaringan terlebih dahulu.
+2. Pilih IP statis pada properti IPv4 adapter yang benar, dengan alamat di luar
+   pool DHCP atau dikecualikan dari pool. Alternatifnya, buat reservasi pada
+   router/server DHCP untuk MAC adapter server, lalu pastikan lease yang diterima
+   sesuai reservasi. DHCP aktif sendiri tidak membuktikan adanya reservasi;
+   periksa pada pengelola DHCP. [Panduan reservasi Microsoft](https://learn.microsoft.com/en-us/windows-server/networking/technologies/dhcp/quickstart-install-configure-dhcp-server)
+   menjelaskan pengelolaan reservasi di Windows DHCP Server.
+3. Periksa adapter aktif, termasuk `vEthernet (...)` pada Hyper-V. Jangan
+   mengasumsikan IP dimiliki adapter Ethernet fisik. Perintah berikut hanya membaca:
+
+   ```powershell
+   Get-NetIPInterface -AddressFamily IPv4 | Select-Object InterfaceIndex,InterfaceAlias,ConnectionState,Dhcp
+   Get-NetIPAddress -AddressFamily IPv4 | Select-Object InterfaceIndex,InterfaceAlias,IPAddress,AddressState
+   Get-NetConnectionProfile
+   Get-NetFirewallProfile | Select-Object Name,Enabled
+   ```
+
+4. Untuk nama DNS, buat record A pada DNS yang dipakai perangkat sekolah menuju
+   alamat tetap server. Masukkan nama lengkap itu di installer, tanpa skema atau
+   port. Jalankan `Resolve-DnsName absensa.sekolah.sch.id` pada server dan klien.
+   Nama komputer Windows tidak otomatis membuat record DNS yang dapat diakses
+   semua klien. Jangan memakai nama lain ketika membuka HTTPS karena sertifikat
+   diperiksa terhadap nama/IP yang dikonfigurasi.
+5. Pilih port HTTPS yang tersedia, misalnya `8443`. Installer memeriksa port HTTPS
+   dan tiga port internal sebelum memasang layanan. `status` menampilkan diagnostik
+   alamat, DNS, DHCP, dan profil firewall. Peringatan jaringan tidak mengubah adapter,
+   profil firewall, atau trust store. Perbaiki ketidakcocokan melalui petugas IT.
+
+### Mengakses dari komputer LAN
+
+Setelah health check lulus, CA publik tersedia di
+`C:\ProgramData\Absensa\root-ca.crt`. Salin hanya berkas ini melalui media yang
+terpercaya. Cocokkan fingerprint **sertifikat SHA-256** dengan nilai yang dicetak
+installer; fingerprint tersebut dihitung dari sertifikat DER, bukan hash berkas
+PEM. Petugas IT memasang CA di trust store klien/browser sesuai kebijakan sekolah
+(misalnya melalui pengelolaan sertifikat Windows atau kebijakan domain). Absensa
+memakai `skip_install_trust` dan tidak memasang CA ke trust store sistem otomatis.
+
+Dari klien jalankan `Test-NetConnection 192.168.0.10 -Port 8443`, lalu buka
+`https://192.168.0.10:8443/admin` (atau nama DNS yang dipilih). TCP berhasil hanya
+membuktikan port dapat dijangkau; browser tetap harus menerima rantai CA dan nama
+sertifikat. Jika akses lokal berhasil tetapi LAN gagal, cocokkan profil
+Domain/Private, sumber LocalSubnet, routing/VLAN dan firewall sekolah. Jangan
+menonaktifkan firewall atau meneruskan port router ke internet sebagai perbaikan.
+
+Setelah reboot, tanpa menyalakan layanan secara manual, periksa:
+
+```powershell
+Get-Service Absensa*
+Get-CimInstance Win32_Service | Where-Object Name -like 'Absensa*' | Select-Object Name,State,StartMode
+& 'C:\Program Files\Absensa\absensa.ps1' status
+```
+
+Enam layanan harus berjalan dengan `StartMode` Auto setelah instalasi sehat.
+Ulangi akses dashboard dari klien dan periksa heartbeat penjadwal/cadangan.
+
 ## Pengelolaan
 
 Jalankan dari PowerShell Administrator. Tidak perlu mengubah PATH:
@@ -115,7 +177,9 @@ Jalankan dari PowerShell Administrator. Tidak perlu mengubah PATH:
 & 'C:\Program Files\Absensa\absensa.ps1' repair
 ```
 
-`status` menampilkan versi terpasang, tahap pemeliharaan, dan keadaan enam layanan.
+`status` menampilkan versi, tahap pemeliharaan, diagnostik jaringan, kegagalan
+layanan/HTTPS/database/worker, dan riwayat diagnostik terakhir, termasuk saat
+instalasi belum selesai. Pemeriksaan ini tidak menghapus transaksi.
 `start`/`restart` memeriksa kesehatan sebelum mengaktifkan startup otomatis.
 `stop` juga menonaktifkan startup otomatis sampai `start` berikutnya. `logs`
 menampilkan 80 baris terakhir; pilihan lain: `scheduler`, `backup`, `whatsapp`,
@@ -218,3 +282,72 @@ memasang ulang versi yang tercatat dan menggunakan data/rahasia yang dipertahank
 5. Bila unduhan/attestation ditolak, periksa akses GitHub/Sigstore dan jam server.
    Jangan melewati checksum atau mematikan TLS. Rilis tanpa paket Windows lengkap
    tidak dapat dipasang melalui bootstrap baru.
+
+### Membaca kegagalan health check
+
+`logs\operations.log` menyimpan komponen, host/port, jenis exception, waktu
+berlalu, dan percobaan. `RETRY` berarti layanan diberi waktu untuk siap;
+`FINAL FAILURE` berarti finalisasi dibatalkan. Diagnostik tetap tersedia setelah
+layanan aplikasi dihentikan. Rahasia konfigurasi disamarkan; jangan membagikan
+berkas konfigurasi atau kunci bersama log.
+
+| Pesan | Pemeriksaan berikutnya |
+| --- | --- |
+| `TLS handshake failed` | Log Caddy, alamat server, kesiapan sertifikat; v1.1.1 memperbaiki probe IPv4 yang sebelumnya menuju loopback. |
+| `certificate verification failed` | Nama/IP sertifikat, jam server, dan CA instalasi yang benar; jangan mematikan verifikasi. |
+| `HTTPS /health returned unexpected status` | Log web/Caddy; status 503 aplikasi dapat menunjukkan database tidak sehat. |
+| `Database ... failed` | Log PostgreSQL dan detail operasi `psql`; jangan membuat ulang database. |
+| `service stopped or not installed` | Log layanan terkait dan status SCM. |
+| `heartbeat missing` / `stale` | Log scheduler/backup, waktu server, dan akses direktori health. |
+| `WhatsApp ... failed` | Log bridge, port internal dan status `/health`; pairing QR merupakan pemeriksaan terpisah. |
+
+Python menghilangkan SNI untuk IP literal dan tetap memvalidasi IP SAN. Karena
+itu probe IP harus menuju IP yang dikonfigurasi agar Caddy memilih sertifikat
+yang tepat. Probe nama DNS tetap menuju loopback dengan SNI/nama terverifikasi,
+sehingga perubahan DNS tidak mengalihkan koneksi pemeriksaan. Lihat
+[catatan Python tentang IP dan SNI](https://bugs.python.org/issue32185).
+
+Berkas JSON UTF-8 dengan BOM kini diterima, termasuk BOM yang dapat ditulis
+PowerShell 5.1. Absensa sendiri tetap menulis UTF-8 tanpa BOM secara atomik.
+JSON rusak, encoding lain, field wajib hilang atau jurnal tidak valid menghasilkan
+pesan lokasi/field yang perlu dipulihkan; tidak ada rahasia baru yang dibuat.
+Pulihkan salinan konfigurasi asli melalui prosedur IT. Jangan mengedit JSON
+internal atau menghapus transaksi untuk memaksa status berhasil.
+
+### Administrator pertama setelah perbaikan
+
+Instalasi baru menawarkan pembuatan administrator setelah seluruh pemeriksaan
+lulus. Jika instalasi terputus atau menggunakan `--no-admin`, jalankan di
+Windows PowerShell sebagai Administrator:
+
+```powershell
+& 'C:\Program Files\Absensa\absensa.ps1' repair
+& 'C:\Program Files\Absensa\absensa.ps1' admin
+```
+
+Perintah `admin` meminta nama dan sandi secara interaktif, memakai validasi dan
+hash sandi aplikasi, dan hanya membuat akun bila tabel administrator kosong.
+Akun yang sudah ada tidak diubah. `repair` tidak membuat atau mereset akun.
+Transaksi migrasi/pemulihan yang belum selesai tetap memblokir pembuatan akun;
+selesaikan pemulihan sesuai panduan. Jangan mengedit `state.json` untuk melewati
+perlindungan ini.
+
+### Instalasi v1.1.0 terhenti pada pemeriksaan HTTPS
+
+Setelah v1.1.1 diterbitkan, gunakan bootstrap **v1.1.1** dan minta versi itu
+secara eksplisit. Di PowerShell Administrator, dari direktori unduhan:
+
+```powershell
+Invoke-WebRequest -UseBasicParsing 'https://github.com/u70i1/absensa/releases/download/v1.1.1/install.ps1' -OutFile install-v1.1.1.ps1
+.\install-v1.1.1.ps1 -Version v1.1.1
+```
+
+Bootstrap memverifikasi checksum dan provenance paket sebelum menjalankannya.
+Pengecualian perbaikan ini hanya menerima v1.1.0 yang belum `initialized` dan
+masih pada transaksi `install`. Data, konfigurasi, kunci, dan binary lama
+dipertahankan; jurnal memilih v1.1.1 sebelum migrasi/health check diulang.
+Jika proses kembali terputus setelah pemilihan versi, gunakan `absensa.ps1 repair`,
+lalu `absensa.ps1 admin`. Jangan mengubah jurnal secara manual. Instalasi yang
+sudah selesai tetap memakai `update`; transaksi migrasi atau restore yang
+terhenti memerlukan prosedur pemulihan yang sudah ada. Perintah unduhan di atas
+belum dapat digunakan sebelum rilis stabil diterbitkan.
